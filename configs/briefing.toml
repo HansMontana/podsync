@@ -1,0 +1,9 @@
+# Example podcast sync / briefing config
+
+name = "Morning Briefing"
+
+[[feed]]
+name = "Example Feed"
+url = "https://example.com/rss"
+priority = 10
+keep = 5
