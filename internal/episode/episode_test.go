@@ -1,4 +1,4 @@
-package episodes
+package episode
 
 import (
 	"testing"

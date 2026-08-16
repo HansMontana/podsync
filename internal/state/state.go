@@ -1,1 +1,59 @@
 package state
+
+import (
+	"fmt"
+
+	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/feed"
+)
+
+// State represents the persistent podsync state associated with a device.
+type State struct {
+	Feeds    []feed.Feed
+	Episodes []episode.Episode
+}
+
+// Validate checks the invariants of the persistent state.
+func (s State) Validate() error {
+	feedIDs := make(map[int64]struct{})
+	feedURLs := make(map[string]struct{})
+
+	for _, f := range s.Feeds {
+		if _, exists := feedIDs[f.ID]; exists {
+			return fmt.Errorf("duplicate feed ID: %d", f.ID)
+		}
+
+		feedIDs[f.ID] = struct{}{}
+
+		normalizedURL, err := feed.NormalizeURL(f.URL)
+		if err != nil {
+			return fmt.Errorf("invalid feed URL %q: %w", f.URL, err)
+		}
+
+		if _, exists := feedURLs[normalizedURL]; exists {
+			return fmt.Errorf("duplicate feed URL: %q", f.URL)
+		}
+
+		feedURLs[normalizedURL] = struct{}{}
+	}
+
+	for i, e := range s.Episodes {
+		if _, exists := feedIDs[e.FeedID]; !exists {
+			return fmt.Errorf(
+				"episode references unknown feed ID: %d",
+				e.FeedID,
+			)
+		}
+
+		for j := i + 1; j < len(s.Episodes); j++ {
+			if e.SameIdentity(s.Episodes[j]) {
+				return fmt.Errorf(
+					"duplicate episode identity for feed ID: %d",
+					e.FeedID,
+				)
+			}
+		}
+	}
+
+	return nil
+}
