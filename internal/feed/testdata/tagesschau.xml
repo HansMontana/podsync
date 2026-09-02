@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <channel>
+    <title>tagesschau in 100 Sekunden: Das aktuelle News-Update (Audio)</title>
+    <link>https://www.tagesschau.de/tagesschau_in_100_sekunden/podcast-ts100-audio-100.html</link>
+    <description>Immer die aktuellen Nachrichten von heute: Die tagesschau in 100 Sekunden liefert euch mehrmals am Tag ein kurzes News-Update. Hier zum Nachhören.</description>
+    <language>de</language>
+    <category>Daily News</category>
+    <itunes:author>tagesschau</itunes:author>
+    <itunes:image href="https://images.tagesschau.de/image/example/podcast.jpg"/>
+    <item>
+      <title>tagesschau in 100 Sekunden</title>
+      <link>https://www.tagesschau.de/tagesschau_in_100_sekunden/audio-3453628.html</link>
+      <description><![CDATA[tagesschau in 100 Sekunden]]></description>
+      <pubDate>Wed, 02 Sep 2026 14:39:00 +0200</pubDate>
+      <enclosure url="https://tagesschau-podcast.ard-mcdn.de/audio/2026/0902/AU-20260902-1439-2400.mp3" type="audio/mpeg" length="2252299"/>
+      <guid isPermaLink="false">c365228a-a39e-426c-ad95-8a5f0af8eb05</guid>
+      <content:encoded><![CDATA[tagesschau in 100 Sekunden]]></content:encoded>
+      <itunes:duration>00:02:20</itunes:duration>
+      <itunes:episodeType>full</itunes:episodeType>
+      <itunes:explicit>false</itunes:explicit>
+      <itunes:image href="https://images.tagesschau.de/image/example/podcast.jpg"/>
+    </item>
+  </channel>
+</rss>

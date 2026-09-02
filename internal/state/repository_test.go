@@ -37,7 +37,11 @@ func TestSQLiteRepositoryRoundTrip(t *testing.T) {
 				GUID:        "episode-1",
 				Title:       "First episode",
 				Description: "An episode description",
-				AudioURL:    "https://example.com/episode-1.mp3",
+				Enclosure: episode.Enclosure{
+					URL:    "https://example.com/episode-1.mp3",
+					Type:   "audio/mpeg",
+					Length: 1234,
+				},
 				PublishedAt: time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC),
 				Duration:    45 * time.Minute,
 			},

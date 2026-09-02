@@ -75,7 +75,7 @@ func (r *SQLiteRepository) Load() (State, error) {
 	}
 
 	rows, err = r.db.Query(`
-		SELECT feed_id, guid, title, description, audio_url, published_at, duration
+		SELECT feed_id, guid, title, description, audio_url, audio_type, audio_length, published_at, duration
 		FROM episodes
 		ORDER BY feed_id, guid, audio_url, title, published_at, duration
 	`)
@@ -87,18 +87,23 @@ func (r *SQLiteRepository) Load() (State, error) {
 	for rows.Next() {
 		var e episode.Episode
 		var publishedAt string
+		var audioURL, audioType string
+		var audioLength int64
 
 		if err := rows.Scan(
 			&e.FeedID,
 			&e.GUID,
 			&e.Title,
 			&e.Description,
-			&e.AudioURL,
+			&audioURL,
+			&audioType,
+			&audioLength,
 			&publishedAt,
 			&e.Duration,
 		); err != nil {
 			return State{}, fmt.Errorf("scan episode: %w", err)
 		}
+		e.Enclosure = episode.Enclosure{URL: audioURL, Type: audioType, Length: audioLength}
 
 		e.PublishedAt, err = time.Parse(time.RFC3339Nano, publishedAt)
 		if err != nil {
@@ -147,15 +152,17 @@ func (r *SQLiteRepository) Save(state State) error {
 	for _, e := range state.Episodes {
 		_, err := tx.Exec(`
 			INSERT INTO episodes (
-				feed_id, guid, title, description, audio_url, published_at, duration
+				feed_id, guid, title, description, audio_url, audio_type, audio_length, published_at, duration
 			)
-			VALUES (?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
 			e.FeedID,
 			e.GUID,
 			e.Title,
 			e.Description,
-			e.AudioURL,
+			e.Enclosure.URL,
+			e.Enclosure.Type,
+			e.Enclosure.Length,
 			e.PublishedAt.UTC().Format(time.RFC3339Nano),
 			e.Duration,
 		)

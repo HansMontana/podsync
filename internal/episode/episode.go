@@ -16,9 +16,16 @@ type Episode struct {
 	GUID        string
 	Title       string
 	Description string
-	AudioURL    string
+	Enclosure   Enclosure
 	PublishedAt time.Time
 	Duration    time.Duration
+}
+
+// Enclosure identifies the downloadable media attached to an episode.
+type Enclosure struct {
+	URL    string
+	Type   string
+	Length int64
 }
 
 func (e Episode) SameIdentity(other Episode) bool {
@@ -32,10 +39,10 @@ func (e Episode) SameIdentity(other Episode) bool {
 			e.GUID == other.GUID
 	}
 
-	if e.AudioURL != "" || other.AudioURL != "" {
-		return e.AudioURL != "" &&
-			other.AudioURL != "" &&
-			e.AudioURL == other.AudioURL
+	if e.Enclosure.URL != "" || other.Enclosure.URL != "" {
+		return e.Enclosure.URL != "" &&
+			other.Enclosure.URL != "" &&
+			e.Enclosure.URL == other.Enclosure.URL
 	}
 
 	return e.fingerprint() == other.fingerprint()

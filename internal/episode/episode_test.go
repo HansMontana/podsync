@@ -7,17 +7,17 @@ import (
 
 func TestEpisodeIdentityUsesGUID(t *testing.T) {
 	first := Episode{
-		FeedID:   1,
-		GUID:     "episode-123",
-		AudioURL: "https://example.com/old.mp3",
-		Title:    "Original title",
+		FeedID:    1,
+		GUID:      "episode-123",
+		Enclosure: Enclosure{URL: "https://example.com/old.mp3"},
+		Title:     "Original title",
 	}
 
 	second := Episode{
-		FeedID:   1,
-		GUID:     "episode-123",
-		AudioURL: "https://example.com/new.mp3",
-		Title:    "Corrected title",
+		FeedID:    1,
+		GUID:      "episode-123",
+		Enclosure: Enclosure{URL: "https://example.com/new.mp3"},
+		Title:     "Corrected title",
 	}
 
 	if !first.SameIdentity(second) {
@@ -27,13 +27,13 @@ func TestEpisodeIdentityUsesGUID(t *testing.T) {
 
 func TestEpisodeIdentityFallsBackToAudioURL(t *testing.T) {
 	first := Episode{
-		FeedID:   1,
-		AudioURL: "https://example.com/episode.mp3",
+		FeedID:    1,
+		Enclosure: Enclosure{URL: "https://example.com/episode.mp3"},
 	}
 
 	second := Episode{
-		FeedID:   1,
-		AudioURL: "https://example.com/episode.mp3",
+		FeedID:    1,
+		Enclosure: Enclosure{URL: "https://example.com/episode.mp3"},
 	}
 
 	if !first.SameIdentity(second) {
@@ -43,13 +43,13 @@ func TestEpisodeIdentityFallsBackToAudioURL(t *testing.T) {
 
 func TestEpisodeIdentityDifferentAudioURLsAreDifferent(t *testing.T) {
 	first := Episode{
-		FeedID:   1,
-		AudioURL: "https://example.com/episode-a.mp3",
+		FeedID:    1,
+		Enclosure: Enclosure{URL: "https://example.com/episode-a.mp3"},
 	}
 
 	second := Episode{
-		FeedID:   1,
-		AudioURL: "https://example.com/episode-b.mp3",
+		FeedID:    1,
+		Enclosure: Enclosure{URL: "https://example.com/episode-b.mp3"},
 	}
 
 	if first.SameIdentity(second) {
