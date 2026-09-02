@@ -2,8 +2,11 @@ package state
 
 import (
 	"path/filepath"
+	"reflect"
 	"testing"
+	"time"
 
+	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
 )
 
@@ -14,7 +17,6 @@ func TestSQLiteRepositoryRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewSQLiteRepository() returned error: %v", err)
 	}
-	defer repository.Close()
 
 	want := State{
 		Feeds: []feed.Feed{
@@ -29,29 +31,67 @@ func TestSQLiteRepositoryRoundTrip(t *testing.T) {
 				URL:  "https://example.org/feed.xml",
 			},
 		},
+		Episodes: []episode.Episode{
+			{
+				FeedID:      1,
+				GUID:        "episode-1",
+				Title:       "First episode",
+				Description: "An episode description",
+				AudioURL:    "https://example.com/episode-1.mp3",
+				PublishedAt: time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC),
+				Duration:    45 * time.Minute,
+			},
+		},
 	}
 
 	if err := repository.Save(want); err != nil {
 		t.Fatalf("Save() returned error: %v", err)
 	}
+	if err := repository.Close(); err != nil {
+		t.Fatalf("Close() returned error: %v", err)
+	}
+
+	repository, err = NewSQLiteRepository(dbPath)
+	if err != nil {
+		t.Fatalf("reopen repository: %v", err)
+	}
+	defer repository.Close()
 
 	got, err := repository.Load()
 	if err != nil {
 		t.Fatalf("Load() returned error: %v", err)
 	}
 
-	if len(got.Feeds) != len(want.Feeds) {
-		t.Fatalf("got %d feeds, want %d", len(got.Feeds), len(want.Feeds))
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got state %+v, want %+v", got, want)
+	}
+}
+
+func TestSQLiteRepositoryRejectsInvalidStateWithoutChangingDatabase(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "state.db")
+
+	repository, err := NewSQLiteRepository(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteRepository() returned error: %v", err)
+	}
+	defer repository.Close()
+
+	want := State{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/feed.xml"}}}
+	if err := repository.Save(want); err != nil {
+		t.Fatalf("initial Save() returned error: %v", err)
 	}
 
-	if len(got.Feeds) != len(want.Feeds) {
-		t.Fatalf("got %d feeds, want %d", len(got.Feeds), len(want.Feeds))
+	invalid := State{Episodes: []episode.Episode{{FeedID: 999, GUID: "orphan"}}}
+	if err := repository.Save(invalid); err == nil {
+		t.Fatal("Save() accepted an episode for an unknown feed")
 	}
 
-	for i := range want.Feeds {
-		if got.Feeds[i] != want.Feeds[i] {
-			t.Fatalf("got feed %+v, want %+v at index %d", got.Feeds[i], want.Feeds[i], i)
-		}
+	got, err := repository.Load()
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got state %+v after rejected save, want %+v", got, want)
 	}
 }
 

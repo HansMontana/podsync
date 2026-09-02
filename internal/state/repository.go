@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"time"
 
+	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
@@ -53,8 +55,6 @@ func (r *SQLiteRepository) Load() (State, error) {
 	if err != nil {
 		return State{}, fmt.Errorf("load feeds: %w", err)
 	}
-	defer rows.Close()
-
 	var state State
 
 	for rows.Next() {
@@ -70,16 +70,65 @@ func (r *SQLiteRepository) Load() (State, error) {
 	if err := rows.Err(); err != nil {
 		return State{}, fmt.Errorf("iterate feeds: %w", err)
 	}
+	if err := rows.Close(); err != nil {
+		return State{}, fmt.Errorf("close feed rows: %w", err)
+	}
+
+	rows, err = r.db.Query(`
+		SELECT feed_id, guid, title, description, audio_url, published_at, duration
+		FROM episodes
+		ORDER BY feed_id, guid, audio_url, title, published_at, duration
+	`)
+	if err != nil {
+		return State{}, fmt.Errorf("load episodes: %w", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var e episode.Episode
+		var publishedAt string
+
+		if err := rows.Scan(
+			&e.FeedID,
+			&e.GUID,
+			&e.Title,
+			&e.Description,
+			&e.AudioURL,
+			&publishedAt,
+			&e.Duration,
+		); err != nil {
+			return State{}, fmt.Errorf("scan episode: %w", err)
+		}
+
+		e.PublishedAt, err = time.Parse(time.RFC3339Nano, publishedAt)
+		if err != nil {
+			return State{}, fmt.Errorf("parse episode published time %q: %w", publishedAt, err)
+		}
+
+		state.Episodes = append(state.Episodes, e)
+	}
+
+	if err := rows.Err(); err != nil {
+		return State{}, fmt.Errorf("iterate episodes: %w", err)
+	}
 
 	return state, nil
 }
 
 func (r *SQLiteRepository) Save(state State) error {
+	if err := state.Validate(); err != nil {
+		return fmt.Errorf("validate state: %w", err)
+	}
+
 	tx, err := r.db.Begin()
 	if err != nil {
 		return fmt.Errorf("begin state transaction: %w", err)
 	}
 	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM episodes`); err != nil {
+		return fmt.Errorf("clear episodes: %w", err)
+	}
 
 	if _, err := tx.Exec(`DELETE FROM feeds`); err != nil {
 		return fmt.Errorf("clear feeds: %w", err)
@@ -92,6 +141,26 @@ func (r *SQLiteRepository) Save(state State) error {
 		`, f.ID, f.Name, f.URL)
 		if err != nil {
 			return fmt.Errorf("save feed %d: %w", f.ID, err)
+		}
+	}
+
+	for _, e := range state.Episodes {
+		_, err := tx.Exec(`
+			INSERT INTO episodes (
+				feed_id, guid, title, description, audio_url, published_at, duration
+			)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`,
+			e.FeedID,
+			e.GUID,
+			e.Title,
+			e.Description,
+			e.AudioURL,
+			e.PublishedAt.UTC().Format(time.RFC3339Nano),
+			e.Duration,
+		)
+		if err != nil {
+			return fmt.Errorf("save episode for feed %d: %w", e.FeedID, err)
 		}
 	}
 
