@@ -21,9 +21,11 @@ func TestSQLiteRepositoryRoundTrip(t *testing.T) {
 	want := State{
 		Feeds: []feed.Feed{
 			{
-				ID:   1,
-				Name: "Example Feed",
-				URL:  "https://example.com/feed.xml",
+				ID:           1,
+				Name:         "Example Feed",
+				URL:          "https://example.com/feed.xml",
+				ETag:         `"feed-1"`,
+				LastModified: "Wed, 02 Sep 2026 14:39:34 +0200",
 			},
 			{
 				ID:   2,

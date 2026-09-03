@@ -48,7 +48,7 @@ func NewSQLiteRepository(path string) (*SQLiteRepository, error) {
 
 func (r *SQLiteRepository) Load() (State, error) {
 	rows, err := r.db.Query(`
-		SELECT id, name, url
+		SELECT id, name, url, etag, last_modified
 		FROM feeds
 		ORDER BY id
 	`)
@@ -60,7 +60,7 @@ func (r *SQLiteRepository) Load() (State, error) {
 	for rows.Next() {
 		var f feed.Feed
 
-		if err := rows.Scan(&f.ID, &f.Name, &f.URL); err != nil {
+		if err := rows.Scan(&f.ID, &f.Name, &f.URL, &f.ETag, &f.LastModified); err != nil {
 			return State{}, fmt.Errorf("scan feed: %w", err)
 		}
 
@@ -141,9 +141,9 @@ func (r *SQLiteRepository) Save(state State) error {
 
 	for _, f := range state.Feeds {
 		_, err := tx.Exec(`
-			INSERT INTO feeds (id, name, url)
-			VALUES (?, ?, ?)
-		`, f.ID, f.Name, f.URL)
+			INSERT INTO feeds (id, name, url, etag, last_modified)
+			VALUES (?, ?, ?, ?, ?)
+		`, f.ID, f.Name, f.URL, f.ETag, f.LastModified)
 		if err != nil {
 			return fmt.Errorf("save feed %d: %w", f.ID, err)
 		}
