@@ -71,13 +71,34 @@ func TestParseRSSSupportsDurationFormats(t *testing.T) {
 		{input: "1:42", want: 102 * time.Second},
 		{input: "1:02:03", want: 1*time.Hour + 2*time.Minute + 3*time.Second},
 	} {
-		got, err := parseDuration(test.input)
+		got, err := parseDurationString(test.input)
 		if err != nil {
 			t.Fatalf("parseDuration(%q) returned error: %v", test.input, err)
 		}
 		if got != test.want {
 			t.Errorf("parseDuration(%q) = %v, want %v", test.input, got, test.want)
 		}
+	}
+}
+
+func TestParseRSSRejectsAtomFeed(t *testing.T) {
+	input := `<feed xmlns="http://www.w3.org/2005/Atom"><title>Example</title></feed>`
+
+	_, _, err := ParseRSS(strings.NewReader(input), Feed{ID: 1, URL: "https://example.com/feed.xml"})
+	if err == nil {
+		t.Fatal("ParseRSS() accepted an Atom feed")
+	}
+}
+
+func TestParseRSSSelectsAudioEnclosure(t *testing.T) {
+	input := `<rss><channel><title>Example</title><item><title>Episode</title><enclosure url="https://example.com/video.mp4" type="video/mp4"/><enclosure url="https://example.com/audio.mp3" type="audio/mpeg" length="123"/></item></channel></rss>`
+
+	_, episodes, err := ParseRSS(strings.NewReader(input), Feed{ID: 1, URL: "https://example.com/feed.xml"})
+	if err != nil {
+		t.Fatalf("ParseRSS() returned error: %v", err)
+	}
+	if len(episodes) != 1 || episodes[0].Enclosure.URL != "https://example.com/audio.mp3" {
+		t.Fatalf("got episodes %+v", episodes)
 	}
 }
 

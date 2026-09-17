@@ -1,7 +1,6 @@
 package feed
 
 import (
-	"encoding/xml"
 	"fmt"
 	"io"
 	"strconv"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/mmcdole/gofeed"
 )
 
 // ParseRSS parses an RSS 2.0 podcast and returns only items with audio
@@ -19,30 +19,36 @@ func ParseRSS(r io.Reader, f Feed) (Feed, []episode.Episode, error) {
 		return Feed{}, nil, fmt.Errorf("normalize feed URL: %w", err)
 	}
 
-	var document rssDocument
-	if err := xml.NewDecoder(r).Decode(&document); err != nil {
+	parser := gofeed.NewParser()
+	parsed, err := parser.Parse(r)
+	if err != nil {
 		return Feed{}, nil, fmt.Errorf("decode RSS: %w", err)
 	}
-	if document.Channel.Title == "" {
+	if parsed.FeedType != "rss" {
+		return Feed{}, nil, fmt.Errorf("unsupported feed type %q: only RSS is supported", parsed.FeedType)
+	}
+	if strings.TrimSpace(parsed.Title) == "" {
 		return Feed{}, nil, fmt.Errorf("RSS channel has no title")
 	}
 
 	f.URL = normalizedURL
-	f.Name = strings.TrimSpace(document.Channel.Title)
+	f.Name = strings.TrimSpace(parsed.Title)
 
-	episodes := make([]episode.Episode, 0, len(document.Channel.Items))
-	for i, item := range document.Channel.Items {
-		if !isAudioEnclosure(item.Enclosure) {
+	episodes := make([]episode.Episode, 0, len(parsed.Items))
+	for i, item := range parsed.Items {
+		enclosure, ok := audioEnclosure(item)
+		if !ok {
 			continue
 		}
 
-		publishedAt, err := parsePublishedAt(item.PubDate)
-		if err != nil {
-			return Feed{}, nil, fmt.Errorf("parse item %d publication time: %w", i, err)
-		}
-		duration, err := parseDuration(item.Duration)
+		duration, err := parseDuration(item)
 		if err != nil {
 			return Feed{}, nil, fmt.Errorf("parse item %d duration: %w", i, err)
+		}
+
+		var publishedAt time.Time
+		if item.PublishedParsed != nil {
+			publishedAt = item.PublishedParsed.UTC()
 		}
 
 		episodes = append(episodes, episode.Episode{
@@ -51,9 +57,9 @@ func ParseRSS(r io.Reader, f Feed) (Feed, []episode.Episode, error) {
 			Title:       strings.TrimSpace(item.Title),
 			Description: strings.TrimSpace(item.Description),
 			Enclosure: episode.Enclosure{
-				URL:    strings.TrimSpace(item.Enclosure.URL),
-				Type:   strings.TrimSpace(item.Enclosure.Type),
-				Length: item.Enclosure.Length,
+				URL:    strings.TrimSpace(enclosure.URL),
+				Type:   strings.TrimSpace(enclosure.Type),
+				Length: enclosureLength(enclosure.Length),
 			},
 			PublishedAt: publishedAt,
 			Duration:    duration,
@@ -63,52 +69,34 @@ func ParseRSS(r io.Reader, f Feed) (Feed, []episode.Episode, error) {
 	return f, episodes, nil
 }
 
-type rssDocument struct {
-	XMLName xml.Name   `xml:"rss"`
-	Channel rssChannel `xml:"channel"`
-}
-
-type rssChannel struct {
-	Title string    `xml:"title"`
-	Items []rssItem `xml:"item"`
-}
-
-type rssItem struct {
-	GUID        string       `xml:"guid"`
-	Title       string       `xml:"title"`
-	Description string       `xml:"description"`
-	PubDate     string       `xml:"pubDate"`
-	Duration    string       `xml:"duration"`
-	Enclosure   rssEnclosure `xml:"enclosure"`
-}
-
-type rssEnclosure struct {
-	URL    string `xml:"url,attr"`
-	Type   string `xml:"type,attr"`
-	Length int64  `xml:"length,attr"`
-}
-
-func isAudioEnclosure(enclosure rssEnclosure) bool {
-	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(enclosure.Type)), "audio/") &&
-		strings.TrimSpace(enclosure.URL) != ""
-}
-
-func parsePublishedAt(raw string) (time.Time, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return time.Time{}, nil
-	}
-
-	for _, layout := range []string{time.RFC1123Z, time.RFC1123, time.RFC3339Nano, time.RFC3339} {
-		if parsed, err := time.Parse(layout, raw); err == nil {
-			return parsed.UTC(), nil
+func audioEnclosure(item *gofeed.Item) (*gofeed.Enclosure, bool) {
+	for _, enclosure := range item.Enclosures {
+		if enclosure == nil || strings.TrimSpace(enclosure.URL) == "" {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(enclosure.Type)), "audio/") {
+			return enclosure, true
 		}
 	}
-
-	return time.Time{}, fmt.Errorf("unsupported date %q", raw)
+	return nil, false
 }
 
-func parseDuration(raw string) (time.Duration, error) {
+func enclosureLength(raw string) int64 {
+	length, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+	if err != nil || length < 0 {
+		return 0
+	}
+	return length
+}
+
+func parseDuration(item *gofeed.Item) (time.Duration, error) {
+	if item.ITunesExt == nil {
+		return 0, nil
+	}
+	return parseDurationString(item.ITunesExt.Duration)
+}
+
+func parseDurationString(raw string) (time.Duration, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return 0, nil
