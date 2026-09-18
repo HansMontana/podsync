@@ -32,6 +32,9 @@ type Record struct {
 func MergeRecords(records []Record) []Record {
 	byPath := make(map[string]Record, len(records))
 	for _, record := range records {
+		if !record.Known {
+			continue
+		}
 		key := normalizePath(record.Path)
 		if key == "" {
 			continue

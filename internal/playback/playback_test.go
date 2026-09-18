@@ -35,6 +35,16 @@ func TestForEpisodesDoesNotTrustUnknownRecords(t *testing.T) {
 	}
 }
 
+func TestMergeRecordsIgnoresUnknownCounts(t *testing.T) {
+	records := MergeRecords([]Record{
+		{Path: "/Podcasts/episode.mp3", PlayCount: 7},
+		{Path: "/Podcasts/episode.mp3", Known: true, PlayCount: 2},
+	})
+	if len(records) != 1 || records[0].PlayCount != 2 {
+		t.Fatalf("got records %+v", records)
+	}
+}
+
 func TestParseLogAggregatesRockboxPlaybackEntries(t *testing.T) {
 	log := `# Started Ver. 4.x
 1700000000:1000:2000:/Podcasts/feed-2/episode.mp3
