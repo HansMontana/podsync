@@ -2,6 +2,7 @@ package playback
 
 import (
 	"path"
+	"sort"
 	"strings"
 	"time"
 
@@ -48,6 +49,9 @@ func MergeRecords(records []Record) []Record {
 	for _, record := range byPath {
 		result = append(result, record)
 	}
+	sort.Slice(result, func(i, j int) bool {
+		return normalizePath(result[i].Path) < normalizePath(result[j].Path)
+	})
 	return result
 }
 
@@ -57,6 +61,9 @@ func MergeRecords(records []Record) []Record {
 func ForEpisodes(episodes []episode.Episode, records []Record) map[string]State {
 	byPath := make(map[string]State, len(records))
 	for _, record := range records {
+		if !record.Known {
+			continue
+		}
 		key := normalizePath(record.Path)
 		if key == "" {
 			continue

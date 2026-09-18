@@ -145,11 +145,16 @@ func generatePlaylist(args []string, briefingMode bool) error {
 	if err != nil {
 		return err
 	}
+	records, err := loadPlaybackRecords(layout)
+	if err != nil {
+		return err
+	}
+	playbackStates := playback.ForEpisodes(current.Episodes, records)
 	var content []byte
 	if briefingMode {
-		content, err = playlists.Briefing(cfg, current, *id, map[string]playback.State{})
+		content, err = playlists.Briefing(cfg, current, *id, playbackStates)
 	} else {
-		content, err = playlists.LogicalFeed(cfg, current, *id, map[string]playback.State{})
+		content, err = playlists.LogicalFeed(cfg, current, *id, playbackStates)
 	}
 	if err != nil {
 		return err
