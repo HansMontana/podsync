@@ -13,6 +13,15 @@ import (
 
 // Feed returns episodes selected by one configured logical feed.
 func Feed(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, unplayedOnly bool) ([]episode.Episode, error) {
+	for _, logical := range cfg.Feeds {
+		if logical.ID == feedID {
+			return FeedOrdered(cfg, current, feedID, playbackStates, unplayedOnly, logical.Order)
+		}
+	}
+	return nil, fmt.Errorf("logical feed %q not found", feedID)
+}
+
+func FeedOrdered(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, unplayedOnly bool, order config.Order) ([]episode.Episode, error) {
 	var logical *config.LogicalFeed
 	for i := range cfg.Feeds {
 		if cfg.Feeds[i].ID == feedID {
@@ -63,7 +72,7 @@ func Feed(cfg config.Config, current state.State, feedID string, playbackStates 
 		if selected[i].PublishedAt.Equal(selected[j].PublishedAt) {
 			return selected[i].IdentityKey() < selected[j].IdentityKey()
 		}
-		if logical.Order == config.OldestFirst {
+		if order == config.OldestFirst {
 			return selected[i].PublishedAt.Before(selected[j].PublishedAt)
 		}
 		return selected[i].PublishedAt.After(selected[j].PublishedAt)
