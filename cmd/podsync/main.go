@@ -76,7 +76,7 @@ func reconcile(args []string, refresh bool) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath)
+	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false)
 	if err != nil {
 		return err
 	}
@@ -147,7 +147,7 @@ func generatePlaylist(args []string, briefingMode bool) error {
 	if *id == "" {
 		return fmt.Errorf("-id is required")
 	}
-	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath)
+	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false)
 	if err != nil {
 		return err
 	}
@@ -193,15 +193,20 @@ func sync(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath)
+	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, *dryRun)
 	if err != nil {
 		return err
 	}
 	defer repository.Close()
-	if err := reconcileState(repository, cfg); err != nil {
-		return err
+	var current state.State
+	if *dryRun {
+		current, err = repository.Load()
+	} else {
+		if err := reconcileState(repository, cfg); err != nil {
+			return err
+		}
+		current, err = repository.Load()
 	}
-	current, err := repository.Load()
 	if err != nil {
 		return err
 	}
@@ -278,8 +283,8 @@ func sync(args []string) error {
 	return nil
 }
 
-func openDevice(root, configPath string) (device.Layout, state.Repository, config.Config, error) {
-	layout, repository, err := openRepository(root)
+func openDevice(root, configPath string, readOnly bool) (device.Layout, state.Repository, config.Config, error) {
+	layout, repository, err := openRepositoryMode(root, readOnly)
 	if err != nil {
 		return layout, nil, config.Config{}, err
 	}
@@ -291,7 +296,7 @@ func openDevice(root, configPath string) (device.Layout, state.Repository, confi
 		_ = repository.Close()
 		return layout, nil, config.Config{}, err
 	}
-	if configPath != layout.ConfigPath() {
+	if !readOnly && configPath != layout.ConfigPath() {
 		if err := config.Save(layout.ConfigPath(), cfg); err != nil {
 			_ = repository.Close()
 			return layout, nil, config.Config{}, fmt.Errorf("save device config: %w", err)
@@ -301,14 +306,26 @@ func openDevice(root, configPath string) (device.Layout, state.Repository, confi
 }
 
 func openRepository(root string) (device.Layout, state.Repository, error) {
+	return openRepositoryMode(root, false)
+}
+
+func openRepositoryMode(root string, readOnly bool) (device.Layout, state.Repository, error) {
 	if root == "" {
 		return device.Layout{}, nil, fmt.Errorf("-device-root is required")
 	}
 	layout := device.Layout{Root: root}
-	if err := os.MkdirAll(layout.StateDirectory(), 0o755); err != nil {
-		return layout, nil, fmt.Errorf("create device state directory: %w", err)
+	if !readOnly {
+		if err := os.MkdirAll(layout.StateDirectory(), 0o755); err != nil {
+			return layout, nil, fmt.Errorf("create device state directory: %w", err)
+		}
 	}
-	repository, err := state.NewSQLiteRepository(layout.DatabasePath())
+	var repository state.Repository
+	var err error
+	if readOnly {
+		repository, err = state.NewReadOnlySQLiteRepository(layout.DatabasePath())
+	} else {
+		repository, err = state.NewSQLiteRepository(layout.DatabasePath())
+	}
 	if err != nil {
 		return layout, nil, err
 	}

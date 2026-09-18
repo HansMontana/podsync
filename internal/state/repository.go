@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/HansMontana/podsync/internal/episode"
@@ -43,6 +44,15 @@ func NewSQLiteRepository(path string) (*SQLiteRepository, error) {
 		return nil, fmt.Errorf("run state migrations: %w", err)
 	}
 
+	return &SQLiteRepository{db: db}, nil
+}
+
+func NewReadOnlySQLiteRepository(path string) (*SQLiteRepository, error) {
+	databaseURL := url.URL{Scheme: "file", Path: path, RawQuery: "mode=ro"}
+	db, err := sql.Open("sqlite", databaseURL.String())
+	if err != nil {
+		return nil, fmt.Errorf("open read-only state database: %w", err)
+	}
 	return &SQLiteRepository{db: db}, nil
 }
 
