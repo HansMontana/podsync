@@ -10,6 +10,29 @@ import (
 	"github.com/HansMontana/podsync/internal/state"
 )
 
+func TestSaveAndLoadRoundTrip(t *testing.T) {
+	path := t.TempDir() + "/Podsync/podsync.toml"
+	want := Config{
+		Sources: []SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
+		Feeds:   []LogicalFeed{{ID: "world", Title: "World", Source: "news", Order: NewestFirst}},
+		Briefings: []Briefing{{
+			ID:       "morning",
+			Title:    "Morning",
+			Sections: []BriefingSection{{Feed: "world", Order: OldestFirst, Limit: 3, UnplayedOnly: true}},
+		}},
+	}
+	if err := Save(path, want); err != nil {
+		t.Fatalf("Save() returned error: %v", err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got config %+v, want %+v", got, want)
+	}
+}
+
 func TestParseConfig(t *testing.T) {
 	input := `
 [[source]]

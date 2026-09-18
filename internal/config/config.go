@@ -1,9 +1,11 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -64,6 +66,41 @@ func Load(path string) (Config, error) {
 	defer file.Close()
 
 	return Parse(file)
+}
+
+// Save validates and atomically writes configuration to path.
+func Save(path string, cfg Config) error {
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("validate config: %w", err)
+	}
+	var encoded bytes.Buffer
+	if err := toml.NewEncoder(&encoded).Encode(cfg); err != nil {
+		return fmt.Errorf("encode config: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create config directory: %w", err)
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".podsync-config-*")
+	if err != nil {
+		return fmt.Errorf("create temporary config: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	if err := temporary.Chmod(0o644); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("set config permissions: %w", err)
+	}
+	if _, err := temporary.Write(encoded.Bytes()); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("write temporary config: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close temporary config: %w", err)
+	}
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return fmt.Errorf("install config: %w", err)
+	}
+	return nil
 }
 
 func Parse(r io.Reader) (Config, error) {
