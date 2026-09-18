@@ -48,6 +48,17 @@ func (e Episode) SameIdentity(other Episode) bool {
 	return e.fingerprint() == other.fingerprint()
 }
 
+// IdentityKey returns a stable key for matching an episode across refreshes.
+func (e Episode) IdentityKey() string {
+	if e.GUID != "" {
+		return fmt.Sprintf("guid:%d:%s", e.FeedID, e.GUID)
+	}
+	if e.Enclosure.URL != "" {
+		return fmt.Sprintf("audio:%d:%s", e.FeedID, e.Enclosure.URL)
+	}
+	return "fingerprint:" + e.fingerprint()
+}
+
 func (e Episode) fingerprint() string {
 	data := fmt.Sprintf(
 		"%d\x00%s\x00%s\x00%d",

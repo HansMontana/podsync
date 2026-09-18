@@ -844,6 +844,12 @@ The following product direction is intentional, but should still be implemented 
 
 The roadmap does not authorize speculative implementation. Each increment must preserve the iPod-as-source-of-truth boundary and establish its behavior with tests before the next layer is added.
 
+### Playback state rule
+
+Playback state comes from the iPod or Rockbox when available. If an episode's
+play count cannot currently be read, matched, or trusted, treat the episode as
+unplayed. Do not invent a host-side played state that overrides the device.
+
 ## Definition of done
 
 A change is normally complete when:
