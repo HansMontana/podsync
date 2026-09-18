@@ -18,16 +18,19 @@ Implemented:
 - Audio enclosure metadata and filtering
 - Conditional RSS refresh using ETag and Last-Modified headers
 - Initial feed refresh reconciliation and regression tests
+- Validated source-feed, logical-feed, filter, ordering, and briefing configuration
+- Device-local TOML configuration persistence and mounted-device layout handling
+- Logical-feed and briefing playlist generation with stable episode paths
+- Host-side bounded downloads and safe filesystem sync planning/application
+- Playback record matching by stable media path, with unknown records treated as unplayed
+- CLI workflows for validation, reconciliation, refresh, status, playlist, briefing, and sync
 
 Not yet implemented:
 
-- iPod-local TOML configuration
-- Logical feeds and filtered partitions
-- Per-feed playlist ordering
-- Daily briefing generation
-- Rockbox playback-statistics import
-- Audio download and device synchronization
-- A complete command-line interface
+- Parsing the hardware-specific Rockbox playback/tagcache format
+- Automatic iPod detection
+- Reading real-device playback records into the generic playback boundary
+- Full interrupted-sync end-to-end coverage against a real Rockbox layout
 
 See `AGENTS.md` for the durable project architecture and roadmap.
 
@@ -61,6 +64,14 @@ Run the tests:
 
 ```bash
 go test -count=1 ./...
+```
+
+The CLI requires an explicit mounted device root because automatic device
+detection is not implemented:
+
+```bash
+podsync refresh -device-root /media/ipod -config ./configs/briefing.toml
+podsync sync -device-root /media/ipod
 ```
 
 Format and verify a change:
