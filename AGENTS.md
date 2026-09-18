@@ -837,19 +837,19 @@ Do not weaken TLS verification or similar security controls merely to make devel
 
 The following product direction is intentional, but should still be implemented in small verified increments:
 
-1. Complete standard RSS support with `github.com/mmcdole/gofeed`, while keeping HTTP fetching, caching, and domain mapping in podsync.
-2. Store user-authored configuration on the iPod alongside the SQLite database.
-3. Distinguish source feeds from logical feeds and filtered partitions, so one RSS feed can provide several independently configured podcast entities.
-4. Support per-feed episode ordering: newest-first, oldest-first, or both where useful.
-5. Generate playlists for logical feeds using the configured ordering.
-6. Define daily briefings as ordered sections containing selected logical feeds and per-section episode limits.
-7. Read Rockbox playback statistics, including play count and last-played information, from the iPod.
-8. Match Rockbox playback records to stable episode identities without making local paths the domain identity.
-9. Add configurable selection rules such as unplayed-only and newest-episode limits.
-10. Detect the iPod and apply sync plans safely: download to transient host storage, copy final files to the iPod, and remove obsolete files conservatively.
-11. Transfer generated playlists and preserve the configured briefing and feed order.
-12. Add a CLI for feed management, refresh, briefing generation, sync, and status.
-13. Add end-to-end tests covering configuration, feed refresh, Rockbox playback state, playlist generation, and interrupted syncs.
+1. Complete standard RSS support with `github.com/mmcdole/gofeed`, while keeping HTTP fetching, caching, and domain mapping in podsync. (Implemented.)
+2. Store user-authored configuration on the iPod alongside the SQLite database. (Implemented for explicit device roots.)
+3. Distinguish source feeds from logical feeds and filtered partitions, so one RSS feed can provide several independently configured podcast entities. (Implemented.)
+4. Support per-feed episode ordering: newest-first, oldest-first, or both where useful. (Implemented.)
+5. Generate playlists for logical feeds using the configured ordering. (Implemented.)
+6. Define daily briefings as ordered sections containing selected logical feeds and per-section episode limits. (Implemented.)
+7. Read Rockbox playback statistics, including play count and last-played information, from the iPod. (Playback-log format implemented; binary TagCache import remains.)
+8. Match Rockbox playback records to stable episode identities without making local paths the domain identity. (Implemented for stable media paths.)
+9. Add configurable selection rules such as unplayed-only and newest-episode limits. (Implemented.)
+10. Detect the iPod and apply sync plans safely: download to transient host storage, copy final files to the iPod, and remove obsolete files conservatively. (Safe sync implemented; automatic detection remains.)
+11. Transfer generated playlists and preserve the configured briefing and feed order. (Implemented.)
+12. Add a CLI for feed management, refresh, briefing generation, sync, and status. (Implemented for explicit device roots.)
+13. Add end-to-end tests covering configuration, feed refresh, Rockbox playback state, playlist generation, and interrupted syncs. (Synthetic mounted-device coverage implemented; real-device validation remains.)
 
 The roadmap does not authorize speculative implementation. Each increment must preserve the iPod-as-source-of-truth boundary and establish its behavior with tests before the next layer is added.
 
