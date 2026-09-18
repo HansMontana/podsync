@@ -28,6 +28,29 @@ type Record struct {
 	LastPlayed time.Time
 }
 
+func MergeRecords(records []Record) []Record {
+	byPath := make(map[string]Record, len(records))
+	for _, record := range records {
+		key := normalizePath(record.Path)
+		if key == "" {
+			continue
+		}
+		current := byPath[key]
+		current.Path = record.Path
+		current.Known = current.Known || record.Known
+		current.PlayCount += record.PlayCount
+		if record.LastPlayed.After(current.LastPlayed) {
+			current.LastPlayed = record.LastPlayed
+		}
+		byPath[key] = current
+	}
+	result := make([]Record, 0, len(byPath))
+	for _, record := range byPath {
+		result = append(result, record)
+	}
+	return result
+}
+
 // ForEpisodes matches device records by stable device-relative media path.
 // Episodes without a trusted matching record remain unknown and therefore
 // unplayed.

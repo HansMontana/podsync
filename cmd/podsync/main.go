@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"sort"
 
 	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/device"
@@ -189,7 +190,11 @@ func sync(args []string) error {
 	if err != nil {
 		return err
 	}
-	states := map[string]playback.State{}
+	records, err := loadPlaybackRecords(layout)
+	if err != nil {
+		return err
+	}
+	states := playback.ForEpisodes(current.Episodes, records)
 	selected := make(map[string]episode.Episode)
 	var playlistFiles []syncer.PlaylistFile
 	var managed []string
@@ -317,4 +322,29 @@ func appendUnique(paths []string, value string) []string {
 
 func mediaPath(current episode.Episode) string {
 	return media.RelativePath(current)
+}
+
+func loadPlaybackRecords(layout device.Layout) ([]playback.Record, error) {
+	paths, err := layout.PlaybackLogPaths()
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(paths)
+	var records []playback.Record
+	for _, path := range paths {
+		file, err := os.Open(path)
+		if err != nil {
+			return nil, fmt.Errorf("open playback log %q: %w", path, err)
+		}
+		parsed, parseErr := playback.ParseLog(file)
+		closeErr := file.Close()
+		if parseErr != nil {
+			return nil, fmt.Errorf("parse playback log %q: %w", path, parseErr)
+		}
+		if closeErr != nil {
+			return nil, fmt.Errorf("close playback log %q: %w", path, closeErr)
+		}
+		records = append(records, parsed...)
+	}
+	return playback.MergeRecords(records), nil
 }

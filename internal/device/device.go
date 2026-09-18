@@ -32,6 +32,14 @@ func (l Layout) PlaylistDirectory() string {
 	return filepath.Join(l.Root, "Playlists")
 }
 
+func (l Layout) PlaybackLogPaths() ([]string, error) {
+	paths, err := filepath.Glob(filepath.Join(l.Root, ".rockbox", "playback*.log"))
+	if err != nil {
+		return nil, fmt.Errorf("find playback logs: %w", err)
+	}
+	return paths, nil
+}
+
 func (l Layout) ManifestPath() string {
 	return filepath.Join(l.StateDirectory(), "managed-files.txt")
 }
