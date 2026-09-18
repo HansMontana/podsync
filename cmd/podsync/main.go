@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
@@ -160,15 +161,13 @@ func generatePlaylist(args []string, briefingMode bool) error {
 		return err
 	}
 	relative := path.Join("Playlists", *id+".m3u8")
-	if err := syncer.ApplyFilePlan(context.Background(), layout.Root, syncer.FilePlan{Playlists: []syncer.PlaylistFile{{Relative: relative, Content: content}}}); err != nil {
-		return err
-	}
 	managed, err := layout.LoadManagedPaths()
 	if err != nil {
 		return err
 	}
 	managed = appendUnique(managed, relative)
-	if err := layout.SaveManagedPaths(managed); err != nil {
+	manifest := syncer.PlaylistFile{Relative: layout.ManifestRelativePath(), Content: manifestContent(managed)}
+	if err := syncer.ApplyFilePlan(context.Background(), layout.Root, syncer.FilePlan{Playlists: []syncer.PlaylistFile{{Relative: relative, Content: content}, manifest}}); err != nil {
 		return err
 	}
 	fmt.Printf("wrote %s\n", relative)
@@ -180,6 +179,7 @@ func sync(args []string) error {
 	deviceRoot := flags.String("device-root", "", "mounted iPod root")
 	configPath := flags.String("config", "", "path to podsync TOML configuration (defaults to device config)")
 	stagingDir := flags.String("staging", "", "host-side staging directory (defaults to a temporary directory)")
+	dryRun := flags.Bool("dry-run", false, "show the sync plan without downloading or changing the device")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -246,13 +246,25 @@ func sync(args []string) error {
 	for _, playlist := range playlistFiles {
 		newManaged = append(newManaged, playlist.Relative)
 	}
+	manifest := syncer.PlaylistFile{Relative: layout.ManifestRelativePath(), Content: manifestContent(newManaged)}
+	playlistFiles = append(playlistFiles, manifest)
+	if *dryRun {
+		copies := make([]syncer.FileCopy, 0, len(episodes))
+		for _, currentEpisode := range episodes {
+			copies = append(copies, syncer.FileCopy{Relative: mediaPath(currentEpisode)})
+		}
+		plan, err := syncer.BuildFilePlan(managed, copies, playlistFiles)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("would sync %d episodes and %d playlists\n", len(episodes), len(playlistFiles)-1)
+		fmt.Printf("would delete %d managed files\n", len(plan.Deletes))
+		return nil
+	}
 	if err := syncer.Episodes(context.Background(), http.DefaultClient, *stagingDir, layout.Root, episodes, playlistFiles, managed); err != nil {
 		return err
 	}
-	if err := layout.SaveManagedPaths(newManaged); err != nil {
-		return err
-	}
-	fmt.Printf("synced %d episodes and %d playlists\n", len(episodes), len(playlistFiles))
+	fmt.Printf("synced %d episodes and %d playlists\n", len(episodes), len(playlistFiles)-1)
 	return nil
 }
 
@@ -323,6 +335,15 @@ func appendUnique(paths []string, value string) []string {
 		}
 	}
 	return append(paths, value)
+}
+
+func manifestContent(paths []string) []byte {
+	var content bytes.Buffer
+	for _, current := range paths {
+		_, _ = content.WriteString(current)
+		_, _ = content.WriteString("\n")
+	}
+	return content.Bytes()
 }
 
 func mediaPath(current episode.Episode) string {

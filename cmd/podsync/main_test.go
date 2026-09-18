@@ -36,6 +36,12 @@ func TestRefreshAndSyncCommandsUseDeviceStateAndStaging(t *testing.T) {
 	if err := run([]string{"refresh", "-device-root", root, "-config", hostConfig}); err != nil {
 		t.Fatalf("refresh command failed: %v", err)
 	}
+	if err := run([]string{"sync", "-device-root", root, "-dry-run"}); err != nil {
+		t.Fatalf("dry-run command failed: %v", err)
+	}
+	if files, err := filepath.Glob(filepath.Join(root, "Podcasts", "feed-1", "*")); err != nil || len(files) != 0 {
+		t.Fatalf("dry-run changed device audio: %v, error %v", files, err)
+	}
 	if err := run([]string{"sync", "-device-root", root}); err != nil {
 		t.Fatalf("sync command failed: %v", err)
 	}

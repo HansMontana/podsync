@@ -34,11 +34,17 @@ func BuildFilePlan(managed []string, copies []FileCopy, playlists []PlaylistFile
 		if err := validateRelative(copy.Relative); err != nil {
 			return FilePlan{}, fmt.Errorf("copy path: %w", err)
 		}
+		if _, exists := desired[copy.Relative]; exists {
+			return FilePlan{}, fmt.Errorf("duplicate desired path: %q", copy.Relative)
+		}
 		desired[copy.Relative] = struct{}{}
 	}
 	for _, playlist := range playlists {
 		if err := validateRelative(playlist.Relative); err != nil {
 			return FilePlan{}, fmt.Errorf("playlist path: %w", err)
+		}
+		if _, exists := desired[playlist.Relative]; exists {
+			return FilePlan{}, fmt.Errorf("duplicate desired path: %q", playlist.Relative)
 		}
 		desired[playlist.Relative] = struct{}{}
 	}

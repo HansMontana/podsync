@@ -48,6 +48,10 @@ func (l Layout) ManifestPath() string {
 	return filepath.Join(l.StateDirectory(), "managed-files.txt")
 }
 
+func (l Layout) ManifestRelativePath() string {
+	return "Podsync/managed-files.txt"
+}
+
 func (l Layout) LoadManagedPaths() ([]string, error) {
 	file, err := os.Open(l.ManifestPath())
 	if os.IsNotExist(err) {

@@ -58,3 +58,9 @@ func TestBuildFilePlanRejectsEscapingPath(t *testing.T) {
 		t.Fatal("BuildFilePlan() accepted an escaping path")
 	}
 }
+
+func TestBuildFilePlanRejectsDuplicateDestination(t *testing.T) {
+	if _, err := BuildFilePlan(nil, []FileCopy{{Source: "one", Relative: "Podcasts/one.mp3"}}, []PlaylistFile{{Relative: "Podcasts/one.mp3"}}); err == nil {
+		t.Fatal("BuildFilePlan() accepted duplicate destinations")
+	}
+}
