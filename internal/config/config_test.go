@@ -1,10 +1,13 @@
 package config
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/feed"
+	"github.com/HansMontana/podsync/internal/state"
 )
 
 func TestParseConfig(t *testing.T) {
@@ -42,6 +45,25 @@ unplayed_only = true
 	}
 	if cfg.Briefings[0].Sections[0].UnplayedOnly != true {
 		t.Fatalf("got briefing %+v", cfg.Briefings[0])
+	}
+}
+
+func TestEnsureSourcesAddsMissingFeedsAndPreservesExistingMetadata(t *testing.T) {
+	cfg := Config{Sources: []SourceFeed{
+		{ID: "existing", URL: "https://example.com/existing.xml"},
+		{ID: "new", URL: "https://example.com/new.xml"},
+	}}
+	current := state.State{Feeds: []feed.Feed{{ID: 4, Name: "Existing name", URL: "https://EXAMPLE.com:443/existing.xml", ETag: `"etag"`}}}
+	got, err := cfg.EnsureSources(current)
+	if err != nil {
+		t.Fatalf("EnsureSources() returned error: %v", err)
+	}
+	want := state.State{Feeds: []feed.Feed{
+		{ID: 4, Name: "Existing name", URL: "https://EXAMPLE.com:443/existing.xml", ETag: `"etag"`},
+		{ID: 5, Name: "new", URL: "https://example.com/new.xml"},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got state %+v, want %+v", got, want)
 	}
 }
 

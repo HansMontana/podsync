@@ -9,6 +9,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
+	"github.com/HansMontana/podsync/internal/state"
 )
 
 type Order string
@@ -152,6 +153,44 @@ func validateOrder(order Order) error {
 func (f Filter) Matches(e episode.Episode) bool {
 	return containsFold(e.Title, f.TitleContains) &&
 		containsFold(e.Description, f.DescriptionContains)
+}
+
+// EnsureSources adds configured source feeds that are missing from durable
+// state while preserving existing IDs, names, and HTTP cache metadata.
+func (c Config) EnsureSources(current state.State) (state.State, error) {
+	if err := c.Validate(); err != nil {
+		return state.State{}, fmt.Errorf("validate config: %w", err)
+	}
+	result := current
+	byURL := make(map[string]feed.Feed, len(result.Feeds))
+	maxID := int64(0)
+	for _, known := range result.Feeds {
+		normalized, err := feed.NormalizeURL(known.URL)
+		if err != nil {
+			return state.State{}, fmt.Errorf("normalize existing feed %d: %w", known.ID, err)
+		}
+		byURL[normalized] = known
+		if known.ID > maxID {
+			maxID = known.ID
+		}
+	}
+	for _, source := range c.Sources {
+		normalized, err := feed.NormalizeURL(source.URL)
+		if err != nil {
+			return state.State{}, fmt.Errorf("normalize source %q: %w", source.ID, err)
+		}
+		if _, exists := byURL[normalized]; exists {
+			continue
+		}
+		maxID++
+		known := feed.Feed{ID: maxID, Name: source.ID, URL: normalized}
+		result.Feeds = append(result.Feeds, known)
+		byURL[normalized] = known
+	}
+	if err := result.Validate(); err != nil {
+		return state.State{}, fmt.Errorf("validate reconciled state: %w", err)
+	}
+	return result, nil
 }
 
 func containsFold(value, query string) bool {
