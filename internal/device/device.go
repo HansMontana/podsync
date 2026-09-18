@@ -40,6 +40,10 @@ func (l Layout) PlaybackLogPaths() ([]string, error) {
 	return paths, nil
 }
 
+func (l Layout) TagCacheDirectory() string {
+	return filepath.Join(l.Root, ".rockbox", "tagcache")
+}
+
 func (l Layout) ManifestPath() string {
 	return filepath.Join(l.StateDirectory(), "managed-files.txt")
 }

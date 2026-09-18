@@ -351,5 +351,14 @@ func loadPlaybackRecords(layout device.Layout) ([]playback.Record, error) {
 		}
 		records = append(records, parsed...)
 	}
+	if _, err := os.Stat(layout.TagCacheDirectory()); err == nil {
+		parsed, err := playback.ParseTagCache(layout.TagCacheDirectory())
+		if err != nil {
+			return nil, fmt.Errorf("parse TagCache: %w", err)
+		}
+		return parsed, nil
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("inspect TagCache directory: %w", err)
+	}
 	return playback.MergeRecords(records), nil
 }
