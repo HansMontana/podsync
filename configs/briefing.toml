@@ -1,9 +1,22 @@
-# Example podcast sync / briefing config
+# Example podsync configuration.
+# This file is a template; authoritative configuration belongs on the iPod.
 
-name = "Morning Briefing"
+[[source]]
+id = "news"
+url = "https://example.com/rss"
 
 [[feed]]
-name = "Example Feed"
-url = "https://example.com/rss"
-priority = 10
-keep = 5
+id = "example"
+title = "Example Feed"
+source = "news"
+order = "newest_first"
+
+[[briefing]]
+id = "morning"
+title = "Morning Briefing"
+
+[[briefing.section]]
+feed = "example"
+order = "newest_first"
+limit = 1
+unplayed_only = true

@@ -3,6 +3,7 @@ module github.com/HansMontana/podsync
 go 1.25.7
 
 require (
+	github.com/BurntSushi/toml v1.5.0
 	github.com/mmcdole/gofeed v1.4.2
 	github.com/pressly/goose/v3 v3.27.3
 	modernc.org/sqlite v1.54.0
