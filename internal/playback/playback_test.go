@@ -1,6 +1,7 @@
 package playback
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -23,5 +24,23 @@ func TestForEpisodesTreatsMissingRecordsAsUnplayed(t *testing.T) {
 	state := ForEpisodes([]episode.Episode{current}, nil)[current.IdentityKey()]
 	if state.Known || state.Played() {
 		t.Fatalf("got playback state %+v", state)
+	}
+}
+
+func TestParseLogAggregatesRockboxPlaybackEntries(t *testing.T) {
+	log := `# Started Ver. 4.x
+1700000000:1000:2000:/Podcasts/feed-2/episode.mp3
+1700000100:1000:2000:/Podcasts/feed-2/episode.mp3
+malformed
+`
+	records, err := ParseLog(strings.NewReader(log))
+	if err != nil {
+		t.Fatalf("ParseLog() returned error: %v", err)
+	}
+	if len(records) != 1 || records[0].PlayCount != 2 {
+		t.Fatalf("got records %+v", records)
+	}
+	if records[0].LastPlayed.Unix() != 1700000100 {
+		t.Fatalf("got last played %v", records[0].LastPlayed)
 	}
 }

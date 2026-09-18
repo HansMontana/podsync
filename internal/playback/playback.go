@@ -23,6 +23,7 @@ func (s State) Played() bool {
 
 type Record struct {
 	Path       string
+	Known      bool
 	PlayCount  int
 	LastPlayed time.Time
 }
