@@ -1,0 +1,38 @@
+package playlists
+
+import (
+	"fmt"
+	"path"
+
+	"github.com/HansMontana/podsync/internal/briefing"
+	"github.com/HansMontana/podsync/internal/config"
+	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/media"
+	"github.com/HansMontana/podsync/internal/playback"
+	"github.com/HansMontana/podsync/internal/selection"
+	"github.com/HansMontana/podsync/internal/state"
+)
+
+func LogicalFeed(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State) ([]byte, error) {
+	episodes, err := selection.Feed(cfg, current, feedID, playbackStates, false)
+	if err != nil {
+		return nil, fmt.Errorf("select logical feed %q: %w", feedID, err)
+	}
+	return M3U(tracks(episodes)), nil
+}
+
+func Briefing(cfg config.Config, current state.State, briefingID string, playbackStates map[string]playback.State) ([]byte, error) {
+	plan, err := briefing.Build(cfg, current, briefingID, playbackStates)
+	if err != nil {
+		return nil, fmt.Errorf("build briefing %q: %w", briefingID, err)
+	}
+	return M3U(tracks(plan.Episodes)), nil
+}
+
+func tracks(episodes []episode.Episode) []Track {
+	result := make([]Track, len(episodes))
+	for i, current := range episodes {
+		result[i] = Track{Episode: current, Path: path.Join("..", media.RelativePath(current))}
+	}
+	return result
+}
