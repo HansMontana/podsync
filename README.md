@@ -23,7 +23,7 @@ Implemented:
 - Logical-feed and briefing playlist generation with stable episode paths
 - Host-side bounded downloads and safe filesystem sync planning/application
 - Rockbox playback-log and TagCache parsing with stable media-path matching, with unknown records treated as unplayed
-- CLI workflows for validation, reconciliation, refresh, status, playlist, briefing, and sync
+- CLI workflows for validation, reconciliation, refresh, feed management, status, playlist, briefing, and sync
 
 Not yet implemented:
 
@@ -69,7 +69,8 @@ detection is not implemented:
 
 ```bash
 podsync refresh -device-root /media/ipod -config ./configs/briefing.toml
-podsync sync -device-root /media/ipod
+podsync feed list -device-root /media/ipod
+podsync sync -device-root /media/ipod --dry-run
 ```
 
 Format and verify a change:
