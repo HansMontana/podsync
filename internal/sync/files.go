@@ -67,6 +67,11 @@ func ApplyFilePlan(ctx context.Context, deviceRoot string, plan FilePlan) error 
 		}
 	}
 	for _, relative := range plan.Deletes {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		if err := validateRelative(relative); err != nil {
 			return fmt.Errorf("delete path: %w", err)
 		}
@@ -115,7 +120,7 @@ func writeFromReader(ctx context.Context, root, relative string, reader io.Reade
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
 
-	if _, err := io.Copy(temporary, reader); err != nil {
+	if _, err := io.Copy(temporary, contextReader{ctx: ctx, reader: reader}); err != nil {
 		_ = temporary.Close()
 		return fmt.Errorf("write temporary destination: %w", err)
 	}
@@ -126,6 +131,20 @@ func writeFromReader(ctx context.Context, root, relative string, reader io.Reade
 		return fmt.Errorf("install %q: %w", relative, err)
 	}
 	return nil
+}
+
+type contextReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (r contextReader) Read(p []byte) (int, error) {
+	select {
+	case <-r.ctx.Done():
+		return 0, r.ctx.Err()
+	default:
+		return r.reader.Read(p)
+	}
 }
 
 func validateRelative(relative string) error {
