@@ -48,6 +48,15 @@ The iPod should contain durable state that needs to survive hosts and travel wit
 
 The exact on-device path can evolve. Preserve the architectural boundary even if paths change.
 
+The current layout helper uses these device-relative paths:
+
+- `Podsync/podsync.db` for the SQLite database
+- `Podsync/podsync.toml` for device-local configuration
+- `Podcasts/` for episode audio
+- `Playlists/` for generated playlists
+
+The CLI currently accepts an explicit mounted device root. Automatic device detection is not implemented.
+
 ### Transient host state
 
 The host may contain disposable working state, including:
