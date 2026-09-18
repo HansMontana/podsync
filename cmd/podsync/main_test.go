@@ -79,3 +79,29 @@ func TestRefreshAndSyncCommandsUseDeviceStateAndStaging(t *testing.T) {
 		t.Fatalf("got episode files %v, error %v", files, err)
 	}
 }
+
+func TestFeedCommandsManageDeviceConfiguration(t *testing.T) {
+	root := t.TempDir()
+	hostConfig := filepath.Join(t.TempDir(), "config.toml")
+	cfg := config.Config{Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}}}
+	if err := config.Save(hostConfig, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"reconcile", "-device-root", root, "-config", hostConfig}); err != nil {
+		t.Fatalf("reconcile command failed: %v", err)
+	}
+	if err := run([]string{"feed", "add", "-device-root", root, "-id", "sports", "-url", "https://example.com/sports.xml"}); err != nil {
+		t.Fatalf("feed add command failed: %v", err)
+	}
+	updated, err := config.Load(filepath.Join(root, "Podsync", "podsync.toml"))
+	if err != nil || len(updated.Sources) != 2 {
+		t.Fatalf("got updated config %+v, error %v", updated, err)
+	}
+	if err := run([]string{"feed", "remove", "-device-root", root, "-id", "sports"}); err != nil {
+		t.Fatalf("feed remove command failed: %v", err)
+	}
+	updated, err = config.Load(filepath.Join(root, "Podsync", "podsync.toml"))
+	if err != nil || len(updated.Sources) != 1 {
+		t.Fatalf("got final config %+v, error %v", updated, err)
+	}
+}

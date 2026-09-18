@@ -31,7 +31,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: podsync <validate-config|reconcile|refresh|status|playlist|briefing|sync> [options]")
+		return fmt.Errorf("usage: podsync <validate-config|reconcile|refresh|status|feed|playlist|briefing|sync> [options]")
 	}
 	switch args[0] {
 	case "validate-config":
@@ -42,6 +42,8 @@ func run(args []string) error {
 		return reconcile(args[1:], true)
 	case "status":
 		return status(args[1:])
+	case "feed":
+		return feedCommand(args[1:])
 	case "playlist":
 		return generatePlaylist(args[1:], false)
 	case "briefing":
@@ -51,6 +53,118 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
+}
+
+func feedCommand(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: podsync feed <list|add|remove> [options]")
+	}
+	switch args[0] {
+	case "list":
+		return listFeeds(args[1:])
+	case "add":
+		return addFeed(args[1:])
+	case "remove":
+		return removeFeed(args[1:])
+	default:
+		return fmt.Errorf("unknown feed command %q", args[0])
+	}
+}
+
+func listFeeds(args []string) error {
+	flags := flag.NewFlagSet("feed list", flag.ContinueOnError)
+	deviceRoot := flags.String("device-root", "", "mounted iPod root")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	_, repository, err := openRepositoryMode(*deviceRoot, true)
+	if err != nil {
+		return err
+	}
+	defer repository.Close()
+	current, err := repository.Load()
+	if err != nil {
+		return err
+	}
+	for _, known := range current.Feeds {
+		fmt.Printf("%d\t%s\t%s\n", known.ID, known.Name, known.URL)
+	}
+	return nil
+}
+
+func addFeed(args []string) error {
+	flags := flag.NewFlagSet("feed add", flag.ContinueOnError)
+	deviceRoot := flags.String("device-root", "", "mounted iPod root")
+	configPath := flags.String("config", "", "path to podsync TOML configuration")
+	id := flags.String("id", "", "source feed ID")
+	feedURL := flags.String("url", "", "source feed URL")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *id == "" || *feedURL == "" {
+		return fmt.Errorf("-id and -url are required")
+	}
+	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false)
+	if err != nil {
+		return err
+	}
+	defer repository.Close()
+	cfg.Sources = append(cfg.Sources, config.SourceFeed{ID: *id, URL: *feedURL})
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	if err := config.Save(layout.ConfigPath(), cfg); err != nil {
+		return fmt.Errorf("save device config: %w", err)
+	}
+	if err := reconcileState(repository, cfg); err != nil {
+		return err
+	}
+	fmt.Printf("added source %s\n", *id)
+	return nil
+}
+
+func removeFeed(args []string) error {
+	flags := flag.NewFlagSet("feed remove", flag.ContinueOnError)
+	deviceRoot := flags.String("device-root", "", "mounted iPod root")
+	configPath := flags.String("config", "", "path to podsync TOML configuration")
+	id := flags.String("id", "", "source feed ID")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if *id == "" {
+		return fmt.Errorf("-id is required")
+	}
+	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false)
+	if err != nil {
+		return err
+	}
+	defer repository.Close()
+	for _, logical := range cfg.Feeds {
+		if logical.Source == *id {
+			return fmt.Errorf("source %q is used by logical feed %q", *id, logical.ID)
+		}
+	}
+	updated := cfg.Sources[:0]
+	found := false
+	for _, source := range cfg.Sources {
+		if source.ID == *id {
+			found = true
+			continue
+		}
+		updated = append(updated, source)
+	}
+	if !found {
+		return fmt.Errorf("source feed %q not found", *id)
+	}
+	cfg.Sources = updated
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	if err := config.Save(layout.ConfigPath(), cfg); err != nil {
+		return fmt.Errorf("save device config: %w", err)
+	}
+	fmt.Printf("removed source %s\n", *id)
+	return nil
 }
 
 func validateConfig(args []string) error {
