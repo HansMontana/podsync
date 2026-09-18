@@ -64,3 +64,27 @@ func TestBuildFilePlanRejectsDuplicateDestination(t *testing.T) {
 		t.Fatal("BuildFilePlan() accepted duplicate destinations")
 	}
 }
+
+func TestApplyFilePlanCancellationLeavesExistingDestinationUntouched(t *testing.T) {
+	root := t.TempDir()
+	destination := filepath.Join(root, "Podcasts/episode.mp3")
+	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(destination, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(t.TempDir(), "episode.mp3")
+	if err := os.WriteFile(source, []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := ApplyFilePlan(ctx, root, FilePlan{Copies: []FileCopy{{Source: source, Relative: "Podcasts/episode.mp3"}}}); err == nil {
+		t.Fatal("ApplyFilePlan() accepted a canceled context")
+	}
+	data, err := os.ReadFile(destination)
+	if err != nil || string(data) != "old" {
+		t.Fatalf("existing destination changed to %q, error %v", data, err)
+	}
+}

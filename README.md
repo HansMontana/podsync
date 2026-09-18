@@ -22,12 +22,11 @@ Implemented:
 - Device-local TOML configuration persistence and mounted-device layout handling
 - Logical-feed and briefing playlist generation with stable episode paths
 - Host-side bounded downloads and safe filesystem sync planning/application
-- Rockbox playback-log parsing and stable media-path matching, with unknown records treated as unplayed
+- Rockbox playback-log and TagCache parsing with stable media-path matching, with unknown records treated as unplayed
 - CLI workflows for validation, reconciliation, refresh, status, playlist, briefing, and sync
 
 Not yet implemented:
 
-- Parsing the hardware-specific Rockbox TagCache database format
 - Automatic iPod detection
 - Full interrupted-sync end-to-end coverage against a real Rockbox layout
 
