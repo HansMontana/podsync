@@ -105,11 +105,10 @@ func reconcile(args []string, refresh bool) error {
 func status(args []string) error {
 	flags := flag.NewFlagSet("status", flag.ContinueOnError)
 	deviceRoot := flags.String("device-root", "", "mounted iPod root")
-	configPath := flags.String("config", "", "path to podsync TOML configuration")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	_, repository, _, err := openDevice(*deviceRoot, *configPath)
+	layout, repository, err := openRepository(*deviceRoot)
 	if err != nil {
 		return err
 	}
@@ -119,6 +118,16 @@ func status(args []string) error {
 		return err
 	}
 	fmt.Printf("feeds: %d\nepisodes: %d\n", len(current.Feeds), len(current.Episodes))
+	if records, err := loadPlaybackRecords(layout); err == nil {
+		states := playback.ForEpisodes(current.Episodes, records)
+		played := 0
+		for _, state := range states {
+			if state.Played() {
+				played++
+			}
+		}
+		fmt.Printf("played: %d\n", played)
+	}
 	return nil
 }
 
@@ -269,30 +278,40 @@ func sync(args []string) error {
 }
 
 func openDevice(root, configPath string) (device.Layout, state.Repository, config.Config, error) {
-	if root == "" {
-		return device.Layout{}, nil, config.Config{}, fmt.Errorf("-device-root is required")
-	}
-	layout := device.Layout{Root: root}
-	if err := os.MkdirAll(layout.StateDirectory(), 0o755); err != nil {
-		return layout, nil, config.Config{}, fmt.Errorf("create device state directory: %w", err)
+	layout, repository, err := openRepository(root)
+	if err != nil {
+		return layout, nil, config.Config{}, err
 	}
 	if configPath == "" {
 		configPath = layout.ConfigPath()
 	}
 	cfg, err := config.Load(configPath)
 	if err != nil {
+		_ = repository.Close()
 		return layout, nil, config.Config{}, err
 	}
 	if configPath != layout.ConfigPath() {
 		if err := config.Save(layout.ConfigPath(), cfg); err != nil {
+			_ = repository.Close()
 			return layout, nil, config.Config{}, fmt.Errorf("save device config: %w", err)
 		}
 	}
+	return layout, repository, cfg, nil
+}
+
+func openRepository(root string) (device.Layout, state.Repository, error) {
+	if root == "" {
+		return device.Layout{}, nil, fmt.Errorf("-device-root is required")
+	}
+	layout := device.Layout{Root: root}
+	if err := os.MkdirAll(layout.StateDirectory(), 0o755); err != nil {
+		return layout, nil, fmt.Errorf("create device state directory: %w", err)
+	}
 	repository, err := state.NewSQLiteRepository(layout.DatabasePath())
 	if err != nil {
-		return layout, nil, config.Config{}, err
+		return layout, nil, err
 	}
-	return layout, repository, cfg, nil
+	return layout, repository, nil
 }
 
 func reconcileState(repository state.Repository, cfg config.Config) error {

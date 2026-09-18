@@ -45,6 +45,9 @@ func TestRefreshAndSyncCommandsUseDeviceStateAndStaging(t *testing.T) {
 	if err := run([]string{"sync", "-device-root", root}); err != nil {
 		t.Fatalf("sync command failed: %v", err)
 	}
+	if err := run([]string{"status", "-device-root", root}); err != nil {
+		t.Fatalf("status command failed without config: %v", err)
+	}
 	if _, err := os.Stat(filepath.Join(root, "Podsync", "podsync.toml")); err != nil {
 		t.Fatalf("device config was not persisted: %v", err)
 	}
