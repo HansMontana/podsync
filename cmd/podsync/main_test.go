@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/HansMontana/podsync/internal/config"
@@ -131,5 +132,18 @@ func TestStatusReportsPlaybackImportErrors(t *testing.T) {
 	}
 	if err := run([]string{"status", "-device-root", root}); err == nil {
 		t.Fatal("status accepted incomplete TagCache data")
+	}
+}
+
+func TestCLIHelpAndUnknownCommandUsage(t *testing.T) {
+	if err := run([]string{"--help"}); err != nil {
+		t.Fatalf("top-level help returned error: %v", err)
+	}
+	if err := run([]string{"help", "sync"}); err != nil {
+		t.Fatalf("command help returned error: %v", err)
+	}
+	err := run([]string{"not-a-command"})
+	if err == nil || !strings.Contains(err.Error(), "Usage: podsync") {
+		t.Fatalf("unknown command error did not include usage: %v", err)
 	}
 }
