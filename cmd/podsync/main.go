@@ -483,7 +483,7 @@ func sync(args []string) error {
 	var playlistFiles []syncer.PlaylistFile
 	var managed []string
 	for _, logical := range cfg.Feeds {
-		episodes, selectErr := selection.Feed(cfg, current, logical.ID, states, false)
+		episodes, selectErr := selection.FeedForSync(cfg, current, logical.ID, states, false)
 		if selectErr != nil {
 			return selectErr
 		}

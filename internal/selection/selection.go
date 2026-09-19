@@ -21,6 +21,17 @@ func Feed(cfg config.Config, current state.State, feedID string, playbackStates 
 	return nil, fmt.Errorf("logical feed %q not found", feedID)
 }
 
+// FeedForSync selects the newest eligible episodes for device storage. Playlist
+// order is applied separately when playlist content is generated.
+func FeedForSync(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, unplayedOnly bool) ([]episode.Episode, error) {
+	for _, logical := range cfg.Feeds {
+		if logical.ID == feedID {
+			return FeedOrderedLimit(cfg, current, feedID, playbackStates, unplayedOnly || logical.UnplayedOnly, config.NewestFirst, logical.Limit)
+		}
+	}
+	return nil, fmt.Errorf("logical feed %q not found", feedID)
+}
+
 func FeedOrdered(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, unplayedOnly bool, order config.Order) ([]episode.Episode, error) {
 	return FeedOrderedLimit(cfg, current, feedID, playbackStates, unplayedOnly, order, 0)
 }

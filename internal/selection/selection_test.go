@@ -63,6 +63,25 @@ func TestFeedSupportsOldestFirst(t *testing.T) {
 	}
 }
 
+func TestFeedForSyncSelectsNewestEpisodesRegardlessOfPlaylistOrder(t *testing.T) {
+	cfg := config.Config{
+		Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
+		Feeds:   []config.LogicalFeed{{ID: "news", Source: "news", Order: config.OldestFirst, Limit: 2}},
+	}
+	episodes := []episode.Episode{
+		{FeedID: 1, GUID: "oldest", PublishedAt: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)},
+		{FeedID: 1, GUID: "middle", PublishedAt: time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)},
+		{FeedID: 1, GUID: "newest", PublishedAt: time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)},
+	}
+	got, err := FeedForSync(cfg, state.State{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/news.xml"}}, Episodes: episodes}, "news", nil, false)
+	if err != nil {
+		t.Fatalf("FeedForSync() returned error: %v", err)
+	}
+	if len(got) != 2 || got[0].GUID != "newest" || got[1].GUID != "middle" {
+		t.Fatalf("got episodes %+v", got)
+	}
+}
+
 func TestFeedUnplayedLimitBackfillsOlderEpisodes(t *testing.T) {
 	cfg := config.Config{
 		Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
