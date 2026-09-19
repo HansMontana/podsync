@@ -40,7 +40,30 @@ func TestBuildOrdersBriefingSectionsAndLimitsEpisodes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() returned error: %v", err)
 	}
-	if len(plan.Episodes) != 3 || plan.Episodes[0].GUID != "first-new" || plan.Episodes[1].GUID != "second-new" || plan.Episodes[2].GUID != "second-old" {
+	if len(plan.Episodes) != 2 || plan.Episodes[0].GUID != "second-new" || plan.Episodes[1].GUID != "second-old" {
+		t.Fatalf("got plan episodes %+v", plan.Episodes)
+	}
+}
+
+func TestBuildSkipsOnlyPlayedBriefingSection(t *testing.T) {
+	cfg := config.Config{
+		Sources: []config.SourceFeed{{ID: "one", URL: "https://example.com/one.xml"}, {ID: "two", URL: "https://example.com/two.xml"}},
+		Feeds:   []config.LogicalFeed{{ID: "first", Source: "one", Order: config.NewestFirst}, {ID: "second", Source: "two", Order: config.NewestFirst}},
+		Briefings: []config.Briefing{{ID: "morning", Sections: []config.BriefingSection{
+			{Feed: "first", Order: config.NewestFirst, Limit: 1, UnplayedOnly: true},
+			{Feed: "second", Order: config.NewestFirst, Limit: 1, UnplayedOnly: true},
+		}}},
+	}
+	first := episode.Episode{FeedID: 1, GUID: "first", PublishedAt: time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)}
+	second := episode.Episode{FeedID: 2, GUID: "second", PublishedAt: time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)}
+	plan, err := Build(cfg, state.State{
+		Feeds:    []feed.Feed{{ID: 1, URL: "https://example.com/one.xml"}, {ID: 2, URL: "https://example.com/two.xml"}},
+		Episodes: []episode.Episode{first, second},
+	}, "morning", map[string]playback.State{first.IdentityKey(): {Known: true, PlayCount: 1}})
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+	if len(plan.Episodes) != 1 || plan.Episodes[0].GUID != "second" {
 		t.Fatalf("got plan episodes %+v", plan.Episodes)
 	}
 }

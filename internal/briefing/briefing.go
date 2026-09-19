@@ -30,14 +30,26 @@ func Build(cfg config.Config, current state.State, briefingID string, playbackSt
 
 	plan := Plan{ID: briefingConfig.ID, Title: briefingConfig.Title}
 	for _, section := range briefingConfig.Sections {
-		episodes, err := selection.FeedOrdered(cfg, current, section.Feed, playbackStates, section.UnplayedOnly, section.Order)
+		episodes, err := selection.FeedOrdered(cfg, current, section.Feed, playbackStates, false, section.Order)
 		if err != nil {
 			return Plan{}, fmt.Errorf("briefing %q section %q: %w", briefingID, section.Feed, err)
 		}
 		if len(episodes) > section.Limit {
 			episodes = episodes[:section.Limit]
 		}
+		if section.UnplayedOnly && hasPlayedEpisode(episodes, playbackStates) {
+			continue
+		}
 		plan.Episodes = append(plan.Episodes, episodes...)
 	}
 	return plan, nil
+}
+
+func hasPlayedEpisode(episodes []episode.Episode, playbackStates map[string]playback.State) bool {
+	for _, current := range episodes {
+		if playbackStates[current.IdentityKey()].Played() {
+			return true
+		}
+	}
+	return false
 }
