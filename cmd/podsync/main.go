@@ -223,7 +223,7 @@ func status(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	layout, repository, err := openRepository(*deviceRoot)
+	layout, repository, err := openRepositoryMode(*deviceRoot, false)
 	if err != nil {
 		return err
 	}
@@ -373,7 +373,7 @@ func sync(args []string) error {
 	}
 	newManaged := make([]string, 0, len(episodes)+len(playlistFiles))
 	for _, currentEpisode := range episodes {
-		newManaged = append(newManaged, mediaPath(currentEpisode))
+		newManaged = append(newManaged, media.RelativePath(currentEpisode))
 	}
 	for _, playlist := range playlistFiles {
 		newManaged = append(newManaged, playlist.Relative)
@@ -383,7 +383,7 @@ func sync(args []string) error {
 	if *dryRun {
 		copies := make([]syncer.FileCopy, 0, len(episodes))
 		for _, currentEpisode := range episodes {
-			copies = append(copies, syncer.FileCopy{Relative: mediaPath(currentEpisode)})
+			copies = append(copies, syncer.FileCopy{Relative: media.RelativePath(currentEpisode)})
 		}
 		plan, err := syncer.BuildFilePlan(managed, copies, playlistFiles)
 		if err != nil {
@@ -420,10 +420,6 @@ func openDevice(root, configPath string, readOnly bool) (device.Layout, state.Re
 		}
 	}
 	return layout, repository, cfg, nil
-}
-
-func openRepository(root string) (device.Layout, state.Repository, error) {
-	return openRepositoryMode(root, false)
 }
 
 func openRepositoryMode(root string, readOnly bool) (device.Layout, state.Repository, error) {
@@ -498,10 +494,6 @@ func manifestContent(paths []string) []byte {
 		_, _ = content.WriteString("\n")
 	}
 	return content.Bytes()
-}
-
-func mediaPath(current episode.Episode) string {
-	return media.RelativePath(current)
 }
 
 func loadPlaybackRecords(layout device.Layout) ([]playback.Record, error) {

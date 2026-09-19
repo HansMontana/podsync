@@ -75,28 +75,3 @@ func (l Layout) LoadManagedPaths() ([]string, error) {
 	}
 	return paths, nil
 }
-
-func (l Layout) SaveManagedPaths(paths []string) error {
-	if err := os.MkdirAll(l.StateDirectory(), 0o755); err != nil {
-		return fmt.Errorf("create state directory: %w", err)
-	}
-	temporary, err := os.CreateTemp(l.StateDirectory(), ".podsync-managed-*")
-	if err != nil {
-		return fmt.Errorf("create managed-files manifest: %w", err)
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	for _, path := range paths {
-		if _, err := fmt.Fprintln(temporary, path); err != nil {
-			_ = temporary.Close()
-			return fmt.Errorf("write managed-files manifest: %w", err)
-		}
-	}
-	if err := temporary.Close(); err != nil {
-		return fmt.Errorf("close managed-files manifest: %w", err)
-	}
-	if err := os.Rename(temporaryPath, l.ManifestPath()); err != nil {
-		return fmt.Errorf("install managed-files manifest: %w", err)
-	}
-	return nil
-}

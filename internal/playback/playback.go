@@ -41,7 +41,7 @@ func MergeRecords(records []Record) []Record {
 		}
 		current := byPath[key]
 		current.Path = record.Path
-		current.Known = current.Known || record.Known
+		current.Known = true
 		current.PlayCount += record.PlayCount
 		if record.LastPlayed.After(current.LastPlayed) {
 			current.LastPlayed = record.LastPlayed

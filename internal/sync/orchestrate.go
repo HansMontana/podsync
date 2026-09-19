@@ -29,12 +29,12 @@ func Episodes(ctx context.Context, client *http.Client, stagingDir, deviceRoot s
 			return ctx.Err()
 		default:
 		}
-		result, err := download.Episode(ctx, client, current, stagingDir)
+		stagedPath, err := download.Episode(ctx, client, current, stagingDir)
 		if err != nil {
 			return fmt.Errorf("stage episode %q: %w", current.Title, err)
 		}
-		staged = append(staged, result.Path)
-		copies = append(copies, FileCopy{Source: result.Path, Relative: media.RelativePath(current)})
+		staged = append(staged, stagedPath)
+		copies = append(copies, FileCopy{Source: stagedPath, Relative: media.RelativePath(current)})
 	}
 
 	plan, err := BuildFilePlan(managed, copies, playlists)

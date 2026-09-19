@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -102,7 +103,7 @@ func copyFile(ctx context.Context, root string, copy FileCopy) error {
 }
 
 func writeFile(ctx context.Context, root, relative string, content []byte) error {
-	return writeFromReader(ctx, root, relative, strings.NewReader(string(content)))
+	return writeFromReader(ctx, root, relative, bytes.NewReader(content))
 }
 
 func writeFromReader(ctx context.Context, root, relative string, reader io.Reader) error {

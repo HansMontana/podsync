@@ -19,22 +19,19 @@ func TestEpisodeDownloadsToStaging(t *testing.T) {
 	defer server.Close()
 
 	staging := filepath.Join(t.TempDir(), "staging")
-	result, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}, staging)
+	path, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}, staging)
 	if err != nil {
 		t.Fatalf("Episode() returned error: %v", err)
 	}
-	if result.Bytes != int64(len("audio data")) {
-		t.Fatalf("got %d bytes", result.Bytes)
-	}
-	data, err := os.ReadFile(result.Path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("ReadFile() returned error: %v", err)
 	}
 	if string(data) != "audio data" {
 		t.Fatalf("got %q", data)
 	}
-	if filepath.Dir(result.Path) != staging {
-		t.Fatalf("download escaped staging directory: %q", result.Path)
+	if filepath.Dir(path) != staging {
+		t.Fatalf("download escaped staging directory: %q", path)
 	}
 }
 
