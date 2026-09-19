@@ -58,12 +58,20 @@ func TestEpisodeRejectsEmptyDownload(t *testing.T) {
 	}
 }
 
-func TestEpisodeRejectsWrongSizedDownload(t *testing.T) {
+func TestEpisodeAllowsAdvisoryEnclosureSizeMismatch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("audio"))
 	}))
 	defer server.Close()
-	if _, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL, Length: 6}}, t.TempDir()); err == nil {
-		t.Fatal("Episode() accepted a wrong-sized download")
+	path, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL, Length: 6}}, t.TempDir())
+	if err != nil {
+		t.Fatalf("Episode() rejected an advisory size mismatch: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "audio" {
+		t.Fatalf("got %q", data)
 	}
 }

@@ -67,10 +67,6 @@ func Episode(ctx context.Context, client *http.Client, e episode.Episode, stagin
 		_ = file.Close()
 		return "", fmt.Errorf("download is empty")
 	}
-	if e.Enclosure.Length > 0 && bytes != e.Enclosure.Length {
-		_ = file.Close()
-		return "", fmt.Errorf("download size %d does not match enclosure size %d", bytes, e.Enclosure.Length)
-	}
 	if err := file.Close(); err != nil {
 		return "", fmt.Errorf("close staged episode: %w", err)
 	}
