@@ -385,7 +385,7 @@ func sync(args []string) error {
 		for _, currentEpisode := range episodes {
 			copies = append(copies, syncer.FileCopy{Relative: media.RelativePath(currentEpisode)})
 		}
-		plan, err := syncer.BuildFilePlan(managed, copies, playlistFiles)
+		plan, err := syncer.BuildFilePlan(managed, copies, playlistFiles, nil)
 		if err != nil {
 			return err
 		}

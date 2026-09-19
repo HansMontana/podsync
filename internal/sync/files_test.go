@@ -18,6 +18,7 @@ func TestBuildAndApplyFilePlan(t *testing.T) {
 		[]string{"Podcasts/old.mp3"},
 		[]FileCopy{{Source: source, Relative: "Podcasts/new.mp3"}},
 		[]PlaylistFile{{Relative: "Playlists/morning.m3u8", Content: []byte("playlist\n")}},
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("BuildFilePlan() returned error: %v", err)
@@ -54,13 +55,13 @@ func TestBuildAndApplyFilePlan(t *testing.T) {
 }
 
 func TestBuildFilePlanRejectsEscapingPath(t *testing.T) {
-	if _, err := BuildFilePlan(nil, []FileCopy{{Source: "audio", Relative: "../outside"}}, nil); err == nil {
+	if _, err := BuildFilePlan(nil, []FileCopy{{Source: "audio", Relative: "../outside"}}, nil, nil); err == nil {
 		t.Fatal("BuildFilePlan() accepted an escaping path")
 	}
 }
 
 func TestBuildFilePlanRejectsDuplicateDestination(t *testing.T) {
-	if _, err := BuildFilePlan(nil, []FileCopy{{Source: "one", Relative: "Podcasts/one.mp3"}}, []PlaylistFile{{Relative: "Podcasts/one.mp3"}}); err == nil {
+	if _, err := BuildFilePlan(nil, []FileCopy{{Source: "one", Relative: "Podcasts/one.mp3"}}, []PlaylistFile{{Relative: "Podcasts/one.mp3"}}, nil); err == nil {
 		t.Fatal("BuildFilePlan() accepted duplicate destinations")
 	}
 }

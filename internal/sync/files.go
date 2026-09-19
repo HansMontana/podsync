@@ -23,13 +23,18 @@ type PlaylistFile struct {
 type FilePlan struct {
 	Copies    []FileCopy
 	Playlists []PlaylistFile
+	Keep      []string
 	Deletes   []string
 }
 
 // BuildFilePlan compares managed device paths with desired paths. Deletes are
 // limited to paths explicitly identified as podsync-managed.
-func BuildFilePlan(managed []string, copies []FileCopy, playlists []PlaylistFile) (FilePlan, error) {
-	plan := FilePlan{Copies: append([]FileCopy(nil), copies...), Playlists: append([]PlaylistFile(nil), playlists...)}
+func BuildFilePlan(managed []string, copies []FileCopy, playlists []PlaylistFile, keep []string) (FilePlan, error) {
+	plan := FilePlan{
+		Copies:    append([]FileCopy(nil), copies...),
+		Playlists: append([]PlaylistFile(nil), playlists...),
+		Keep:      append([]string(nil), keep...),
+	}
 	desired := make(map[string]struct{}, len(copies)+len(playlists))
 	for _, copy := range copies {
 		if err := validateRelative(copy.Relative); err != nil {
@@ -48,6 +53,12 @@ func BuildFilePlan(managed []string, copies []FileCopy, playlists []PlaylistFile
 			return FilePlan{}, fmt.Errorf("duplicate desired path: %q", playlist.Relative)
 		}
 		desired[playlist.Relative] = struct{}{}
+	}
+	for _, relative := range keep {
+		if err := validateRelative(relative); err != nil {
+			return FilePlan{}, fmt.Errorf("keep path: %w", err)
+		}
+		desired[relative] = struct{}{}
 	}
 	for _, path := range managed {
 		if err := validateRelative(path); err != nil {
