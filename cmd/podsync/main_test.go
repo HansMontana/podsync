@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/HansMontana/podsync/internal/config"
+	"github.com/HansMontana/podsync/internal/device"
 )
 
 func TestRefreshAndSyncCommandsUseDeviceStateAndStaging(t *testing.T) {
@@ -103,5 +104,19 @@ func TestFeedCommandsManageDeviceConfiguration(t *testing.T) {
 	updated, err = config.Load(filepath.Join(root, "Podsync", "podsync.toml"))
 	if err != nil || len(updated.Sources) != 1 {
 		t.Fatalf("got final config %+v, error %v", updated, err)
+	}
+}
+
+func TestLoadPlaybackRecordsAllowsMissingTagCache(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".rockbox"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	records, err := loadPlaybackRecords(device.Layout{Root: root})
+	if err != nil {
+		t.Fatalf("loadPlaybackRecords() returned error: %v", err)
+	}
+	if len(records) != 0 {
+		t.Fatalf("got records %+v", records)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 
 	"github.com/HansMontana/podsync/internal/config"
@@ -523,14 +524,36 @@ func loadPlaybackRecords(layout device.Layout) ([]playback.Record, error) {
 		}
 		records = append(records, parsed...)
 	}
-	if _, err := os.Stat(layout.TagCacheDirectory()); err == nil {
+	masterPath := filepath.Join(layout.TagCacheDirectory(), "database_idx.tcd")
+	filenamePath := filepath.Join(layout.TagCacheDirectory(), "database_4.tcd")
+	masterExists, err := fileExists(masterPath)
+	if err != nil {
+		return nil, fmt.Errorf("inspect TagCache master: %w", err)
+	}
+	filenameExists, err := fileExists(filenamePath)
+	if err != nil {
+		return nil, fmt.Errorf("inspect TagCache filename index: %w", err)
+	}
+	if masterExists != filenameExists {
+		return nil, fmt.Errorf("incomplete TagCache: master=%t filename-index=%t", masterExists, filenameExists)
+	}
+	if masterExists {
 		parsed, err := playback.ParseTagCache(layout.TagCacheDirectory())
 		if err != nil {
 			return nil, fmt.Errorf("parse TagCache: %w", err)
 		}
 		return parsed, nil
-	} else if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("inspect TagCache directory: %w", err)
 	}
 	return playback.MergeRecords(records), nil
+}
+
+func fileExists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
 }
