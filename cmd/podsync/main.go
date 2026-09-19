@@ -233,17 +233,19 @@ func status(args []string) error {
 		return err
 	}
 	fmt.Printf("feeds: %d\nepisodes: %d\n", len(current.Feeds), len(current.Episodes))
-	if records, err := loadPlaybackRecords(layout); err == nil {
-		fmt.Printf("playback records: %d\n", len(records))
-		states := playback.ForEpisodes(current.Episodes, records)
-		played := 0
-		for _, state := range states {
-			if state.Played() {
-				played++
-			}
-		}
-		fmt.Printf("played: %d\n", played)
+	records, err := loadPlaybackRecords(layout)
+	if err != nil {
+		return fmt.Errorf("load playback state: %w", err)
 	}
+	fmt.Printf("playback records: %d\n", len(records))
+	states := playback.ForEpisodes(current.Episodes, records)
+	played := 0
+	for _, state := range states {
+		if state.Played() {
+			played++
+		}
+	}
+	fmt.Printf("played: %d\n", played)
 	return nil
 }
 

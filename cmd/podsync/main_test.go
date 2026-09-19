@@ -120,3 +120,16 @@ func TestLoadPlaybackRecordsAllowsMissingTagCache(t *testing.T) {
 		t.Fatalf("got records %+v", records)
 	}
 }
+
+func TestStatusReportsPlaybackImportErrors(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".rockbox"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".rockbox", "database_idx.tcd"), []byte("partial"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"status", "-device-root", root}); err == nil {
+		t.Fatal("status accepted incomplete TagCache data")
+	}
+}
