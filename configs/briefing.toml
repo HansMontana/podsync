@@ -10,6 +10,8 @@ id = "example"
 title = "Example Feed"
 source = "news"
 order = "newest_first"
+limit = 5
+unplayed_only = true
 
 [[briefing]]
 id = "morning"
