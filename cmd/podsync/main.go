@@ -12,7 +12,9 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"time"
 
+	"github.com/HansMontana/podsync/internal/briefing"
 	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/episode"
@@ -24,6 +26,8 @@ import (
 	"github.com/HansMontana/podsync/internal/state"
 	syncer "github.com/HansMontana/podsync/internal/sync"
 )
+
+var httpClient = &http.Client{Timeout: 10 * time.Minute}
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -234,9 +238,11 @@ func removeFeed(args []string) error {
 	}
 	updated := cfg.Sources[:0]
 	found := false
+	removedURL := ""
 	for _, source := range cfg.Sources {
 		if source.ID == *id {
 			found = true
+			removedURL = source.URL
 			continue
 		}
 		updated = append(updated, source)
@@ -247,6 +253,30 @@ func removeFeed(args []string) error {
 	cfg.Sources = updated
 	if err := cfg.Validate(); err != nil {
 		return err
+	}
+	current, err := repository.Load()
+	if err != nil {
+		return err
+	}
+	remaining := current.Feeds[:0]
+	removedIDs := make(map[int64]struct{})
+	for _, known := range current.Feeds {
+		if known.SameIdentity(feed.Feed{URL: removedURL}) {
+			removedIDs[known.ID] = struct{}{}
+			continue
+		}
+		remaining = append(remaining, known)
+	}
+	current.Feeds = remaining
+	episodes := current.Episodes[:0]
+	for _, currentEpisode := range current.Episodes {
+		if _, removed := removedIDs[currentEpisode.FeedID]; !removed {
+			episodes = append(episodes, currentEpisode)
+		}
+	}
+	current.Episodes = episodes
+	if err := repository.Save(current); err != nil {
+		return fmt.Errorf("remove source state: %w", err)
 	}
 	if err := config.Save(layout.ConfigPath(), cfg); err != nil {
 		return fmt.Errorf("save device config: %w", err)
@@ -299,7 +329,7 @@ func reconcile(args []string, refresh bool) error {
 		if err != nil {
 			return err
 		}
-		if err := syncer.RefreshFeed(context.Background(), repository, http.DefaultClient, feedID); err != nil {
+		if err := syncer.RefreshFeed(context.Background(), repository, httpClient, feedID); err != nil {
 			return fmt.Errorf("refresh source %q: %w", source.ID, err)
 		}
 		fmt.Printf("refreshed %s\n", source.ID)
@@ -316,7 +346,7 @@ func status(args []string) error {
 	} else if help {
 		return nil
 	}
-	layout, repository, err := openRepositoryMode(*deviceRoot, false)
+	layout, repository, err := openRepositoryMode(*deviceRoot, true)
 	if err != nil {
 		return err
 	}
@@ -447,11 +477,18 @@ func sync(args []string) error {
 		playlistFiles = append(playlistFiles, syncer.PlaylistFile{Relative: path.Join("Playlists", logical.ID+".m3u8"), Content: content})
 	}
 	for _, configured := range cfg.Briefings {
-		content, generateErr := playlists.Briefing(cfg, current, configured.ID, states)
+		plan, generateErr := briefing.Build(cfg, current, configured.ID, states)
 		if generateErr != nil {
 			return generateErr
 		}
-		playlistFiles = append(playlistFiles, syncer.PlaylistFile{Relative: path.Join("Playlists", configured.ID+".m3u8"), Content: content})
+		for _, currentEpisode := range plan.Episodes {
+			selected[currentEpisode.IdentityKey()] = currentEpisode
+		}
+		tracks := make([]playlists.Track, len(plan.Episodes))
+		for i, currentEpisode := range plan.Episodes {
+			tracks[i] = playlists.Track{Episode: currentEpisode, Path: path.Join("..", media.RelativePath(currentEpisode))}
+		}
+		playlistFiles = append(playlistFiles, syncer.PlaylistFile{Relative: path.Join("Playlists", configured.ID+".m3u8"), Content: playlists.M3U(tracks)})
 	}
 	managed, err = layout.LoadManagedPaths()
 	if err != nil {
@@ -468,6 +505,9 @@ func sync(args []string) error {
 	for _, currentEpisode := range selected {
 		episodes = append(episodes, currentEpisode)
 	}
+	sort.Slice(episodes, func(i, j int) bool {
+		return media.RelativePath(episodes[i]) < media.RelativePath(episodes[j])
+	})
 	newManaged := make([]string, 0, len(episodes)+len(playlistFiles))
 	for _, currentEpisode := range episodes {
 		newManaged = append(newManaged, media.RelativePath(currentEpisode))
@@ -486,11 +526,20 @@ func sync(args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("would sync %d episodes and %d playlists\n", len(episodes), len(playlistFiles)-1)
-		fmt.Printf("would delete %d managed files\n", len(plan.Deletes))
+		for _, copy := range plan.Copies {
+			fmt.Printf("would copy %s\n", copy.Relative)
+		}
+		for _, playlist := range plan.Playlists {
+			if playlist.Relative != layout.ManifestRelativePath() {
+				fmt.Printf("would write %s\n", playlist.Relative)
+			}
+		}
+		for _, relative := range plan.Deletes {
+			fmt.Printf("would delete %s\n", relative)
+		}
 		return nil
 	}
-	if err := syncer.Episodes(context.Background(), http.DefaultClient, *stagingDir, layout.Root, episodes, playlistFiles, managed); err != nil {
+	if err := syncer.Episodes(context.Background(), httpClient, *stagingDir, layout.Root, episodes, playlistFiles, managed); err != nil {
 		return err
 	}
 	fmt.Printf("synced %d episodes and %d playlists\n", len(episodes), len(playlistFiles)-1)
@@ -524,13 +573,19 @@ func openRepositoryMode(root string, readOnly bool) (device.Layout, state.Reposi
 		return device.Layout{}, nil, fmt.Errorf("-device-root is required")
 	}
 	layout := device.Layout{Root: root}
+	info, err := os.Stat(root)
+	if err != nil {
+		return layout, nil, fmt.Errorf("inspect device root: %w", err)
+	}
+	if !info.IsDir() {
+		return layout, nil, fmt.Errorf("device root is not a directory")
+	}
 	if !readOnly {
 		if err := os.MkdirAll(layout.StateDirectory(), 0o755); err != nil {
 			return layout, nil, fmt.Errorf("create device state directory: %w", err)
 		}
 	}
 	var repository state.Repository
-	var err error
 	if readOnly {
 		repository, err = state.NewReadOnlySQLiteRepository(layout.DatabasePath())
 	} else {

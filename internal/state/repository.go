@@ -31,6 +31,10 @@ func NewSQLiteRepository(path string) (*SQLiteRepository, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open state database: %w", err)
 	}
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("enable foreign keys: %w", err)
+	}
 
 	goose.SetBaseFS(migrationFS)
 
@@ -52,6 +56,10 @@ func NewReadOnlySQLiteRepository(path string) (*SQLiteRepository, error) {
 	db, err := sql.Open("sqlite", databaseURL.String())
 	if err != nil {
 		return nil, fmt.Errorf("open read-only state database: %w", err)
+	}
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("enable foreign keys: %w", err)
 	}
 	return &SQLiteRepository{db: db}, nil
 }
@@ -127,6 +135,9 @@ func (r *SQLiteRepository) Load() (State, error) {
 		return State{}, fmt.Errorf("iterate episodes: %w", err)
 	}
 
+	if err := state.Validate(); err != nil {
+		return State{}, fmt.Errorf("validate loaded state: %w", err)
+	}
 	return state, nil
 }
 

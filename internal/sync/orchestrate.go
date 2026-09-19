@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 
 	"github.com/HansMontana/podsync/internal/download"
 	"github.com/HansMontana/podsync/internal/episode"
@@ -60,7 +59,11 @@ func Episodes(ctx context.Context, client *http.Client, stagingDir, deviceRoot s
 }
 
 func reusableFile(deviceRoot, relative string, expectedLength int64) (bool, error) {
-	fileInfo, err := os.Lstat(filepath.Join(deviceRoot, filepath.FromSlash(relative)))
+	path, err := safeDevicePath(deviceRoot, relative, false)
+	if err != nil {
+		return false, err
+	}
+	fileInfo, err := os.Lstat(path)
 	if os.IsNotExist(err) {
 		return false, nil
 	}

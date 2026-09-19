@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -27,59 +28,61 @@ type FilePlan struct {
 	Deletes   []string
 }
 
-// BuildFilePlan compares managed device paths with desired paths. Deletes are
-// limited to paths explicitly identified as podsync-managed.
+// BuildFilePlan limits every device operation to podsync-owned paths.
 func BuildFilePlan(managed []string, copies []FileCopy, playlists []PlaylistFile, keep []string) (FilePlan, error) {
-	plan := FilePlan{
-		Copies:    append([]FileCopy(nil), copies...),
-		Playlists: append([]PlaylistFile(nil), playlists...),
-		Keep:      append([]string(nil), keep...),
-	}
-	desired := make(map[string]struct{}, len(copies)+len(playlists))
-	for _, copy := range copies {
-		if err := validateRelative(copy.Relative); err != nil {
-			return FilePlan{}, fmt.Errorf("copy path: %w", err)
+	plan := FilePlan{Copies: append([]FileCopy(nil), copies...), Playlists: append([]PlaylistFile(nil), playlists...), Keep: append([]string(nil), keep...)}
+	desired := make(map[string]struct{}, len(copies)+len(playlists)+len(keep))
+	for _, relative := range append(copyPaths(copies), append(playlistPaths(playlists), keep...)...) {
+		if err := validateManagedPath(relative); err != nil {
+			return FilePlan{}, err
 		}
-		if _, exists := desired[copy.Relative]; exists {
-			return FilePlan{}, fmt.Errorf("duplicate desired path: %q", copy.Relative)
-		}
-		desired[copy.Relative] = struct{}{}
-	}
-	for _, playlist := range playlists {
-		if err := validateRelative(playlist.Relative); err != nil {
-			return FilePlan{}, fmt.Errorf("playlist path: %w", err)
-		}
-		if _, exists := desired[playlist.Relative]; exists {
-			return FilePlan{}, fmt.Errorf("duplicate desired path: %q", playlist.Relative)
-		}
-		desired[playlist.Relative] = struct{}{}
-	}
-	for _, relative := range keep {
-		if err := validateRelative(relative); err != nil {
-			return FilePlan{}, fmt.Errorf("keep path: %w", err)
+		if _, exists := desired[relative]; exists {
+			return FilePlan{}, fmt.Errorf("duplicate desired path: %q", relative)
 		}
 		desired[relative] = struct{}{}
 	}
-	for _, path := range managed {
-		if err := validateRelative(path); err != nil {
+	for _, relative := range managed {
+		if err := validateManagedPath(relative); err != nil {
 			return FilePlan{}, fmt.Errorf("managed path: %w", err)
 		}
-		if _, exists := desired[path]; !exists {
-			plan.Deletes = append(plan.Deletes, path)
+		if _, exists := desired[relative]; !exists {
+			plan.Deletes = append(plan.Deletes, relative)
 		}
 	}
 	return plan, nil
 }
 
-// ApplyFilePlan applies a plan beneath deviceRoot. It never deletes files not
-// present in the plan's managed set.
+func copyPaths(copies []FileCopy) []string {
+	paths := make([]string, len(copies))
+	for i, copy := range copies {
+		paths[i] = copy.Relative
+	}
+	return paths
+}
+
+func playlistPaths(playlists []PlaylistFile) []string {
+	paths := make([]string, len(playlists))
+	for i, playlist := range playlists {
+		paths[i] = playlist.Relative
+	}
+	return paths
+}
+
+// ApplyFilePlan installs content, removes obsolete owned files, then commits
+// the manifest last so failed deletion remains recoverable on a later sync.
 func ApplyFilePlan(ctx context.Context, deviceRoot string, plan FilePlan) error {
 	for _, copy := range plan.Copies {
 		if err := copyFile(ctx, deviceRoot, copy); err != nil {
 			return err
 		}
 	}
-	for _, playlist := range plan.Playlists {
+	var manifest *PlaylistFile
+	for i := range plan.Playlists {
+		playlist := plan.Playlists[i]
+		if playlist.Relative == "Podsync/managed-files.txt" {
+			manifest = &playlist
+			continue
+		}
 		if err := writeFile(ctx, deviceRoot, playlist.Relative, playlist.Content); err != nil {
 			return err
 		}
@@ -90,26 +93,28 @@ func ApplyFilePlan(ctx context.Context, deviceRoot string, plan FilePlan) error 
 			return ctx.Err()
 		default:
 		}
-		if err := validateRelative(relative); err != nil {
-			return fmt.Errorf("delete path: %w", err)
-		}
-		if err := os.Remove(filepath.Join(deviceRoot, filepath.FromSlash(relative))); err != nil && !os.IsNotExist(err) {
+		destination, err := safeDevicePath(deviceRoot, relative, false)
+		if err != nil {
 			return fmt.Errorf("delete %q: %w", relative, err)
+		}
+		if err := os.Remove(destination); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("delete %q: %w", relative, err)
+		}
+	}
+	if manifest != nil {
+		if err := writeFile(ctx, deviceRoot, manifest.Relative, manifest.Content); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
 func copyFile(ctx context.Context, root string, copy FileCopy) error {
-	if err := validateRelative(copy.Relative); err != nil {
-		return fmt.Errorf("copy path: %w", err)
-	}
 	input, err := os.Open(copy.Source)
 	if err != nil {
 		return fmt.Errorf("open copy source %q: %w", copy.Source, err)
 	}
 	defer input.Close()
-
 	return writeFromReader(ctx, root, copy.Relative, input)
 }
 
@@ -118,18 +123,14 @@ func writeFile(ctx context.Context, root, relative string, content []byte) error
 }
 
 func writeFromReader(ctx context.Context, root, relative string, reader io.Reader) error {
-	if err := validateRelative(relative); err != nil {
-		return fmt.Errorf("write path: %w", err)
+	destination, err := safeDevicePath(root, relative, true)
+	if err != nil {
+		return fmt.Errorf("resolve destination: %w", err)
 	}
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-	}
-
-	destination := filepath.Join(root, filepath.FromSlash(relative))
-	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
-		return fmt.Errorf("create destination directory: %w", err)
 	}
 	temporary, err := os.CreateTemp(filepath.Dir(destination), ".podsync-*")
 	if err != nil {
@@ -137,10 +138,13 @@ func writeFromReader(ctx context.Context, root, relative string, reader io.Reade
 	}
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
-
 	if _, err := io.Copy(temporary, contextReader{ctx: ctx, reader: reader}); err != nil {
 		_ = temporary.Close()
 		return fmt.Errorf("write temporary destination: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("sync temporary destination: %w", err)
 	}
 	if err := temporary.Close(); err != nil {
 		return fmt.Errorf("close temporary destination: %w", err)
@@ -165,13 +169,60 @@ func (r contextReader) Read(p []byte) (int, error) {
 	}
 }
 
-func validateRelative(relative string) error {
-	if relative == "" || filepath.IsAbs(relative) {
-		return fmt.Errorf("path must be relative: %q", relative)
+var audioPathPattern = regexp.MustCompile(`^Podcasts/feed-[1-9][0-9]*/[a-f0-9]{16}\.[A-Za-z0-9]{1,8}$`)
+var playlistPathPattern = regexp.MustCompile(`^Playlists/[A-Za-z0-9][A-Za-z0-9._-]*\.m3u8$`)
+
+func validateManagedPath(relative string) error {
+	if relative == "" || filepath.IsAbs(relative) || strings.ContainsAny(relative, "\r\n\x00") {
+		return fmt.Errorf("path must be a safe relative path: %q", relative)
 	}
 	clean := filepath.ToSlash(filepath.Clean(relative))
-	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+	if clean != relative || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
 		return fmt.Errorf("path escapes device root: %q", relative)
 	}
-	return nil
+	if clean == "Podsync/managed-files.txt" || audioPathPattern.MatchString(clean) || playlistPathPattern.MatchString(clean) {
+		return nil
+	}
+	return fmt.Errorf("path is outside podsync-managed locations: %q", relative)
+}
+
+// safeDevicePath rejects symlinks in every existing path component. This is a
+// portable best-effort guard for device filesystems that normally lack links.
+func safeDevicePath(root, relative string, createParents bool) (string, error) {
+	if err := validateManagedPath(relative); err != nil {
+		return "", err
+	}
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(root)
+	if err != nil {
+		return "", fmt.Errorf("inspect device root: %w", err)
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("device root is not a real directory")
+	}
+	parts := strings.Split(relative, "/")
+	directory := root
+	for _, part := range parts[:len(parts)-1] {
+		directory = filepath.Join(directory, part)
+		info, err := os.Lstat(directory)
+		if os.IsNotExist(err) {
+			if !createParents {
+				return filepath.Join(directory, parts[len(parts)-1]), nil
+			}
+			if err := os.Mkdir(directory, 0o755); err != nil {
+				return "", err
+			}
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return "", fmt.Errorf("path component %q is not a real directory", part)
+		}
+	}
+	return filepath.Join(directory, parts[len(parts)-1]), nil
 }

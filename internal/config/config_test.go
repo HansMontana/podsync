@@ -154,3 +154,15 @@ limit = -1
 		t.Fatal("Parse() accepted a negative logical feed limit")
 	}
 }
+
+func TestParseRejectsUnknownKeysAndUnsafeIDs(t *testing.T) {
+	for _, input := range []string{
+		"unknown = true\n",
+		"[[source]]\nid = \"../escape\"\nurl = \"https://example.com/feed\"\n",
+		"[[source]]\nid = \"news\"\nurl = \"https://example.com/feed\"\n[[feed]]\nid = \"news\"\nsource = \"news\"\norder = \"newest_first\"\n[[briefing]]\nid = \"news\"\n",
+	} {
+		if _, err := Parse(strings.NewReader(input)); err == nil {
+			t.Fatalf("Parse() accepted unsafe configuration %q", input)
+		}
+	}
+}

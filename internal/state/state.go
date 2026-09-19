@@ -19,6 +19,9 @@ func (s State) Validate() error {
 	feedURLs := make(map[string]struct{})
 
 	for _, f := range s.Feeds {
+		if f.ID <= 0 {
+			return fmt.Errorf("feed ID must be positive: %d", f.ID)
+		}
 		if _, exists := feedIDs[f.ID]; exists {
 			return fmt.Errorf("duplicate feed ID: %d", f.ID)
 		}

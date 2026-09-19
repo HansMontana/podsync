@@ -1,13 +1,12 @@
 package playback
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
-	"time"
 )
 
 const (
@@ -26,7 +25,7 @@ func ParseTagCache(directory string) ([]Record, error) {
 	masterPath := filepath.Join(directory, "database_idx.tcd")
 	filenamePath := filepath.Join(directory, fmt.Sprintf("database_%d.tcd", tagFilename))
 
-	master, order, entrySize, err := openMaster(masterPath)
+	master, order, entrySize, entryCount, err := openMaster(masterPath)
 	if err != nil {
 		return nil, err
 	}
@@ -37,16 +36,17 @@ func ParseTagCache(directory string) ([]Record, error) {
 	}
 	defer filename.Close()
 
-	if _, err := filename.Seek(12, io.SeekStart); err != nil {
-		return nil, fmt.Errorf("seek TagCache filename index: %w", err)
+	filenameHeader, err := readTagHeader(filename, order)
+	if err != nil {
+		return nil, fmt.Errorf("read TagCache filename header: %w", err)
+	}
+	if filenameHeader.count != entryCount {
+		return nil, fmt.Errorf("TagCache entry counts do not match")
 	}
 	var records []Record
-	for {
+	for range entryCount {
 		var header [8]byte
 		if _, err := io.ReadFull(filename, header[:]); err != nil {
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				break
-			}
 			return nil, fmt.Errorf("read TagCache filename entry: %w", err)
 		}
 		length := int64(order.Uint32(header[0:4]))
@@ -58,11 +58,18 @@ func ParseTagCache(directory string) ([]Record, error) {
 		if _, err := io.ReadFull(filename, data); err != nil {
 			return nil, fmt.Errorf("read TagCache filename: %w", err)
 		}
-		path := strings.TrimRight(string(data), "\x00")
+		terminator := bytes.IndexByte(data, 0)
+		if terminator < 0 {
+			return nil, fmt.Errorf("TagCache filename has no terminator")
+		}
+		path := string(data[:terminator])
 		if path == "" || indexID < 0 {
 			continue
 		}
 
+		if indexID >= entryCount {
+			return nil, fmt.Errorf("TagCache index ID out of range: %d", indexID)
+		}
 		entry, err := readMasterEntry(master, order, entrySize, indexID)
 		if err != nil {
 			return nil, err
@@ -71,10 +78,10 @@ func ParseTagCache(directory string) ([]Record, error) {
 			continue
 		}
 		records = append(records, Record{
-			Path:       path,
-			Known:      true,
-			PlayCount:  int(entry.values[tagPlayCount]),
-			LastPlayed: time.Unix(int64(entry.values[tagLastPlayed]), 0).UTC(),
+			Path:      path,
+			Known:     true,
+			PlayCount: int(entry.values[tagPlayCount]),
+			// TagCache lastplayed is an internal ordinal, not a wall-clock time.
 		})
 	}
 	return MergeRecords(records), nil
@@ -85,26 +92,56 @@ type tagCacheEntry struct {
 	flag   uint32
 }
 
-func openMaster(path string) (*os.File, binary.ByteOrder, int64, error) {
+type tagHeader struct{ count int64 }
+
+func openMaster(path string) (*os.File, binary.ByteOrder, int64, int64, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, nil, 0, fmt.Errorf("open TagCache master index: %w", err)
+		return nil, nil, 0, 0, fmt.Errorf("open TagCache master index: %w", err)
 	}
-	var header [12]byte
+	var header [20]byte
 	if _, err := io.ReadFull(file, header[:]); err != nil {
 		file.Close()
-		return nil, nil, 0, fmt.Errorf("read TagCache master header: %w", err)
+		return nil, nil, 0, 0, fmt.Errorf("read TagCache master header: %w", err)
 	}
 	var order binary.ByteOrder = binary.LittleEndian
 	if order.Uint32(header[0:4]) != tagCacheMagic {
 		order = binary.BigEndian
 		if order.Uint32(header[0:4]) != tagCacheMagic {
 			file.Close()
-			return nil, nil, 0, fmt.Errorf("invalid TagCache magic")
+			return nil, nil, 0, 0, fmt.Errorf("invalid TagCache magic")
 		}
 	}
+	count := int64(order.Uint32(header[8:12]))
+	if count < 0 {
+		file.Close()
+		return nil, nil, 0, 0, fmt.Errorf("TagCache is dirty or invalid")
+	}
 	entrySize := int64(tagCacheTagCount*4 + 4)
-	return file, order, entrySize, nil
+	info, err := file.Stat()
+	if err != nil || info.Size() < 20+count*entrySize {
+		file.Close()
+		return nil, nil, 0, 0, fmt.Errorf("truncated TagCache master index")
+	}
+	return file, order, entrySize, count, nil
+}
+
+func readTagHeader(file *os.File, order binary.ByteOrder) (tagHeader, error) {
+	var header [12]byte
+	if _, err := io.ReadFull(file, header[:]); err != nil {
+		return tagHeader{}, err
+	}
+	if order.Uint32(header[0:4]) != tagCacheMagic {
+		return tagHeader{}, fmt.Errorf("invalid magic")
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return tagHeader{}, err
+	}
+	if int64(order.Uint32(header[4:8])) != info.Size()-12 {
+		return tagHeader{}, fmt.Errorf("invalid data size")
+	}
+	return tagHeader{count: int64(order.Uint32(header[8:12]))}, nil
 }
 
 func readMasterEntry(file *os.File, order binary.ByteOrder, entrySize, indexID int64) (tagCacheEntry, error) {

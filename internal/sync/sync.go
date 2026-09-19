@@ -48,6 +48,13 @@ func RefreshFeed(
 	if err != nil {
 		return fmt.Errorf("refresh feed %d: %w", feedID, err)
 	}
+	if len(episodes) == 0 {
+		for _, existing := range current.Episodes {
+			if existing.FeedID == feedID {
+				return fmt.Errorf("refresh feed %d: refusing to replace existing episodes with an empty feed", feedID)
+			}
+		}
+	}
 	refreshedFeed.ETag = result.ETag
 	refreshedFeed.LastModified = result.LastModified
 	current.Feeds[feedIndex] = refreshedFeed

@@ -78,8 +78,13 @@ func PreferRecords(primary, fallback []Record) []Record {
 		if key == "" {
 			continue
 		}
-		if _, exists := byPath[key]; !exists {
+		if current, exists := byPath[key]; !exists {
 			byPath[key] = record
+		} else if record.PlayCount > 0 && current.PlayCount == 0 {
+			// A valid log proves playback after an uncommitted TagCache update.
+			current.PlayCount = record.PlayCount
+			current.LastPlayed = record.LastPlayed
+			byPath[key] = current
 		}
 	}
 

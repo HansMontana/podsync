@@ -67,8 +67,8 @@ func TestPreferRecordsUsesFallbackForMissingPaths(t *testing.T) {
 
 func TestParseLogAggregatesRockboxPlaybackEntries(t *testing.T) {
 	log := `# Started Ver. 4.x
-1700000000:1000:2000:/Podcasts/feed-2/episode.mp3
-1700000100:1000:2000:/Podcasts/feed-2/episode.mp3
+	1700000000:15000:20000:/Podcasts/feed-2/episode.mp3
+	1700000100:15000:20000:/Podcasts/feed-2/episode.mp3
 malformed
 `
 	records, err := ParseLog(strings.NewReader(log))
@@ -80,5 +80,20 @@ malformed
 	}
 	if records[0].LastPlayed.Unix() != 1700000100 {
 		t.Fatalf("got last played %v", records[0].LastPlayed)
+	}
+}
+
+func TestParseLogRejectsBriefOrMalformedPlayback(t *testing.T) {
+	log := "1700000000:14999:20000:/Podcasts/feed-2/episode.mp3\n1700000000:20001:20000:/Podcasts/feed-2/episode.mp3\n"
+	records, err := ParseLog(strings.NewReader(log))
+	if err != nil || len(records) != 0 {
+		t.Fatalf("got records %+v, error %v", records, err)
+	}
+}
+
+func TestPreferRecordsKeepsPlayedLogEvidence(t *testing.T) {
+	got := PreferRecords([]Record{{Path: "/Podcasts/one.mp3", Known: true}}, []Record{{Path: "/Podcasts/one.mp3", Known: true, PlayCount: 1}})
+	if len(got) != 1 || got[0].PlayCount != 1 {
+		t.Fatalf("got records %+v", got)
 	}
 }

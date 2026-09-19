@@ -49,3 +49,17 @@ func TestEpisodeRejectsMissingAudioURL(t *testing.T) {
 		t.Fatal("Episode() accepted an episode without an audio URL")
 	}
 }
+
+func TestEpisodeRejectsEmptyAndWrongSizedDownloads(t *testing.T) {
+	for _, current := range []episode.Episode{
+		{Enclosure: episode.Enclosure{URL: "", Length: 1}},
+		{Enclosure: episode.Enclosure{Length: 5}},
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+		current.Enclosure.URL = server.URL
+		if _, err := Episode(context.Background(), server.Client(), current, t.TempDir()); err == nil {
+			t.Fatal("Episode() accepted an invalid download")
+		}
+		server.Close()
+	}
+}

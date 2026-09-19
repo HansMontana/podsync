@@ -23,8 +23,10 @@ func ParseLog(reader io.Reader) ([]Record, error) {
 		if len(parts) != 4 {
 			continue
 		}
-		timestamp, err := strconv.ParseInt(parts[0], 10, 64)
-		if err != nil || timestamp <= 0 || strings.TrimSpace(parts[3]) == "" {
+		timestamp, timestampErr := strconv.ParseInt(parts[0], 10, 64)
+		elapsed, elapsedErr := strconv.ParseInt(parts[1], 10, 64)
+		length, lengthErr := strconv.ParseInt(parts[2], 10, 64)
+		if timestampErr != nil || elapsedErr != nil || lengthErr != nil || timestamp <= 0 || elapsed < 15_000 || length <= 0 || elapsed > length || strings.TrimSpace(parts[3]) == "" {
 			continue
 		}
 		key := normalizePath(parts[3])

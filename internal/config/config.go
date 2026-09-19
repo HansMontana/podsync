@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -107,8 +108,12 @@ func Save(path string, cfg Config) error {
 
 func Parse(r io.Reader) (Config, error) {
 	var cfg Config
-	if _, err := toml.NewDecoder(r).Decode(&cfg); err != nil {
+	metadata, err := toml.NewDecoder(r).Decode(&cfg)
+	if err != nil {
 		return Config{}, fmt.Errorf("decode config: %w", err)
+	}
+	if undecoded := metadata.Undecoded(); len(undecoded) > 0 {
+		return Config{}, fmt.Errorf("unknown configuration key %q", undecoded[0])
 	}
 	if err := cfg.Validate(); err != nil {
 		return Config{}, fmt.Errorf("validate config: %w", err)
@@ -120,8 +125,8 @@ func (c Config) Validate() error {
 	sources := make(map[string]struct{}, len(c.Sources))
 	urls := make(map[string]struct{}, len(c.Sources))
 	for _, source := range c.Sources {
-		if source.ID == "" {
-			return fmt.Errorf("source ID is required")
+		if !validID(source.ID) {
+			return fmt.Errorf("source ID %q is invalid", source.ID)
 		}
 		if _, exists := sources[source.ID]; exists {
 			return fmt.Errorf("duplicate source ID %q", source.ID)
@@ -139,8 +144,8 @@ func (c Config) Validate() error {
 
 	logicalFeeds := make(map[string]struct{}, len(c.Feeds))
 	for _, logical := range c.Feeds {
-		if logical.ID == "" {
-			return fmt.Errorf("logical feed ID is required")
+		if !validID(logical.ID) {
+			return fmt.Errorf("logical feed ID %q is invalid", logical.ID)
 		}
 		if _, exists := logicalFeeds[logical.ID]; exists {
 			return fmt.Errorf("duplicate logical feed ID %q", logical.ID)
@@ -159,8 +164,8 @@ func (c Config) Validate() error {
 
 	briefings := make(map[string]struct{}, len(c.Briefings))
 	for _, briefing := range c.Briefings {
-		if briefing.ID == "" {
-			return fmt.Errorf("briefing ID is required")
+		if !validID(briefing.ID) {
+			return fmt.Errorf("briefing ID %q is invalid", briefing.ID)
 		}
 		if _, exists := briefings[briefing.ID]; exists {
 			return fmt.Errorf("duplicate briefing ID %q", briefing.ID)
@@ -179,10 +184,19 @@ func (c Config) Validate() error {
 				return fmt.Errorf("briefing %q section %d limit must be positive", briefing.ID, i)
 			}
 		}
+		if _, exists := logicalFeeds[briefing.ID]; exists {
+			return fmt.Errorf("briefing ID %q conflicts with logical feed ID", briefing.ID)
+		}
 		briefings[briefing.ID] = struct{}{}
 	}
 
 	return nil
+}
+
+var idPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+
+func validID(id string) bool {
+	return idPattern.MatchString(id) && id != "." && id != ".."
 }
 
 func validateOrder(order Order) error {
