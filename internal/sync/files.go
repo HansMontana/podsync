@@ -22,6 +22,15 @@ type PlaylistFile struct {
 	Content  []byte
 }
 
+type FileProgress struct {
+	Phase     string
+	Completed int
+	Total     int
+	Relative  string
+}
+
+type FileProgressFunc func(FileProgress)
+
 type FilePlan struct {
 	Copies    []FileCopy
 	Playlists []PlaylistFile
@@ -72,12 +81,27 @@ func playlistPaths(playlists []PlaylistFile) []string {
 // ApplyFilePlan installs content, removes obsolete owned files, then commits
 // the manifest last so failed deletion remains recoverable on a later sync.
 func ApplyFilePlan(ctx context.Context, deviceRoot string, plan FilePlan) error {
-	for _, copy := range plan.Copies {
+	return ApplyFilePlanWithProgress(ctx, deviceRoot, plan, nil)
+}
+
+func ApplyFilePlanWithProgress(ctx context.Context, deviceRoot string, plan FilePlan, progress FileProgressFunc) error {
+	copyTotal := len(plan.Copies)
+	for i, copy := range plan.Copies {
 		if err := copyFile(ctx, deviceRoot, copy); err != nil {
 			return err
 		}
+		if progress != nil {
+			progress(FileProgress{Phase: "copy", Completed: i + 1, Total: copyTotal, Relative: copy.Relative})
+		}
 	}
 	var manifest *PlaylistFile
+	playlistTotal := 0
+	for _, playlist := range plan.Playlists {
+		if playlist.Relative != "Podsync/managed-files.txt" {
+			playlistTotal++
+		}
+	}
+	playlistCompleted := 0
 	for i := range plan.Playlists {
 		playlist := plan.Playlists[i]
 		if playlist.Relative == "Podsync/managed-files.txt" {
@@ -87,8 +111,12 @@ func ApplyFilePlan(ctx context.Context, deviceRoot string, plan FilePlan) error 
 		if err := writeFile(ctx, deviceRoot, playlist.Relative, playlist.Content); err != nil {
 			return err
 		}
+		playlistCompleted++
+		if progress != nil {
+			progress(FileProgress{Phase: "playlist", Completed: playlistCompleted, Total: playlistTotal, Relative: playlist.Relative})
+		}
 	}
-	for _, relative := range plan.Deletes {
+	for i, relative := range plan.Deletes {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -100,6 +128,9 @@ func ApplyFilePlan(ctx context.Context, deviceRoot string, plan FilePlan) error 
 		}
 		if err := os.Remove(destination); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("delete %q: %w", relative, err)
+		}
+		if progress != nil {
+			progress(FileProgress{Phase: "delete", Completed: i + 1, Total: len(plan.Deletes), Relative: relative})
 		}
 	}
 	if manifest != nil {

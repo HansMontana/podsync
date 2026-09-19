@@ -17,10 +17,10 @@ type ProgressFunc func(completed, total int, current episode.Episode, reused boo
 // complete device file plan. Device deletions happen only after all downloads
 // and device writes succeed.
 func Episodes(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string) error {
-	return EpisodesWithProgress(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, nil)
+	return EpisodesWithProgress(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, nil, nil)
 }
 
-func EpisodesWithProgress(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, progress ProgressFunc) error {
+func EpisodesWithProgress(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, progress ProgressFunc, fileProgress FileProgressFunc) error {
 	var copies []FileCopy
 	var keep []string
 	var staged []string
@@ -64,7 +64,7 @@ func EpisodesWithProgress(ctx context.Context, client *http.Client, stagingDir, 
 	if err != nil {
 		return fmt.Errorf("build episode sync plan: %w", err)
 	}
-	if err := ApplyFilePlan(ctx, deviceRoot, plan); err != nil {
+	if err := ApplyFilePlanWithProgress(ctx, deviceRoot, plan, fileProgress); err != nil {
 		return fmt.Errorf("apply episode sync plan: %w", err)
 	}
 	return nil

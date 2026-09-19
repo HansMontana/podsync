@@ -66,6 +66,33 @@ func TestBuildFilePlanRejectsEscapingPath(t *testing.T) {
 	}
 }
 
+func TestApplyFilePlanReportsCopyAndPlaylistProgress(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(t.TempDir(), "episode.mp3")
+	if err := os.WriteFile(source, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plan := FilePlan{
+		Copies:    []FileCopy{{Source: source, Relative: "Podcasts/feed-1/aaaaaaaaaaaaaaaa.mp3"}},
+		Playlists: []PlaylistFile{{Relative: "Playlists/Daily Briefing.m3u8", Content: []byte("#EXTM3U\n")}},
+	}
+	var progress []FileProgress
+	if err := ApplyFilePlanWithProgress(context.Background(), root, plan, func(current FileProgress) {
+		progress = append(progress, current)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(progress) != 2 {
+		t.Fatalf("got progress %+v", progress)
+	}
+	if progress[0].Phase != "copy" || progress[0].Completed != 1 || progress[0].Total != 1 {
+		t.Fatalf("got copy progress %+v", progress[0])
+	}
+	if progress[1].Phase != "playlist" || progress[1].Completed != 1 || progress[1].Total != 1 {
+		t.Fatalf("got playlist progress %+v", progress[1])
+	}
+}
+
 func TestBuildFilePlanRejectsUnownedManifestPaths(t *testing.T) {
 	for _, current := range []string{"iPod_Control/iTunes/iTunesDB", "Podsync/podsync.db", "Music/manual.mp3"} {
 		if _, err := BuildFilePlan([]string{current}, nil, nil, nil); err == nil {

@@ -94,7 +94,7 @@ func TestEpisodesReusesExistingMatchingFile(t *testing.T) {
 		progress.completed = completed
 		progress.total = total
 		progress.reused = reused
-	}); err != nil {
+	}, nil); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
 	if progress.completed != 1 || progress.total != 1 || !progress.reused {

@@ -570,6 +570,15 @@ func sync(args []string) error {
 			action = "reused"
 		}
 		fmt.Printf("%s %d/%d: %s\n", action, completed, total, current.Title)
+	}, func(progress syncer.FileProgress) {
+		switch progress.Phase {
+		case "copy":
+			fmt.Printf("copied %d/%d: %s\n", progress.Completed, progress.Total, progress.Relative)
+		case "playlist":
+			fmt.Printf("wrote playlist %d/%d: %s\n", progress.Completed, progress.Total, progress.Relative)
+		case "delete":
+			fmt.Printf("deleted %d/%d: %s\n", progress.Completed, progress.Total, progress.Relative)
+		}
 	}); err != nil {
 		return err
 	}
