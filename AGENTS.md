@@ -569,41 +569,16 @@ For a migration already used on real databases, prefer adding a new migration ov
 
 SQL files should end with a newline.
 
-### Initial feed persistence
+### Persisted feed and episode fields
 
-The initial schema introduced a `feeds` table with fields such as:
+The current schema persists feed metadata, including ETag and Last-Modified,
+and episode fields through a foreign-key relationship to the feed. These fields
+are durable iPod state, not host-only cache data.
 
-```sql
-CREATE TABLE feeds (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    url TEXT NOT NULL
-);
-```
-
-This is not a promise that those are the only durable feed fields forever.
-
-If the domain has fields such as ETag or Last-Modified, explicitly decide whether they are durable cross-host state or disposable cache metadata before adding or omitting them from persistence.
-
-## Episode persistence
-
-Episode persistence is an important upcoming design area.
-
-Do not jump directly to a table because "episodes need SQL."
-
-Before implementing it:
-
-1. Inspect the current `episode.Episode`, `feed.Feed`, and `state.State`.
-2. Decide which episode fields are durable iPod state.
-3. Map existing GUID / AudioURL / fingerprint identity rules into persistence.
-4. Decide which invariants belong in Go and which can use SQL constraints/indexes.
-5. Establish the feed relationship.
-6. Add migration tests and persistence/regression tests.
-7. Implement the smallest repository change that satisfies those behaviors.
-
-Use a proper relationship to the feed when appropriate.
-
-Do not invent a synthetic domain ID solely to make the SQL schema look conventional.
+When evolving persisted fields, inspect the current domain model, migration,
+repository, and persistence tests. Add a forward migration for deployed
+schemas, preserve the existing episode identity rules, and do not invent a
+synthetic domain ID unless the domain requires one.
 
 ## Transactions and writes
 
@@ -611,7 +586,8 @@ Durable state changes should be atomic where partial application would corrupt s
 
 Use transactions where they simplify correctness.
 
-The initial repository may use a simple whole-set replacement strategy such as:
+The current repository uses a simple whole-set replacement strategy inside one
+transaction:
 
 ```text
 BEGIN
@@ -620,11 +596,9 @@ INSERT desired rows
 COMMIT
 ```
 
-That can be acceptable for a small first implementation.
-
-Do not treat it as permanent architecture. As episode state and preferences grow, revisit write strategy based on actual requirements and database size.
-
-Prefer simple correct transactions over elaborate incremental update machinery until incremental updates are genuinely needed.
+This is acceptable while the state remains small. Revisit the strategy only
+when measured scale or new durable state requires it; prefer simple correct
+transactions over elaborate incremental machinery.
 
 ## Sync design
 
