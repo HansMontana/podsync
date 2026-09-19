@@ -50,16 +50,20 @@ func TestEpisodeRejectsMissingAudioURL(t *testing.T) {
 	}
 }
 
-func TestEpisodeRejectsEmptyAndWrongSizedDownloads(t *testing.T) {
-	for _, current := range []episode.Episode{
-		{Enclosure: episode.Enclosure{URL: "", Length: 1}},
-		{Enclosure: episode.Enclosure{Length: 5}},
-	} {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-		current.Enclosure.URL = server.URL
-		if _, err := Episode(context.Background(), server.Client(), current, t.TempDir()); err == nil {
-			t.Fatal("Episode() accepted an invalid download")
-		}
-		server.Close()
+func TestEpisodeRejectsEmptyDownload(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer server.Close()
+	if _, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL}}, t.TempDir()); err == nil {
+		t.Fatal("Episode() accepted an empty download")
+	}
+}
+
+func TestEpisodeRejectsWrongSizedDownload(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("audio"))
+	}))
+	defer server.Close()
+	if _, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL, Length: 6}}, t.TempDir()); err == nil {
+		t.Fatal("Episode() accepted a wrong-sized download")
 	}
 }

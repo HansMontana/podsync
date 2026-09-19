@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/HansMontana/podsync/internal/briefing"
@@ -194,7 +195,7 @@ func addFeed(args []string) error {
 	if *id == "" || *feedURL == "" {
 		return fmt.Errorf("-id and -url are required")
 	}
-	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false)
+	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false, true)
 	if err != nil {
 		return err
 	}
@@ -226,7 +227,7 @@ func removeFeed(args []string) error {
 	if *id == "" {
 		return fmt.Errorf("-id is required")
 	}
-	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false)
+	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false, true)
 	if err != nil {
 		return err
 	}
@@ -304,7 +305,13 @@ func validateConfig(args []string) error {
 }
 
 func reconcile(args []string, refresh bool) error {
-	flags := newFlagSet("reconcile", "Usage: podsync reconcile -device-root PATH [-config PATH]")
+	command := "reconcile"
+	usage := "Usage: podsync reconcile -device-root PATH [-config PATH]"
+	if refresh {
+		command = "refresh"
+		usage = "Usage: podsync refresh -device-root PATH [-config PATH]"
+	}
+	flags := newFlagSet(command, usage)
 	deviceRoot := flags.String("device-root", "", "mounted iPod root")
 	configPath := flags.String("config", "", "path to podsync TOML configuration (defaults to device config)")
 	if help, err := parseFlags(flags, args); err != nil {
@@ -312,7 +319,7 @@ func reconcile(args []string, refresh bool) error {
 	} else if help {
 		return nil
 	}
-	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false)
+	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false, true)
 	if err != nil {
 		return err
 	}
@@ -389,7 +396,7 @@ func generatePlaylist(args []string, briefingMode bool) error {
 	if *id == "" {
 		return fmt.Errorf("-id is required")
 	}
-	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false)
+	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false, true)
 	if err != nil {
 		return err
 	}
@@ -437,20 +444,17 @@ func sync(args []string) error {
 	} else if help {
 		return nil
 	}
-	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, *dryRun)
+	configProvided := *configPath != ""
+	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, *dryRun, false)
 	if err != nil {
 		return err
 	}
 	defer repository.Close()
-	var current state.State
-	if *dryRun {
-		current, err = repository.Load()
-	} else {
-		if err := reconcileState(repository, cfg); err != nil {
-			return err
-		}
-		current, err = repository.Load()
+	current, err := repository.Load()
+	if err != nil {
+		return err
 	}
+	current, err = cfg.EnsureSources(current)
 	if err != nil {
 		return err
 	}
@@ -494,7 +498,11 @@ func sync(args []string) error {
 	if err != nil {
 		return err
 	}
-	if *stagingDir == "" {
+	if *stagingDir != "" {
+		if err := validateStagingDirectory(layout.Root, *stagingDir); err != nil {
+			return err
+		}
+	} else if !*dryRun {
 		*stagingDir, err = os.MkdirTemp("", "podsync-staging-")
 		if err != nil {
 			return fmt.Errorf("create staging directory: %w", err)
@@ -527,7 +535,7 @@ func sync(args []string) error {
 			return err
 		}
 		for _, copy := range plan.Copies {
-			fmt.Printf("would copy %s\n", copy.Relative)
+			fmt.Printf("would ensure %s\n", copy.Relative)
 		}
 		for _, playlist := range plan.Playlists {
 			if playlist.Relative != layout.ManifestRelativePath() {
@@ -537,16 +545,25 @@ func sync(args []string) error {
 		for _, relative := range plan.Deletes {
 			fmt.Printf("would delete %s\n", relative)
 		}
+		fmt.Printf("would select %d episodes, write %d playlists, and delete %d managed files\n", len(episodes), len(playlistFiles)-1, len(plan.Deletes))
 		return nil
 	}
 	if err := syncer.Episodes(context.Background(), httpClient, *stagingDir, layout.Root, episodes, playlistFiles, managed); err != nil {
 		return err
 	}
+	if configProvided {
+		if err := config.Save(layout.ConfigPath(), cfg); err != nil {
+			return fmt.Errorf("save device config: %w", err)
+		}
+	}
+	if err := repository.Save(current); err != nil {
+		return fmt.Errorf("save configured sources: %w", err)
+	}
 	fmt.Printf("synced %d episodes and %d playlists\n", len(episodes), len(playlistFiles)-1)
 	return nil
 }
 
-func openDevice(root, configPath string, readOnly bool) (device.Layout, state.Repository, config.Config, error) {
+func openDevice(root, configPath string, readOnly, persistConfig bool) (device.Layout, state.Repository, config.Config, error) {
 	layout, repository, err := openRepositoryMode(root, readOnly)
 	if err != nil {
 		return layout, nil, config.Config{}, err
@@ -559,13 +576,32 @@ func openDevice(root, configPath string, readOnly bool) (device.Layout, state.Re
 		_ = repository.Close()
 		return layout, nil, config.Config{}, err
 	}
-	if !readOnly && configPath != layout.ConfigPath() {
+	if !readOnly && persistConfig && configPath != layout.ConfigPath() {
 		if err := config.Save(layout.ConfigPath(), cfg); err != nil {
 			_ = repository.Close()
 			return layout, nil, config.Config{}, fmt.Errorf("save device config: %w", err)
 		}
 	}
 	return layout, repository, cfg, nil
+}
+
+func validateStagingDirectory(deviceRoot, stagingDir string) error {
+	deviceRoot, err := filepath.Abs(deviceRoot)
+	if err != nil {
+		return fmt.Errorf("resolve device root: %w", err)
+	}
+	stagingDir, err = filepath.Abs(stagingDir)
+	if err != nil {
+		return fmt.Errorf("resolve staging directory: %w", err)
+	}
+	relative, err := filepath.Rel(deviceRoot, stagingDir)
+	if err != nil {
+		return fmt.Errorf("compare staging directory: %w", err)
+	}
+	if relative == "." || (relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))) {
+		return fmt.Errorf("staging directory must be outside the device root")
+	}
+	return nil
 }
 
 func openRepositoryMode(root string, readOnly bool) (device.Layout, state.Repository, error) {

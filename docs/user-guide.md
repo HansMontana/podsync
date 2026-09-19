@@ -18,13 +18,15 @@ Before the first real sync:
 1. Mount the iPod normally.
 2. Check the mount path and device contents.
 3. Run `sync --dry-run`.
-4. Review the planned episode count and deletions.
+4. Review the selected episode, playlist, and deletion counts.
 5. Run `sync` only after the plan is acceptable.
 
-Podsync manages only paths recorded in its device-local manifest. It does not
-manage or delete `AUDIO/`, `iPod_Control/`, or other files created outside
-podsync. Existing files at podsync-generated paths are reused when they are
-non-empty regular files and their known enclosure size matches.
+Only manifest-listed podsync paths are eligible for deletion. Podsync does not
+delete `AUDIO/`, `iPod_Control/`, or other files created outside podsync. Sync
+can write or replace its selected generated `Podcasts/feed-N/...` and
+`Playlists/...` destinations even when they were not in an earlier manifest.
+Existing generated audio is reused when it is a non-empty regular file and its
+known enclosure size matches.
 
 ## Build
 
@@ -60,6 +62,9 @@ Podsync/podsync.toml
 
 If `-config` is omitted, commands read that device-local file.
 
+To initialize a device, first run `reconcile -device-root ... -config ...`.
+After that, config-less device commands use `Podsync/podsync.toml`.
+
 Example source and logical-feed configuration:
 
 ```toml
@@ -84,6 +89,10 @@ then older unplayed episodes fill the configured limit.
 
 `limit = 0` or an omitted limit means no limit. Valid ordering values are
 `newest_first` and `oldest_first`.
+
+`feed.order`, `briefing.section.order`, and `briefing.section.limit` are
+required. A briefing section uses its referenced logical feed's source and
+filter, but uses its own ordering, limit, and `unplayed_only` setting.
 
 ## Briefings
 
@@ -136,6 +145,10 @@ Refresh all configured source feeds:
 podsync refresh -device-root /media/hansmontana/HANSPOD
 ```
 
+`refresh` processes sources sequentially. A failure leaves earlier successful
+refreshes committed. `sync` uses stored episodes and does not fetch RSS; use
+`reconcile` or `feed add`, then `refresh`, then `sync` for new feed content.
+
 Show state and playback counts:
 
 ```bash
@@ -147,6 +160,10 @@ List source feeds without requiring a config file:
 ```bash
 podsync feed list -device-root /media/hansmontana/HANSPOD
 ```
+
+The output columns are durable numeric feed ID, RSS feed name, and URL. Use the
+source ID from configuration, rather than the listed numeric ID or RSS name,
+with `feed remove -id`.
 
 Add or remove a source feed:
 
@@ -161,10 +178,9 @@ podsync feed remove \
   -id technology
 ```
 
-Removal is rejected while a logical feed still references the source. Removing
-a source from configuration does not immediately delete its durable database
-rows; obsolete media is removed only from paths podsync previously recorded as
-managed during a later sync.
+Removal is rejected while a logical feed still references the source. It deletes
+the matching source feed and its episodes from the device database immediately.
+Previously managed media remains until a later sync removes it.
 
 Generate one logical-feed playlist:
 
@@ -182,7 +198,7 @@ podsync briefing \
   -id morning
 ```
 
-Preview a sync without downloading or changing device files:
+Preview desired managed paths without downloading or changing device files:
 
 ```bash
 podsync sync \
@@ -196,17 +212,21 @@ Apply a sync:
 podsync sync -device-root /media/hansmontana/HANSPOD
 ```
 
-Downloads first go to host-side staging. Device files are written through
-temporary files and renames. Managed deletions happen only after downloads and
-playlist writes succeed.
+Downloads first go to host-side staging. An explicit `-staging` path must be
+outside the device root. Device files are written through temporary files and
+renames. Managed deletions happen only after downloads and playlist writes
+succeed. A supplied configuration and reconciled state are persisted after file
+application succeeds; a final persistence failure can leave new files with the
+previous configuration/state and is recoverable by rerunning sync.
 
 ## Playback State
 
 Podsync reads Rockbox playback information without writing Rockbox databases.
 Sources are used in this order:
 
-1. TagCache records are authoritative when a path exists there.
-2. `.rockbox/playback.log` fills paths missing from TagCache.
+1. TagCache records are preferred when a path exists there.
+2. A valid positive `.rockbox/playback.log` record supersedes a zero-count
+   TagCache record; otherwise the log fills paths missing from TagCache.
 3. Missing or untrusted records are treated as unplayed.
 
 Rockbox playback logging can be enabled from its playback/settings menu. The

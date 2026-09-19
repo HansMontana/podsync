@@ -47,12 +47,3 @@ func TestLogicalFeedUsesStableDevicePathsAndConfiguredOrder(t *testing.T) {
 		t.Fatalf("playlist does not use device-relative stable path: %q", text)
 	}
 }
-
-func TestValidateTracksRejectsEmptyPath(t *testing.T) {
-	if err := ValidateTracks([]Track{{Path: "  "}}); err == nil {
-		t.Fatal("ValidateTracks() accepted an empty path")
-	}
-	if !strings.Contains(string(M3U(nil)), "#EXTM3U") {
-		t.Fatal("M3U() did not write the playlist header")
-	}
-}

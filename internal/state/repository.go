@@ -1,9 +1,11 @@
 package state
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"fmt"
+	"io/fs"
 	"net/url"
 	"time"
 
@@ -27,23 +29,21 @@ type SQLiteRepository struct {
 }
 
 func NewSQLiteRepository(path string) (*SQLiteRepository, error) {
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", sqliteURL(path, false))
 	if err != nil {
 		return nil, fmt.Errorf("open state database: %w", err)
 	}
-	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+	migrations, err := fs.Sub(migrationFS, "migrations")
+	if err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("enable foreign keys: %w", err)
+		return nil, fmt.Errorf("open embedded migrations: %w", err)
 	}
-
-	goose.SetBaseFS(migrationFS)
-
-	if err := goose.SetDialect("sqlite3"); err != nil {
+	provider, err := goose.NewProvider(goose.DialectSQLite3, db, migrations)
+	if err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("set migration dialect: %w", err)
+		return nil, fmt.Errorf("create migration provider: %w", err)
 	}
-
-	if err := goose.Up(db, "migrations"); err != nil {
+	if _, err := provider.Up(context.Background()); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("run state migrations: %w", err)
 	}
@@ -52,16 +52,20 @@ func NewSQLiteRepository(path string) (*SQLiteRepository, error) {
 }
 
 func NewReadOnlySQLiteRepository(path string) (*SQLiteRepository, error) {
-	databaseURL := url.URL{Scheme: "file", Path: path, RawQuery: "mode=ro"}
-	db, err := sql.Open("sqlite", databaseURL.String())
+	db, err := sql.Open("sqlite", sqliteURL(path, true))
 	if err != nil {
 		return nil, fmt.Errorf("open read-only state database: %w", err)
 	}
-	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("enable foreign keys: %w", err)
-	}
 	return &SQLiteRepository{db: db}, nil
+}
+
+func sqliteURL(path string, readOnly bool) string {
+	query := url.Values{}
+	query.Set("_pragma", "foreign_keys(1)")
+	if readOnly {
+		query.Set("mode", "ro")
+	}
+	return (&url.URL{Scheme: "file", Path: path, RawQuery: query.Encode()}).String()
 }
 
 func (r *SQLiteRepository) Load() (State, error) {

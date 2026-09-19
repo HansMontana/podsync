@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -9,6 +10,29 @@ import (
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
 )
+
+func TestSQLiteRepositoryEnablesForeignKeysForEachConnection(t *testing.T) {
+	repository, err := NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	repository.db.SetMaxOpenConns(2)
+	for range 2 {
+		connection, err := repository.db.Conn(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer connection.Close()
+		var enabled int
+		if err := connection.QueryRowContext(context.Background(), "PRAGMA foreign_keys").Scan(&enabled); err != nil {
+			t.Fatal(err)
+		}
+		if enabled != 1 {
+			t.Fatalf("foreign keys are disabled on a pooled connection")
+		}
+	}
+}
 
 func TestSQLiteRepositoryRoundTrip(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "state.db")

@@ -1,7 +1,6 @@
 package playlists
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -28,13 +27,4 @@ func M3U(tracks []Track) []byte {
 		builder.WriteString("\n")
 	}
 	return []byte(builder.String())
-}
-
-func ValidateTracks(tracks []Track) error {
-	for i, track := range tracks {
-		if strings.TrimSpace(track.Path) == "" {
-			return fmt.Errorf("track %d has an empty path", i)
-		}
-	}
-	return nil
 }

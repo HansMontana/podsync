@@ -75,6 +75,9 @@ podsync feed list -device-root /media/ipod
 podsync sync -device-root /media/ipod --dry-run
 ```
 
+`sync` uses already refreshed episode state. For new content, use
+`reconcile`/`feed add`, then `refresh`, then `sync`.
+
 Format and verify a change:
 
 ```bash

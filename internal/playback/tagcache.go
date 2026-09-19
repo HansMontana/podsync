@@ -113,10 +113,6 @@ func openMaster(path string) (*os.File, binary.ByteOrder, int64, int64, error) {
 		}
 	}
 	count := int64(order.Uint32(header[8:12]))
-	if count < 0 {
-		file.Close()
-		return nil, nil, 0, 0, fmt.Errorf("TagCache is dirty or invalid")
-	}
 	entrySize := int64(tagCacheTagCount*4 + 4)
 	info, err := file.Stat()
 	if err != nil || info.Size() < 20+count*entrySize {

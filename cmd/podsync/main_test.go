@@ -12,6 +12,7 @@ import (
 
 	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/device"
+	"github.com/HansMontana/podsync/internal/state"
 )
 
 func TestRefreshAndSyncCommandsUseDeviceStateAndStaging(t *testing.T) {
@@ -105,6 +106,70 @@ func TestFeedCommandsManageDeviceConfiguration(t *testing.T) {
 	updated, err = config.Load(filepath.Join(root, "Podsync", "podsync.toml"))
 	if err != nil || len(updated.Sources) != 1 {
 		t.Fatalf("got final config %+v, error %v", updated, err)
+	}
+}
+
+func TestSyncFailureDoesNotPersistSuppliedConfiguration(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/episode.mp3" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = fmt.Fprintf(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>News</title><link>https://example.com</link><description>News</description><item><title>Episode one</title><guid>one</guid><pubDate>Fri, 02 Jan 2026 00:00:00 GMT</pubDate><enclosure url="%s/episode.mp3" type="audio/mpeg" length="5"/></item></channel></rss>`, server.URL)
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	original := config.Config{Sources: []config.SourceFeed{{ID: "news", URL: server.URL + "/feed.xml"}}, Feeds: []config.LogicalFeed{{ID: "news", Source: "news", Order: config.NewestFirst}}}
+	originalPath := filepath.Join(t.TempDir(), "original.toml")
+	if err := config.Save(originalPath, original); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"refresh", "-device-root", root, "-config", originalPath}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(filepath.Join(root, "Podsync", "podsync.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := original
+	updated.Sources = append(updated.Sources, config.SourceFeed{ID: "sports", URL: "https://example.com/sports.xml"})
+	updatedPath := filepath.Join(t.TempDir(), "updated.toml")
+	if err := config.Save(updatedPath, updated); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"sync", "-device-root", root, "-config", updatedPath}); err == nil {
+		t.Fatal("sync accepted a failed download")
+	}
+	after, err := os.ReadFile(filepath.Join(root, "Podsync", "podsync.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("failed sync persisted the supplied configuration")
+	}
+	repository, err := state.NewReadOnlySQLiteRepository(filepath.Join(root, "Podsync", "podsync.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	current, err := repository.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(current.Feeds) != 1 {
+		t.Fatalf("failed sync persisted reconciled state: %+v", current.Feeds)
+	}
+}
+
+func TestValidateStagingDirectoryRejectsDevicePaths(t *testing.T) {
+	root := t.TempDir()
+	if err := validateStagingDirectory(root, filepath.Join(root, "staging")); err == nil {
+		t.Fatal("validateStagingDirectory() accepted a device path")
+	}
+	if err := validateStagingDirectory(root, t.TempDir()); err != nil {
+		t.Fatalf("validateStagingDirectory() rejected a host path: %v", err)
 	}
 }
 
