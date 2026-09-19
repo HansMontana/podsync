@@ -15,13 +15,17 @@ import (
 func Feed(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, unplayedOnly bool) ([]episode.Episode, error) {
 	for _, logical := range cfg.Feeds {
 		if logical.ID == feedID {
-			return FeedOrdered(cfg, current, feedID, playbackStates, unplayedOnly, logical.Order)
+			return FeedOrderedLimit(cfg, current, feedID, playbackStates, unplayedOnly || logical.UnplayedOnly, logical.Order, logical.Limit)
 		}
 	}
 	return nil, fmt.Errorf("logical feed %q not found", feedID)
 }
 
 func FeedOrdered(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, unplayedOnly bool, order config.Order) ([]episode.Episode, error) {
+	return FeedOrderedLimit(cfg, current, feedID, playbackStates, unplayedOnly, order, 0)
+}
+
+func FeedOrderedLimit(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, unplayedOnly bool, order config.Order, limit int) ([]episode.Episode, error) {
 	var logical *config.LogicalFeed
 	for i := range cfg.Feeds {
 		if cfg.Feeds[i].ID == feedID {
@@ -84,6 +88,9 @@ func FeedOrdered(cfg config.Config, current state.State, feedID string, playback
 			continue
 		}
 		result = append(result, candidate)
+	}
+	if limit > 0 && len(result) > limit {
+		result = result[:limit]
 	}
 	return result, nil
 }

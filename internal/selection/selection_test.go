@@ -1,6 +1,7 @@
 package selection
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -58,6 +59,29 @@ func TestFeedSupportsOldestFirst(t *testing.T) {
 		t.Fatalf("Feed() returned error: %v", err)
 	}
 	if len(got) != 2 || got[0].GUID != "earlier" {
+		t.Fatalf("got episodes %+v", got)
+	}
+}
+
+func TestFeedUnplayedLimitBackfillsOlderEpisodes(t *testing.T) {
+	cfg := config.Config{
+		Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
+		Feeds:   []config.LogicalFeed{{ID: "news", Source: "news", Order: config.NewestFirst, Limit: 5, UnplayedOnly: true}},
+	}
+	episodes := make([]episode.Episode, 0, 6)
+	playbackStates := make(map[string]playback.State)
+	for i := 0; i < 6; i++ {
+		current := episode.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i), PublishedAt: time.Date(2026, 9, i+1, 0, 0, 0, 0, time.UTC)}
+		episodes = append(episodes, current)
+		if i == 5 {
+			playbackStates[current.IdentityKey()] = playback.State{Known: true, PlayCount: 1}
+		}
+	}
+	got, err := Feed(cfg, state.State{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/news.xml"}}, Episodes: episodes}, "news", playbackStates, false)
+	if err != nil {
+		t.Fatalf("Feed() returned error: %v", err)
+	}
+	if len(got) != 5 || got[0].GUID != "episode-4" || got[4].GUID != "episode-0" {
 		t.Fatalf("got episodes %+v", got)
 	}
 }

@@ -137,3 +137,20 @@ limit = 0
 		t.Fatal("Parse() accepted a non-positive briefing limit")
 	}
 }
+
+func TestConfigRejectsNegativeLogicalFeedLimit(t *testing.T) {
+	input := `
+[[source]]
+id = "news"
+url = "https://example.com/news.xml"
+
+[[feed]]
+id = "news"
+source = "news"
+order = "newest_first"
+limit = -1
+`
+	if _, err := Parse(strings.NewReader(input)); err == nil {
+		t.Fatal("Parse() accepted a negative logical feed limit")
+	}
+}

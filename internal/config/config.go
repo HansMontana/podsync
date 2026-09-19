@@ -33,11 +33,13 @@ type SourceFeed struct {
 }
 
 type LogicalFeed struct {
-	ID     string `toml:"id"`
-	Title  string `toml:"title"`
-	Source string `toml:"source"`
-	Order  Order  `toml:"order"`
-	Filter Filter `toml:"filter"`
+	ID           string `toml:"id"`
+	Title        string `toml:"title"`
+	Source       string `toml:"source"`
+	Order        Order  `toml:"order"`
+	Limit        int    `toml:"limit"`
+	UnplayedOnly bool   `toml:"unplayed_only"`
+	Filter       Filter `toml:"filter"`
 }
 
 type Filter struct {
@@ -148,6 +150,9 @@ func (c Config) Validate() error {
 		}
 		if err := validateOrder(logical.Order); err != nil {
 			return fmt.Errorf("logical feed %q: %w", logical.ID, err)
+		}
+		if logical.Limit < 0 {
+			return fmt.Errorf("logical feed %q limit cannot be negative", logical.ID)
 		}
 		logicalFeeds[logical.ID] = struct{}{}
 	}
