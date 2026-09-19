@@ -1,0 +1,38 @@
+# Example configuration for ordinary podcast feeds.
+# These examples are for documentation and testing, not recommendations.
+
+[[source]]
+id = "sgu"
+url = "https://feed.theskepticsguide.org/feed/rss.aspx?feed=sgu"
+
+[[source]]
+id = "science-vs"
+url = "https://feeds.megaphone.fm/sciencevs"
+
+[[source]]
+id = "night-vale"
+url = "https://feeds.megaphone.fm/SBP4591212513"
+
+[[feed]]
+id = "sgu"
+title = "The Skeptics' Guide to the Universe"
+source = "sgu"
+order = "newest_first"
+limit = 5
+unplayed_only = true
+
+[[feed]]
+id = "science-vs"
+title = "Science Vs"
+source = "science-vs"
+order = "newest_first"
+limit = 3
+unplayed_only = true
+
+[[feed]]
+id = "night-vale"
+title = "Welcome to Night Vale"
+source = "night-vale"
+order = "oldest_first"
+limit = 5
+unplayed_only = true

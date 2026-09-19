@@ -1,6 +1,7 @@
 package feed
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -49,6 +50,22 @@ func TestFetchRSSReturnsBodyAndCacheHeaders(t *testing.T) {
 	}
 	if result.ETag != `"feed-2"` || result.LastModified != "Wed, 02 Sep 2026 14:39:34 +0200" {
 		t.Fatalf("got cache metadata %+v", result)
+	}
+}
+
+func TestFetchRSSAcceptsLargerRealWorldFeeds(t *testing.T) {
+	body := bytes.Repeat([]byte("x"), 11<<20)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+
+	result, err := FetchRSS(context.Background(), server.Client(), Feed{URL: server.URL})
+	if err != nil {
+		t.Fatalf("FetchRSS() rejected a feed larger than the old limit: %v", err)
+	}
+	if len(result.Body) != len(body) {
+		t.Fatalf("got body length %d, want %d", len(result.Body), len(body))
 	}
 }
 

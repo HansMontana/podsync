@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-const maxRSSSize = 10 << 20
+const maxRSSSize = 64 << 20
 
 // FetchResult contains an RSS response and its HTTP cache metadata.
 type FetchResult struct {

@@ -33,6 +33,8 @@ Not yet implemented:
 See `AGENTS.md` for the durable project architecture and roadmap.
 See [`docs/user-guide.md`](docs/user-guide.md) for installation, configuration,
 CLI usage, sync safety, and Rockbox playback guidance.
+See [`examples/`](examples/) for ordinary podcast and German daily-briefing
+configuration examples.
 
 ## Architecture
 

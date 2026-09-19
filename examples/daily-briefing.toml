@@ -1,0 +1,156 @@
+# Example configuration for a German daily briefing.
+# These examples are for documentation and testing, not recommendations.
+
+[[source]]
+id = "tagesschau-100-sekunden"
+url = "https://www.tagesschau.de/tagesschau_in_100_sekunden/podcast-ts100-audio-100~podcast.xml"
+
+[[source]]
+id = "dlf-news"
+url = "https://www.deutschlandfunk.de/nachrichten-108.xml"
+
+[[source]]
+id = "dlf-economic"
+url = "https://www.deutschlandfunk.de/wirtschaftspresseschau-102.xml"
+
+[[source]]
+id = "dlf-international"
+url = "https://www.deutschlandfunk.de/presseschau-122.xml"
+
+[[source]]
+id = "spiegel-lage"
+url = "https://www.omnycontent.com/d/playlist/5ac1e950-45c7-4eb7-87c0-aa0f018441b8/bb17ca27-51f4-4349-bc1e-abc00102c975/4c18e072-24d2-4d60-9a42-abc00102c97e/podcast.rss"
+
+[[source]]
+id = "sz-auf-den-punkt"
+url = "https://sz-auf-den-punkt.podigee.io/feed/mp3"
+
+[[source]]
+id = "zeit-was-jetzt"
+url = "https://feeds.simplecast.com/Xtqjn37O"
+
+# This official DLF feed combines several Presseschau editions. It is kept as
+# a source and partitioned through the generic title filter below, rather than
+# being treated as a German-only source feed.
+[[source]]
+id = "dlf-presseschau"
+url = "https://www.deutschlandfunk.de/presseschau-120.xml"
+
+[[feed]]
+id = "tagesschau-100-sekunden"
+title = "tagesschau in 100 Sekunden"
+source = "tagesschau-100-sekunden"
+order = "newest_first"
+limit = 3
+unplayed_only = true
+
+[[feed]]
+id = "dlf-news"
+title = "Deutschlandfunk Nachrichten"
+source = "dlf-news"
+order = "newest_first"
+limit = 3
+unplayed_only = true
+
+[[feed]]
+id = "dlf-economic"
+title = "Wirtschaftspresseschau"
+source = "dlf-economic"
+order = "newest_first"
+limit = 2
+unplayed_only = true
+
+[[feed]]
+id = "dlf-international"
+title = "Internationale Presseschau"
+source = "dlf-international"
+order = "newest_first"
+limit = 2
+unplayed_only = true
+
+[[feed]]
+id = "spiegel-lage"
+title = "DER SPIEGEL: Die Lage"
+source = "spiegel-lage"
+order = "newest_first"
+limit = 2
+unplayed_only = true
+
+[[feed]]
+id = "sz-auf-den-punkt"
+title = "Süddeutsche Zeitung: Auf den Punkt"
+source = "sz-auf-den-punkt"
+order = "newest_first"
+limit = 2
+unplayed_only = true
+
+[[feed]]
+id = "zeit-was-jetzt"
+title = "DIE ZEIT: Was jetzt?"
+source = "zeit-was-jetzt"
+order = "newest_first"
+limit = 2
+unplayed_only = true
+
+[[feed]]
+id = "dlf-german-newspapers"
+title = "German Newspaper Presseschau"
+source = "dlf-presseschau"
+order = "newest_first"
+limit = 4
+unplayed_only = true
+
+[feed.filter]
+title_contains = "Zeitungen"
+
+[[briefing]]
+id = "daily"
+title = "Daily Briefing"
+
+[[briefing.section]]
+feed = "tagesschau-100-sekunden"
+order = "newest_first"
+limit = 1
+unplayed_only = true
+
+[[briefing.section]]
+feed = "dlf-news"
+order = "newest_first"
+limit = 1
+unplayed_only = true
+
+[[briefing.section]]
+feed = "dlf-german-newspapers"
+order = "newest_first"
+limit = 1
+unplayed_only = true
+
+[[briefing.section]]
+feed = "dlf-economic"
+order = "newest_first"
+limit = 1
+unplayed_only = true
+
+[[briefing.section]]
+feed = "dlf-international"
+order = "newest_first"
+limit = 1
+unplayed_only = true
+
+[[briefing.section]]
+feed = "spiegel-lage"
+order = "newest_first"
+limit = 1
+unplayed_only = true
+
+[[briefing.section]]
+feed = "sz-auf-den-punkt"
+order = "newest_first"
+limit = 1
+unplayed_only = true
+
+[[briefing.section]]
+feed = "zeit-was-jetzt"
+order = "newest_first"
+limit = 1
+unplayed_only = true

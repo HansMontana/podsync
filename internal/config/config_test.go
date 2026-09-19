@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -68,6 +69,17 @@ unplayed_only = true
 	}
 	if cfg.Briefings[0].Sections[0].UnplayedOnly != true {
 		t.Fatalf("got briefing %+v", cfg.Briefings[0])
+	}
+}
+
+func TestExampleConfigsParseAndValidate(t *testing.T) {
+	for _, name := range []string{"podcasts.toml", "daily-briefing.toml"} {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join("..", "..", "examples", name)
+			if _, err := Load(path); err != nil {
+				t.Fatalf("Load(%q) returned error: %v", path, err)
+			}
+		})
 	}
 }
 
