@@ -31,6 +31,8 @@ Not yet implemented:
 - Full interrupted-sync end-to-end coverage against a real Rockbox layout
 
 See `AGENTS.md` for the durable project architecture and roadmap.
+See [`docs/user-guide.md`](docs/user-guide.md) for installation, configuration,
+CLI usage, sync safety, and Rockbox playback guidance.
 
 ## Architecture
 
