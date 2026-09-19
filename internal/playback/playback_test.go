@@ -45,6 +45,26 @@ func TestMergeRecordsIgnoresUnknownCounts(t *testing.T) {
 	}
 }
 
+func TestPreferRecordsUsesFallbackForMissingPaths(t *testing.T) {
+	primary := []Record{{Path: "/Podcasts/one.mp3", Known: true, PlayCount: 2}}
+	fallback := []Record{
+		{Path: "/Podcasts/one.mp3", Known: true, PlayCount: 9},
+		{Path: "/Podcasts/two.mp3", Known: true, PlayCount: 1},
+	}
+	got := PreferRecords(primary, fallback)
+	if len(got) != 2 {
+		t.Fatalf("got records %+v", got)
+	}
+	for _, record := range got {
+		if normalizePath(record.Path) == "Podcasts/one.mp3" && record.PlayCount != 2 {
+			t.Fatalf("fallback replaced primary record: %+v", got)
+		}
+	}
+	if normalizePath(got[1].Path) != "Podcasts/two.mp3" {
+		t.Fatalf("got records %+v", got)
+	}
+}
+
 func TestParseLogAggregatesRockboxPlaybackEntries(t *testing.T) {
 	log := `# Started Ver. 4.x
 1700000000:1000:2000:/Podcasts/feed-2/episode.mp3

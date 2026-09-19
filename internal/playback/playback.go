@@ -58,6 +58,41 @@ func MergeRecords(records []Record) []Record {
 	return result
 }
 
+// PreferRecords keeps primary records when both sources contain a path and
+// uses fallback records only for paths missing from the primary source.
+func PreferRecords(primary, fallback []Record) []Record {
+	byPath := make(map[string]Record, len(primary)+len(fallback))
+	for _, record := range primary {
+		if !record.Known {
+			continue
+		}
+		if key := normalizePath(record.Path); key != "" {
+			byPath[key] = record
+		}
+	}
+	for _, record := range fallback {
+		if !record.Known {
+			continue
+		}
+		key := normalizePath(record.Path)
+		if key == "" {
+			continue
+		}
+		if _, exists := byPath[key]; !exists {
+			byPath[key] = record
+		}
+	}
+
+	result := make([]Record, 0, len(byPath))
+	for _, record := range byPath {
+		result = append(result, record)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return normalizePath(result[i].Path) < normalizePath(result[j].Path)
+	})
+	return result
+}
+
 // ForEpisodes matches device records by stable device-relative media path.
 // Episodes without a trusted matching record remain unknown and therefore
 // unplayed.

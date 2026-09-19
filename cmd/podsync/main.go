@@ -536,7 +536,7 @@ func loadPlaybackRecords(layout device.Layout) ([]playback.Record, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parse TagCache: %w", err)
 		}
-		return parsed, nil
+		return playback.PreferRecords(parsed, playback.MergeRecords(records)), nil
 	}
 	return playback.MergeRecords(records), nil
 }
