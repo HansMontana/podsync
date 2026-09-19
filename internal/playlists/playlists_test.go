@@ -23,6 +23,15 @@ func TestM3UProducesExtendedPlaylist(t *testing.T) {
 	}
 }
 
+func TestFilenameUsesReadableSafeTitle(t *testing.T) {
+	if got := Filename("Süddeutsche Zeitung: Auf den Punkt", "sz"); got != "Süddeutsche Zeitung Auf den Punkt" {
+		t.Fatalf("Filename() = %q", got)
+	}
+	if got := Filename("", "fallback"); got != "fallback" {
+		t.Fatalf("Filename() with empty title = %q", got)
+	}
+}
+
 func TestLogicalFeedUsesStableDevicePathsAndConfiguredOrder(t *testing.T) {
 	cfg := config.Config{
 		Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},

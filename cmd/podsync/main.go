@@ -419,7 +419,23 @@ func generatePlaylist(args []string, briefingMode bool) error {
 	if err != nil {
 		return err
 	}
-	relative := path.Join("Playlists", *id+".m3u8")
+	title := *id
+	if briefingMode {
+		for _, configured := range cfg.Briefings {
+			if configured.ID == *id {
+				title = configured.Title
+				break
+			}
+		}
+	} else {
+		for _, configured := range cfg.Feeds {
+			if configured.ID == *id {
+				title = configured.Title
+				break
+			}
+		}
+	}
+	relative := path.Join("Playlists", playlists.Filename(title, *id)+".m3u8")
 	managed, err := layout.LoadManagedPaths()
 	if err != nil {
 		return err
@@ -478,7 +494,7 @@ func sync(args []string) error {
 		if generateErr != nil {
 			return generateErr
 		}
-		playlistFiles = append(playlistFiles, syncer.PlaylistFile{Relative: path.Join("Playlists", logical.ID+".m3u8"), Content: content})
+		playlistFiles = append(playlistFiles, syncer.PlaylistFile{Relative: path.Join("Playlists", playlists.Filename(logical.Title, logical.ID)+".m3u8"), Content: content})
 	}
 	for _, configured := range cfg.Briefings {
 		plan, generateErr := briefing.Build(cfg, current, configured.ID, states)
@@ -492,7 +508,7 @@ func sync(args []string) error {
 		for i, currentEpisode := range plan.Episodes {
 			tracks[i] = playlists.Track{Episode: currentEpisode, Path: path.Join("..", media.RelativePath(currentEpisode))}
 		}
-		playlistFiles = append(playlistFiles, syncer.PlaylistFile{Relative: path.Join("Playlists", configured.ID+".m3u8"), Content: playlists.M3U(tracks)})
+		playlistFiles = append(playlistFiles, syncer.PlaylistFile{Relative: path.Join("Playlists", playlists.Filename(configured.Title, configured.ID)+".m3u8"), Content: playlists.M3U(tracks)})
 	}
 	managed, err = layout.LoadManagedPaths()
 	if err != nil {

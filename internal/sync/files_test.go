@@ -54,6 +54,12 @@ func TestBuildAndApplyFilePlan(t *testing.T) {
 	}
 }
 
+func TestBuildFilePlanAcceptsReadablePlaylistPath(t *testing.T) {
+	if _, err := BuildFilePlan(nil, nil, []PlaylistFile{{Relative: "Playlists/Süddeutsche Zeitung.m3u8"}}, nil); err != nil {
+		t.Fatalf("BuildFilePlan() rejected readable playlist path: %v", err)
+	}
+}
+
 func TestBuildFilePlanRejectsEscapingPath(t *testing.T) {
 	if _, err := BuildFilePlan(nil, []FileCopy{{Source: "audio", Relative: "../outside"}}, nil, nil); err == nil {
 		t.Fatal("BuildFilePlan() accepted an escaping path")

@@ -64,8 +64,8 @@ func TestRealFeedCLIWorkflow(t *testing.T) {
 		t.Fatalf("sync dry-run command failed: %v", err)
 	}
 	for _, relative := range []string{
-		filepath.Join("Playlists", "dlf-german-newspapers.m3u8"),
-		filepath.Join("Playlists", "daily.m3u8"),
+		filepath.Join("Playlists", "German Newspaper Presseschau.m3u8"),
+		filepath.Join("Playlists", "Daily Briefing.m3u8"),
 	} {
 		if _, err := os.Stat(filepath.Join(root, relative)); err != nil {
 			t.Fatalf("expected generated playlist %s: %v", relative, err)
@@ -117,7 +117,7 @@ func TestRealFeedCLIWorkflow(t *testing.T) {
 	if err := run([]string{"sync", "-device-root", podcastRoot, "-dry-run"}); err != nil {
 		t.Fatalf("sync podcasts dry-run command failed: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(podcastRoot, "Playlists", "sgu.m3u8")); err != nil {
+	if _, err := os.Stat(filepath.Join(podcastRoot, "Playlists", "The Skeptics' Guide to the Universe.m3u8")); err != nil {
 		t.Fatalf("expected generated podcasts playlist: %v", err)
 	}
 }

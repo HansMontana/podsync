@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 type FileCopy struct {
@@ -170,7 +171,7 @@ func (r contextReader) Read(p []byte) (int, error) {
 }
 
 var audioPathPattern = regexp.MustCompile(`^Podcasts/feed-[1-9][0-9]*/[a-f0-9]{16}\.[A-Za-z0-9]{1,8}$`)
-var playlistPathPattern = regexp.MustCompile(`^Playlists/[A-Za-z0-9][A-Za-z0-9._-]*\.m3u8$`)
+var playlistPathPattern = regexp.MustCompile(`^Playlists/.+\.m3u8$`)
 
 func validateManagedPath(relative string) error {
 	if relative == "" || filepath.IsAbs(relative) || strings.ContainsAny(relative, "\r\n\x00") {
@@ -180,10 +181,27 @@ func validateManagedPath(relative string) error {
 	if clean != relative || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
 		return fmt.Errorf("path escapes device root: %q", relative)
 	}
-	if clean == "Podsync/managed-files.txt" || audioPathPattern.MatchString(clean) || playlistPathPattern.MatchString(clean) {
+	if clean == "Podsync/managed-files.txt" || audioPathPattern.MatchString(clean) || validPlaylistPath(clean) {
 		return nil
 	}
 	return fmt.Errorf("path is outside podsync-managed locations: %q", relative)
+}
+
+func validPlaylistPath(path string) bool {
+	if !playlistPathPattern.MatchString(path) {
+		return false
+	}
+	name := strings.TrimSuffix(strings.TrimPrefix(path, "Playlists/"), ".m3u8")
+	if name == "" || name == "." || name == ".." {
+		return false
+	}
+	for _, character := range name {
+		if unicode.IsLetter(character) || unicode.IsNumber(character) || character == ' ' || strings.ContainsRune("._-'()&", character) {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // safeDevicePath rejects symlinks in every existing path component. This is a
