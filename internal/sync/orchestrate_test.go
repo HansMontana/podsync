@@ -85,8 +85,20 @@ func TestEpisodesReusesExistingMatchingFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, nil); err != nil {
+	var progress struct {
+		completed int
+		total     int
+		reused    bool
+	}
+	if err := EpisodesWithProgress(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, nil, func(completed, total int, current episode.Episode, reused bool) {
+		progress.completed = completed
+		progress.total = total
+		progress.reused = reused
+	}); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
+	}
+	if progress.completed != 1 || progress.total != 1 || !progress.reused {
+		t.Fatalf("got progress %+v", progress)
 	}
 	if requests.Load() != 0 {
 		t.Fatalf("downloaded existing file %d times", requests.Load())

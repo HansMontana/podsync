@@ -564,7 +564,13 @@ func sync(args []string) error {
 		fmt.Printf("would select %d episodes, write %d playlists, and delete %d managed files\n", len(episodes), len(playlistFiles)-1, len(plan.Deletes))
 		return nil
 	}
-	if err := syncer.Episodes(context.Background(), httpClient, *stagingDir, layout.Root, episodes, playlistFiles, managed); err != nil {
+	if err := syncer.EpisodesWithProgress(context.Background(), httpClient, *stagingDir, layout.Root, episodes, playlistFiles, managed, func(completed, total int, current episode.Episode, reused bool) {
+		action := "staged"
+		if reused {
+			action = "reused"
+		}
+		fmt.Printf("%s %d/%d: %s\n", action, completed, total, current.Title)
+	}); err != nil {
 		return err
 	}
 	if configProvided {

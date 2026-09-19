@@ -11,10 +11,16 @@ import (
 	"github.com/HansMontana/podsync/internal/media"
 )
 
+type ProgressFunc func(completed, total int, current episode.Episode, reused bool)
+
 // Episodes downloads selected episodes to host staging, then applies the
 // complete device file plan. Device deletions happen only after all downloads
 // and device writes succeed.
 func Episodes(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string) error {
+	return EpisodesWithProgress(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, nil)
+}
+
+func EpisodesWithProgress(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, progress ProgressFunc) error {
 	var copies []FileCopy
 	var keep []string
 	var staged []string
@@ -37,6 +43,9 @@ func Episodes(ctx context.Context, client *http.Client, stagingDir, deviceRoot s
 		}
 		if exists {
 			keep = append(keep, relative)
+			if progress != nil {
+				progress(len(keep)+len(copies), len(episodes), current, true)
+			}
 			continue
 		}
 
@@ -46,6 +55,9 @@ func Episodes(ctx context.Context, client *http.Client, stagingDir, deviceRoot s
 		}
 		staged = append(staged, stagedPath)
 		copies = append(copies, FileCopy{Source: stagedPath, Relative: relative})
+		if progress != nil {
+			progress(len(keep)+len(copies), len(episodes), current, false)
+		}
 	}
 
 	plan, err := BuildFilePlan(managed, copies, playlists, keep)
