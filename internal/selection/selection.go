@@ -38,6 +38,22 @@ func FeedForSync(cfg config.Config, current state.State, feedID string, playback
 	return nil, fmt.Errorf("logical feed %q not found", feedID)
 }
 
+// FeedForPlaylist returns the same storage window as FeedForSync, reordered
+// for presentation in the logical-feed playlist.
+func FeedForPlaylist(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State) ([]episode.Episode, error) {
+	selected, err := FeedForSync(cfg, current, feedID, playbackStates, false)
+	if err != nil {
+		return nil, err
+	}
+	for _, logical := range cfg.Feeds {
+		if logical.ID == feedID {
+			sortEpisodes(selected, logical.Order)
+			return selected, nil
+		}
+	}
+	return nil, fmt.Errorf("logical feed %q not found", feedID)
+}
+
 func FeedOrdered(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, unplayedOnly bool, order config.Order) ([]episode.Episode, error) {
 	return FeedOrderedLimit(cfg, current, feedID, playbackStates, unplayedOnly, order, 0)
 }
@@ -89,15 +105,7 @@ func FeedOrderedLimit(cfg config.Config, current state.State, feedID string, pla
 		selected = append(selected, candidate)
 	}
 
-	sort.SliceStable(selected, func(i, j int) bool {
-		if selected[i].PublishedAt.Equal(selected[j].PublishedAt) {
-			return selected[i].IdentityKey() < selected[j].IdentityKey()
-		}
-		if order == config.OldestFirst {
-			return selected[i].PublishedAt.Before(selected[j].PublishedAt)
-		}
-		return selected[i].PublishedAt.After(selected[j].PublishedAt)
-	})
+	sortEpisodes(selected, order)
 
 	result := selected[:0]
 	for _, candidate := range selected {
@@ -110,4 +118,16 @@ func FeedOrderedLimit(cfg config.Config, current state.State, feedID string, pla
 		result = result[:limit]
 	}
 	return result, nil
+}
+
+func sortEpisodes(episodes []episode.Episode, order config.Order) {
+	sort.SliceStable(episodes, func(i, j int) bool {
+		if episodes[i].PublishedAt.Equal(episodes[j].PublishedAt) {
+			return episodes[i].IdentityKey() < episodes[j].IdentityKey()
+		}
+		if order == config.OldestFirst {
+			return episodes[i].PublishedAt.Before(episodes[j].PublishedAt)
+		}
+		return episodes[i].PublishedAt.After(episodes[j].PublishedAt)
+	})
 }

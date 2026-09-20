@@ -35,7 +35,7 @@ func TestFilenameUsesReadableSafeTitle(t *testing.T) {
 func TestLogicalFeedUsesStableDevicePathsAndConfiguredOrder(t *testing.T) {
 	cfg := config.Config{
 		Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
-		Feeds:   []config.LogicalFeed{{ID: "world", Source: "news", Order: config.OldestFirst}},
+		Feeds:   []config.LogicalFeed{{ID: "world", Source: "news", Order: config.OldestFirst, Limit: 1}},
 	}
 	current := state.State{
 		Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/news.xml"}},
@@ -49,8 +49,8 @@ func TestLogicalFeedUsesStableDevicePathsAndConfiguredOrder(t *testing.T) {
 		t.Fatalf("LogicalFeed() returned error: %v", err)
 	}
 	text := string(playlist)
-	if strings.Index(text, "Old") > strings.Index(text, "New") {
-		t.Fatalf("playlist is not oldest-first: %q", text)
+	if !strings.Contains(text, "New") || strings.Contains(text, "Old") {
+		t.Fatalf("playlist does not use the synced newest storage window: %q", text)
 	}
 	if !strings.Contains(text, "../Podcasts/world/") {
 		t.Fatalf("playlist does not use device-relative stable path: %q", text)

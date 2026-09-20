@@ -22,7 +22,7 @@ func LogicalFeed(cfg config.Config, current state.State, feedID string, playback
 }
 
 func LogicalFeedWithResolver(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, resolver media.Resolver) ([]byte, error) {
-	episodes, err := selection.Feed(cfg, current, feedID, playbackStates, false)
+	episodes, err := selection.FeedForPlaylist(cfg, current, feedID, playbackStates)
 	if err != nil {
 		return nil, fmt.Errorf("select logical feed %q: %w", feedID, err)
 	}
