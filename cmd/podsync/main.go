@@ -32,7 +32,7 @@ import (
 var httpClient = &http.Client{Timeout: 10 * time.Minute}
 
 func main() {
-	logger := logging.New(os.Stderr).WithComponent("cli")
+	logger := commandLogger("cli")
 	started := time.Now()
 	command := "help"
 	if len(os.Args) > 1 {
@@ -44,6 +44,10 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info(fmt.Sprintf("Completed command %s in %s", command, time.Since(started).Round(time.Millisecond)))
+}
+
+func commandLogger(component string) *logging.Logger {
+	return logging.New(os.Stderr).WithComponent(component)
 }
 
 func run(args []string) error {
@@ -95,9 +99,9 @@ Commands:
   validate-config  Validate a TOML configuration file.
   reconcile        Add configured source feeds to device state.
   refresh          Reconcile and refresh all configured source feeds.
-	update           Refresh feeds, sync selected media, and verify the device.
-	status           Show device state and playback summary.
-	verify           Verify manifest-managed device files without changing them.
+  update           Refresh feeds, sync selected media, and verify the device.
+  status           Show device state and playback summary.
+  verify           Verify manifest-managed device files without changing them.
   feed             List, add, or remove source feeds.
   playlist         Generate one logical-feed playlist.
   briefing         Generate one briefing playlist.
@@ -194,8 +198,9 @@ func listFeeds(args []string) error {
 	if err != nil {
 		return err
 	}
+	logger := commandLogger("feed")
 	for _, known := range current.Feeds {
-		fmt.Printf("%d\t%s\t%s\n", known.ID, known.Name, known.URL)
+		logger.Info(fmt.Sprintf("%d\t%s\t%s", known.ID, known.Name, known.URL))
 	}
 	return nil
 }
@@ -229,7 +234,7 @@ func addFeed(args []string) error {
 	if err := reconcileState(repository, cfg); err != nil {
 		return err
 	}
-	fmt.Printf("added source %s\n", *id)
+	commandLogger("feed").Info(fmt.Sprintf("Added source %s", *id))
 	return nil
 }
 
@@ -301,7 +306,7 @@ func removeFeed(args []string) error {
 	if err := config.Save(layout.ConfigPath(), cfg); err != nil {
 		return fmt.Errorf("save device config: %w", err)
 	}
-	fmt.Printf("removed source %s\n", *id)
+	commandLogger("feed").Info(fmt.Sprintf("Removed source %s", *id))
 	return nil
 }
 
@@ -319,7 +324,7 @@ func validateConfig(args []string) error {
 	if _, err := config.Load(*configPath); err != nil {
 		return err
 	}
-	fmt.Println("configuration is valid")
+	commandLogger("config").Info("Configuration is valid")
 	return nil
 }
 
@@ -342,6 +347,7 @@ func reconcile(args []string, refresh bool) error {
 }
 
 func reconcileDevice(deviceRoot, configPath string, refresh bool) error {
+	logger := commandLogger("feed")
 	layout, repository, cfg, err := openDevice(deviceRoot, configPath, false, true)
 	if err != nil {
 		return err
@@ -351,7 +357,7 @@ func reconcileDevice(deviceRoot, configPath string, refresh bool) error {
 		return err
 	}
 	if !refresh {
-		fmt.Printf("reconciled %d source feeds\n", len(cfg.Sources))
+		logger.Info(fmt.Sprintf("Reconciled %d source feeds", len(cfg.Sources)))
 		return nil
 	}
 	for _, source := range cfg.Sources {
@@ -369,7 +375,7 @@ func reconcileDevice(deviceRoot, configPath string, refresh bool) error {
 		if err := syncer.RefreshFeedWithArchive(context.Background(), repository, httpClient, feedID, archive); err != nil {
 			return fmt.Errorf("refresh source %q: %w", source.ID, err)
 		}
-		fmt.Printf("refreshed %s\n", source.ID)
+		logger.Info(fmt.Sprintf("Refreshed source %s", source.ID))
 	}
 	_ = layout
 	return nil
@@ -420,16 +426,17 @@ func status(args []string) error {
 		return err
 	}
 	defer repository.Close()
+	logger := commandLogger("status")
 	current, err := repository.Load()
 	if err != nil {
 		return err
 	}
-	fmt.Printf("feeds: %d\nepisodes: %d\n", len(current.Feeds), len(current.Episodes))
+	logger.Info(fmt.Sprintf("Feeds: %d\tEpisodes: %d", len(current.Feeds), len(current.Episodes)))
 	records, err := loadPlaybackRecords(layout)
 	if err != nil {
 		return fmt.Errorf("load playback state: %w", err)
 	}
-	fmt.Printf("playback records: %d\n", len(records))
+	logger.Info(fmt.Sprintf("Playback records: %d", len(records)))
 	logicalIDs, err := cfg.LogicalFeedIDs(current)
 	if err != nil {
 		return err
@@ -441,7 +448,7 @@ func status(args []string) error {
 			played++
 		}
 	}
-	fmt.Printf("played: %d\n", played)
+	logger.Info(fmt.Sprintf("Played: %d", played))
 	return nil
 }
 
@@ -457,7 +464,7 @@ func verify(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("verified %d managed files\n", verified)
+	commandLogger("verify").Info(fmt.Sprintf("Verified %d managed files", verified))
 	return nil
 }
 
@@ -548,7 +555,7 @@ func generatePlaylist(args []string, briefingMode bool) error {
 	if err := syncer.ApplyFilePlan(context.Background(), layout.Root, syncer.FilePlan{Playlists: []syncer.PlaylistFile{{Relative: relative, Content: content}, manifest}}); err != nil {
 		return err
 	}
-	fmt.Printf("wrote %s\n", relative)
+	commandLogger("playlist").Info(fmt.Sprintf("Wrote %s", relative))
 	return nil
 }
 
@@ -699,18 +706,6 @@ func syncDevice(options syncOptions) error {
 		if err != nil {
 			return err
 		}
-		for _, copy := range plan.Copies {
-			fmt.Printf("would ensure %s\n", copy.Relative)
-		}
-		for _, playlist := range plan.Playlists {
-			if playlist.Relative != layout.ManifestRelativePath() {
-				fmt.Printf("would write %s\n", playlist.Relative)
-			}
-		}
-		for _, relative := range plan.Deletes {
-			fmt.Printf("would delete %s\n", relative)
-		}
-		fmt.Printf("would select %d episodes, write %d playlists, and delete %d managed files\n", len(episodes), len(playlistFiles)-1, len(plan.Deletes))
 		logger.Info(fmt.Sprintf("Dry run selected %d episodes, writes %d playlists, and deletes %d managed files", len(episodes), len(playlistFiles)-1, len(plan.Deletes)))
 		return nil
 	}

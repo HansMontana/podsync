@@ -271,3 +271,17 @@ func TestCLIHelpAndUnknownCommandUsage(t *testing.T) {
 		t.Fatalf("unknown command error did not include usage: %v", err)
 	}
 }
+
+func TestUsageTextUsesConsistentSpaceIndentation(t *testing.T) {
+	text := usageText()
+	for _, line := range strings.Split(text, "\n") {
+		if strings.HasPrefix(line, "\t") {
+			t.Fatalf("usage line starts with a tab: %q", line)
+		}
+	}
+	for _, command := range []string{"validate-config", "reconcile", "refresh", "update", "status", "verify", "feed", "playlist", "briefing", "sync"} {
+		if !strings.Contains(text, "  "+command) {
+			t.Fatalf("usage text does not contain consistently indented command %q", command)
+		}
+	}
+}

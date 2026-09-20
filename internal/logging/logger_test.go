@@ -23,9 +23,9 @@ func TestLoggerFormatsReadableTimestampedLines(t *testing.T) {
 	logger.Warn("Keeping existing file")
 	logger.Error("Sync failed")
 
-	want := "2026-08-17T10:51:28.508Z  INFO  sync: Starting sync\n" +
-		"2026-08-17T10:51:28.508Z  WARN  sync: Keeping existing file\n" +
-		"2026-08-17T10:51:28.508Z  ERROR sync: Sync failed\n"
+	want := "2026-08-17T10:51:28.508Z\tINFO\tsync\tStarting sync\n" +
+		"2026-08-17T10:51:28.508Z\tWARN\tsync\tKeeping existing file\n" +
+		"2026-08-17T10:51:28.508Z\tERROR\tsync\tSync failed\n"
 	if output.String() != want {
 		t.Fatalf("got %q, want %q", output.String(), want)
 	}
@@ -56,7 +56,7 @@ func TestLoggerComponentsShareSynchronizedOutput(t *testing.T) {
 		t.Fatalf("got %d log lines, want 40", len(lines))
 	}
 	for _, line := range lines {
-		if !strings.Contains(line, "Z  ") || (!strings.Contains(line, " sync: ") && !strings.Contains(line, " device: ")) {
+		if !strings.Contains(line, "Z\t") || (!strings.Contains(line, "\tsync\t") && !strings.Contains(line, "\tdevice\t")) {
 			t.Fatalf("malformed log line %q", line)
 		}
 	}
