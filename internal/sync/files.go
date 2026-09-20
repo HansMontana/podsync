@@ -38,6 +38,31 @@ type FilePlan struct {
 	Deletes   []string
 }
 
+// VerifyManagedFiles checks that every manifest entry is a valid, non-empty
+// regular file without changing the device.
+func VerifyManagedFiles(deviceRoot string, managed []string) error {
+	if _, err := BuildFilePlan(managed, nil, nil, nil); err != nil {
+		return fmt.Errorf("validate managed paths: %w", err)
+	}
+	for _, relative := range managed {
+		path, err := safeDevicePath(deviceRoot, relative, false)
+		if err != nil {
+			return fmt.Errorf("resolve managed path %q: %w", relative, err)
+		}
+		info, err := os.Stat(path)
+		if os.IsNotExist(err) {
+			return fmt.Errorf("managed file is missing: %q", relative)
+		}
+		if err != nil {
+			return fmt.Errorf("inspect managed file %q: %w", relative, err)
+		}
+		if !info.Mode().IsRegular() || info.Size() == 0 {
+			return fmt.Errorf("managed file is not a non-empty regular file: %q", relative)
+		}
+	}
+	return nil
+}
+
 // BuildFilePlan limits every device operation to podsync-owned paths.
 func BuildFilePlan(managed []string, copies []FileCopy, playlists []PlaylistFile, keep []string) (FilePlan, error) {
 	plan := FilePlan{Copies: append([]FileCopy(nil), copies...), Playlists: append([]PlaylistFile(nil), playlists...), Keep: append([]string(nil), keep...)}

@@ -101,6 +101,24 @@ func TestBuildFilePlanRejectsUnownedManifestPaths(t *testing.T) {
 	}
 }
 
+func TestVerifyManagedFiles(t *testing.T) {
+	root := t.TempDir()
+	path := "Podcasts/podcast/episode.mp3"
+	destination := filepath.Join(root, filepath.FromSlash(path))
+	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(destination, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyManagedFiles(root, []string{path}); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyManagedFiles(root, []string{"Podcasts/podcast/missing.mp3"}); err == nil {
+		t.Fatal("VerifyManagedFiles() accepted a missing file")
+	}
+}
+
 func TestApplyFilePlanRejectsSymlinkedParent(t *testing.T) {
 	root := t.TempDir()
 	target := t.TempDir()

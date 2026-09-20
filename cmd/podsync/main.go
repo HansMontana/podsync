@@ -62,6 +62,8 @@ func run(args []string) error {
 		return reconcile(args[1:], true)
 	case "status":
 		return status(args[1:])
+	case "verify":
+		return verify(args[1:])
 	case "feed":
 		return feedCommand(args[1:])
 	case "playlist":
@@ -82,7 +84,8 @@ Commands:
   validate-config  Validate a TOML configuration file.
   reconcile        Add configured source feeds to device state.
   refresh          Reconcile and refresh all configured source feeds.
-  status           Show device state and playback summary.
+	status           Show device state and playback summary.
+	verify           Verify manifest-managed device files without changing them.
   feed             List, add, or remove source feeds.
   playlist         Generate one logical-feed playlist.
   briefing         Generate one briefing playlist.
@@ -106,6 +109,8 @@ func printCommandHelp(command string) error {
 		text = "Usage: podsync refresh [-device-root PATH] [-config PATH]\n\nReconcile and refresh all configured source feeds."
 	case "status":
 		text = "Usage: podsync status [-device-root PATH]\n\nShow feed, episode, and playback counts."
+	case "verify":
+		text = "Usage: podsync verify [-device-root PATH]\n\nVerify manifest-managed device files without changing them."
 	case "feed":
 		text = "Usage: podsync feed <list|add|remove> [options]\n\nManage source feeds in device-local configuration."
 	case "playlist":
@@ -387,6 +392,30 @@ func status(args []string) error {
 		}
 	}
 	fmt.Printf("played: %d\n", played)
+	return nil
+}
+
+func verify(args []string) error {
+	flags := newFlagSet("verify", "Usage: podsync verify [-device-root PATH]")
+	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
+	if help, err := parseFlags(flags, args); err != nil {
+		return err
+	} else if help {
+		return nil
+	}
+	layout, repository, err := openRepositoryMode(*deviceRoot, true)
+	if err != nil {
+		return err
+	}
+	defer repository.Close()
+	managed, err := layout.LoadManagedPaths()
+	if err != nil {
+		return err
+	}
+	if err := syncer.VerifyManagedFiles(layout.Root, managed); err != nil {
+		return err
+	}
+	fmt.Printf("verified %d managed files\n", len(managed))
 	return nil
 }
 

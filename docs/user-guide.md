@@ -17,6 +17,15 @@ podsync status -device-root /media/hansmontana/HANSPOD
 Set `PODSYNC_DEVICE_ROOT` to use a non-standard mount without repeating the
 flag.
 
+Run a read-only device integrity check with:
+
+```bash
+podsync verify
+```
+
+This validates every manifest-managed file as an existing, non-empty regular
+file without changing the device.
+
 Before the first real sync:
 
 1. Mount the iPod normally.
