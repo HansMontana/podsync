@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/HansMontana/podsync/internal/download"
 	"github.com/HansMontana/podsync/internal/episode"
@@ -18,6 +19,8 @@ import (
 
 type ProgressFunc func(completed, total int, current episode.Episode, reused bool)
 type WarningFunc func(message string)
+
+const existingReadAttempts = 3
 
 // Episodes downloads selected episodes to host staging, then applies the
 // complete device file plan. Device deletions happen only after all downloads
@@ -60,12 +63,45 @@ func episodesWithProgress(ctx context.Context, client *http.Client, stagingDir, 
 		if exists {
 			changed := false
 			if isMP3(current, relative) {
-				stagedPath, stageErr := stageExisting(deviceRoot, relative, stagingDir)
-				if stageErr != nil {
-					var readErr *existingReadError
-					if !errors.As(stageErr, &readErr) {
-						return fmt.Errorf("stage existing episode %q: %w", current.Title, stageErr)
+				needsNormalization := true
+				var readErr *existingReadError
+				if err := retryExistingRead(ctx, func() error {
+					var err error
+					needsNormalization, err = metadata.NeedsNormalization(filepath.Join(deviceRoot, filepath.FromSlash(relative)), current)
+					return err
+				}); err != nil {
+					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+						return err
 					}
+					readErr = &existingReadError{err: err}
+				}
+				if readErr == nil && !needsNormalization {
+					keep = append(keep, relative)
+					if progress != nil {
+						progress(len(keep)+len(copies), len(episodes), current, true)
+					}
+					continue
+				}
+
+				var stagedPath string
+				if readErr == nil {
+					stageErr := retryExistingRead(ctx, func() error {
+						var err error
+						stagedPath, err = stageExisting(deviceRoot, relative, stagingDir)
+						return err
+					})
+					if stageErr != nil {
+						if errors.Is(stageErr, context.Canceled) || errors.Is(stageErr, context.DeadlineExceeded) {
+							return stageErr
+						}
+						var typedReadErr *existingReadError
+						if !errors.As(stageErr, &typedReadErr) {
+							return fmt.Errorf("stage existing episode %q: %w", current.Title, stageErr)
+						}
+						readErr = typedReadErr
+					}
+				}
+				if readErr != nil {
 					warn(warning, fmt.Sprintf("unreadable existing episode %q: %v; redownloading", current.Title, readErr))
 					stagedPath, err = download.Episode(ctx, client, current, stagingDir)
 					if err != nil {
@@ -129,6 +165,27 @@ func episodesWithProgress(ctx context.Context, client *http.Client, stagingDir, 
 		return fmt.Errorf("apply episode sync plan: %w", err)
 	}
 	return nil
+}
+
+func retryExistingRead(ctx context.Context, operation func() error) error {
+	var err error
+	for attempt := 1; attempt <= existingReadAttempts; attempt++ {
+		err = operation()
+		if err == nil {
+			return nil
+		}
+		if attempt == existingReadAttempts {
+			break
+		}
+		timer := time.NewTimer(time.Duration(attempt) * 250 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+	return err
 }
 
 func isMP3(current episode.Episode, relative string) bool {

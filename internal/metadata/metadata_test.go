@@ -81,3 +81,35 @@ func TestNormalizeMP3PreservesExistingMetadata(t *testing.T) {
 		t.Fatalf("existing metadata changed: title=%q album=%q artist=%q genre=%q year=%q", parsed.Title(), parsed.Album(), parsed.Artist(), parsed.Genre(), parsed.Year())
 	}
 }
+
+func TestNeedsNormalizationReadsTagsWithoutChangingAudio(t *testing.T) {
+	path := t.TempDir() + "/episode.mp3"
+	tag := id3v2.NewEmptyTag()
+	tag.SetVersion(3)
+	tag.SetTitle("Publisher title")
+	tag.SetAlbum("Publisher album")
+	tag.SetArtist("Publisher artist")
+	tag.SetGenre("Science")
+	tag.SetYear("2025")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tag.WriteTo(file); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.WriteString("audio payload"); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	needs, err := NeedsNormalization(path, episode.Episode{Title: "Feed title"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if needs {
+		t.Fatal("NeedsNormalization() reported complete metadata as missing")
+	}
+}

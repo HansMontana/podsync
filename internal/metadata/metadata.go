@@ -14,6 +14,31 @@ import (
 
 const genre = "Podcast"
 
+// NeedsNormalization reports whether an MP3 is missing any podcast metadata.
+// It only reads the ID3 header and tag, not the audio payload.
+func NeedsNormalization(path string, current episode.Episode) (bool, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return false, fmt.Errorf("open MP3: %w", err)
+	}
+	var header [3]byte
+	_, readErr := io.ReadFull(file, header[:])
+	_ = file.Close()
+	if readErr != nil {
+		return false, fmt.Errorf("read MP3 header: %w", readErr)
+	}
+	if string(header[:]) != "ID3" {
+		return true, nil
+	}
+
+	tag, err := id3v2.Open(path, id3v2.Options{Parse: true})
+	if err != nil {
+		return false, fmt.Errorf("open ID3 tag: %w", err)
+	}
+	defer tag.Close()
+	return hasMissingFields(tag, current), nil
+}
+
 // NormalizeMP3 fills missing podcast metadata fields on an MP3 file.
 // It returns whether the file was changed.
 func NormalizeMP3(path, feedName string, current episode.Episode) (bool, error) {

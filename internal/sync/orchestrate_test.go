@@ -198,3 +198,20 @@ func TestEpisodesKeepsUnreadableExistingMP3WhenRedownloadFails(t *testing.T) {
 		t.Fatalf("existing file changed to %q, error %v", data, err)
 	}
 }
+
+func TestRetryExistingReadRetriesBeforeFailing(t *testing.T) {
+	attempts := 0
+	err := retryExistingRead(context.Background(), func() error {
+		attempts++
+		if attempts < existingReadAttempts {
+			return os.ErrInvalid
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("retryExistingRead() returned error: %v", err)
+	}
+	if attempts != existingReadAttempts {
+		t.Fatalf("got %d attempts, want %d", attempts, existingReadAttempts)
+	}
+}
