@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -213,5 +214,20 @@ func TestRetryExistingReadRetriesBeforeFailing(t *testing.T) {
 	}
 	if attempts != existingReadAttempts {
 		t.Fatalf("got %d attempts, want %d", attempts, existingReadAttempts)
+	}
+}
+
+func TestMissingEpisodeChunksUsesEpisodeFallbackLimit(t *testing.T) {
+	episodes := make([]episode.Episode, chunkEpisodeLimit+1)
+	for i := range episodes {
+		episodes[i] = episode.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i), Enclosure: episode.Enclosure{URL: "https://example.com/episode.mp3"}}
+	}
+
+	chunks, err := missingEpisodeChunks(t.TempDir(), episodes, media.Resolver{1: "podcast"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(chunks) != 2 || len(chunks[0]) != chunkEpisodeLimit || len(chunks[1]) != 1 {
+		t.Fatalf("got chunk sizes %v", []int{len(chunks[0]), len(chunks[1])})
 	}
 }

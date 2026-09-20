@@ -22,6 +22,11 @@ type WarningFunc func(message string)
 
 const existingReadAttempts = 3
 
+const (
+	chunkTargetBytes  = int64(5 * 1024 * 1024 * 1024)
+	chunkEpisodeLimit = 200
+)
+
 // Episodes downloads selected episodes to host staging, then applies the
 // complete device file plan. Device deletions happen only after all downloads
 // and device writes succeed.
@@ -50,6 +55,58 @@ func resolverForEpisodes(episodes []episode.Episode) media.Resolver {
 }
 
 func EpisodesWithResolverAndProgressAndWarnings(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver media.Resolver, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
+	chunks, err := missingEpisodeChunks(deviceRoot, episodes, resolver)
+	if err != nil {
+		return fmt.Errorf("plan episode chunks: %w", err)
+	}
+	if len(chunks) <= 1 {
+		return syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, progress, fileProgress, warning)
+	}
+
+	for _, chunk := range chunks {
+		if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, chunk, nil, nil, feedNames, resolver, progress, fileProgress, warning); err != nil {
+			return fmt.Errorf("apply episode chunk: %w", err)
+		}
+	}
+	return syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, progress, fileProgress, warning)
+}
+
+func missingEpisodeChunks(deviceRoot string, episodes []episode.Episode, resolver media.Resolver) ([][]episode.Episode, error) {
+	var chunks [][]episode.Episode
+	var chunk []episode.Episode
+	var chunkBytes int64
+
+	flush := func() {
+		if len(chunk) > 0 {
+			chunks = append(chunks, chunk)
+			chunk = nil
+			chunkBytes = 0
+		}
+	}
+	for _, current := range episodes {
+		relative := resolver.RelativePathFor(current)
+		exists, err := reusableFile(deviceRoot, relative, current.Enclosure.Length)
+		if err != nil {
+			return nil, fmt.Errorf("inspect existing episode %q: %w", current.Title, err)
+		}
+		if exists {
+			continue
+		}
+
+		size := current.Enclosure.Length
+		if len(chunk) >= chunkEpisodeLimit || (size > 0 && chunkBytes > 0 && chunkBytes+size > chunkTargetBytes) {
+			flush()
+		}
+		chunk = append(chunk, current)
+		if size > 0 {
+			chunkBytes += size
+		}
+	}
+	flush()
+	return chunks, nil
+}
+
+func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver media.Resolver, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
 	var copies []FileCopy
 	var keep []string
 	var staged []string
