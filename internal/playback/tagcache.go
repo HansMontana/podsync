@@ -10,12 +10,13 @@ import (
 )
 
 const (
-	tagCacheMagic    uint32 = 0x54434810
-	tagCacheTagCount        = 23
-	tagFilename             = 4
-	tagPlayCount            = 15
-	tagLastPlayed           = 18
-	tagCacheDeleted  uint32 = 0x0001
+	tagCacheMagic        uint32 = 0x54434810
+	tagCacheTagCount            = 23
+	tagCacheMasterHeader        = 24
+	tagFilename                 = 4
+	tagPlayCount                = 15
+	tagLastPlayed               = 18
+	tagCacheDeleted      uint32 = 0x0001
 )
 
 // ParseTagCache reads the Rockbox TagCache master and filename index files.
@@ -115,7 +116,7 @@ func openMaster(path string) (*os.File, binary.ByteOrder, int64, int64, error) {
 	count := int64(order.Uint32(header[8:12]))
 	entrySize := int64(tagCacheTagCount*4 + 4)
 	info, err := file.Stat()
-	if err != nil || info.Size() < 20+count*entrySize {
+	if err != nil || info.Size() < tagCacheMasterHeader+count*entrySize {
 		file.Close()
 		return nil, nil, 0, 0, fmt.Errorf("truncated TagCache master index")
 	}
@@ -144,7 +145,7 @@ func readMasterEntry(file *os.File, order binary.ByteOrder, entrySize, indexID i
 	if indexID > (1<<31)/entrySize {
 		return tagCacheEntry{}, fmt.Errorf("TagCache index ID out of range: %d", indexID)
 	}
-	if _, err := file.Seek(20+indexID*entrySize, io.SeekStart); err != nil {
+	if _, err := file.Seek(tagCacheMasterHeader+indexID*entrySize, io.SeekStart); err != nil {
 		return tagCacheEntry{}, fmt.Errorf("seek TagCache master entry: %w", err)
 	}
 	data := make([]byte, entrySize)

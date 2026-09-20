@@ -47,11 +47,11 @@ func writeTagCacheFixture(t *testing.T, order binary.ByteOrder, deleted bool) st
 	t.Helper()
 	directory := t.TempDir()
 	entrySize := tagCacheTagCount*4 + 4
-	master := make([]byte, 20+entrySize)
+	master := make([]byte, tagCacheMasterHeader+entrySize)
 	order.PutUint32(master[0:4], tagCacheMagic)
 	order.PutUint32(master[4:8], uint32(entrySize))
 	order.PutUint32(master[8:12], 1)
-	base := 20
+	base := tagCacheMasterHeader
 	order.PutUint32(master[base+tagPlayCount*4:], 4)
 	order.PutUint32(master[base+tagLastPlayed*4:], 1700000000)
 	if deleted {
