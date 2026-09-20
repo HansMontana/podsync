@@ -1,0 +1,108 @@
+package metadata
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/bogem/id3v2/v2"
+)
+
+const genre = "Podcast"
+
+// NormalizeMP3 writes podsync's canonical metadata fields to an MP3 file.
+// It returns whether the file was changed.
+func NormalizeMP3(path, feedName string, current episode.Episode) (bool, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return false, fmt.Errorf("open MP3: %w", err)
+	}
+	var header [3]byte
+	_, readErr := io.ReadFull(file, header[:])
+	_ = file.Close()
+	if readErr != nil {
+		return false, fmt.Errorf("read MP3 header: %w", readErr)
+	}
+
+	if string(header[:]) != "ID3" {
+		tag := id3v2.NewEmptyTag()
+		tag.SetVersion(3)
+		setFields(tag, feedName, current)
+		if err := prependTag(path, tag); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	tag, err := id3v2.Open(path, id3v2.Options{Parse: true})
+	if err != nil {
+		return false, fmt.Errorf("open ID3 tag: %w", err)
+	}
+	defer tag.Close()
+
+	if strings.TrimSpace(feedName) == "" {
+		feedName = "Podcast"
+	}
+	year := ""
+	if !current.PublishedAt.IsZero() {
+		year = strconv.Itoa(current.PublishedAt.UTC().Year())
+	}
+	if tag.Title() == current.Title && tag.Album() == feedName && tag.Artist() == feedName && tag.Genre() == genre && tag.Year() == year {
+		return false, nil
+	}
+
+	setFields(tag, feedName, current)
+	if err := tag.Save(); err != nil {
+		return false, fmt.Errorf("save ID3 tag: %w", err)
+	}
+	return true, nil
+}
+
+func setFields(tag *id3v2.Tag, feedName string, current episode.Episode) {
+	tag.SetTitle(current.Title)
+	tag.SetAlbum(feedName)
+	tag.SetArtist(feedName)
+	tag.SetGenre(genre)
+	year := ""
+	if !current.PublishedAt.IsZero() {
+		year = strconv.Itoa(current.PublishedAt.UTC().Year())
+	}
+	tag.SetYear(year)
+}
+
+func prependTag(path string, tag *id3v2.Tag) error {
+	input, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open MP3 for tagging: %w", err)
+	}
+	defer input.Close()
+	output, err := os.CreateTemp(filepath.Dir(path), ".podsync-tagged-*")
+	if err != nil {
+		return fmt.Errorf("create tagged MP3: %w", err)
+	}
+	temporaryPath := output.Name()
+	defer os.Remove(temporaryPath)
+	if _, err := tag.WriteTo(output); err != nil {
+		_ = output.Close()
+		return fmt.Errorf("write ID3 tag: %w", err)
+	}
+	if _, err := io.Copy(output, input); err != nil {
+		_ = output.Close()
+		return fmt.Errorf("copy MP3 audio: %w", err)
+	}
+	if err := output.Sync(); err != nil {
+		_ = output.Close()
+		return fmt.Errorf("sync tagged MP3: %w", err)
+	}
+	if err := output.Close(); err != nil {
+		return fmt.Errorf("close tagged MP3: %w", err)
+	}
+	if err := os.Rename(temporaryPath, path); err != nil {
+		return fmt.Errorf("install tagged MP3: %w", err)
+	}
+	return nil
+}

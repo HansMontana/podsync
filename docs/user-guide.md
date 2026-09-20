@@ -243,6 +243,12 @@ This is not required merely to play a generated path-based playlist, but it is
 needed for Rockbox database browsing and for TagCache statistics on newly added
 files.
 
+During sync, podsync normalizes metadata on MP3 files using the RSS episode and
+feed state. The episode title is written as the title, the feed name as album
+and artist, `Podcast` as genre, and the publication year when available. Existing
+managed MP3 files are reprocessed when their metadata needs updating. Other
+audio formats are copied without metadata changes.
+
 ## Storage and Deletion
 
 The SQLite database stores current feed and episode metadata, not audio files

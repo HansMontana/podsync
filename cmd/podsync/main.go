@@ -482,6 +482,10 @@ func sync(args []string) error {
 	selected := make(map[string]episode.Episode)
 	var playlistFiles []syncer.PlaylistFile
 	var managed []string
+	feedNames := make(map[int64]string, len(current.Feeds))
+	for _, known := range current.Feeds {
+		feedNames[known.ID] = known.Name
+	}
 	for _, logical := range cfg.Feeds {
 		episodes, selectErr := selection.FeedForSync(cfg, current, logical.ID, states, false)
 		if selectErr != nil {
@@ -564,7 +568,7 @@ func sync(args []string) error {
 		fmt.Printf("would select %d episodes, write %d playlists, and delete %d managed files\n", len(episodes), len(playlistFiles)-1, len(plan.Deletes))
 		return nil
 	}
-	if err := syncer.EpisodesWithProgress(context.Background(), httpClient, *stagingDir, layout.Root, episodes, playlistFiles, managed, func(completed, total int, current episode.Episode, reused bool) {
+	if err := syncer.EpisodesWithProgress(context.Background(), httpClient, *stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, func(completed, total int, current episode.Episode, reused bool) {
 		action := "staged"
 		if reused {
 			action = "reused"

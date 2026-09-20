@@ -90,14 +90,14 @@ func TestEpisodesReusesExistingMatchingFile(t *testing.T) {
 		total     int
 		reused    bool
 	}
-	if err := EpisodesWithProgress(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, nil, func(completed, total int, current episode.Episode, reused bool) {
+	if err := EpisodesWithProgress(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, nil, nil, func(completed, total int, current episode.Episode, reused bool) {
 		progress.completed = completed
 		progress.total = total
 		progress.reused = reused
 	}, nil); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
-	if progress.completed != 1 || progress.total != 1 || !progress.reused {
+	if progress.completed != 1 || progress.total != 1 || progress.reused {
 		t.Fatalf("got progress %+v", progress)
 	}
 	if requests.Load() != 0 {
@@ -105,7 +105,7 @@ func TestEpisodesReusesExistingMatchingFile(t *testing.T) {
 	}
 }
 
-func TestEpisodesRedownloadsExistingFileWithWrongKnownSize(t *testing.T) {
+func TestEpisodesRetagsExistingMP3WithWrongKnownSize(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
@@ -127,11 +127,10 @@ func TestEpisodesRedownloadsExistingFileWithWrongKnownSize(t *testing.T) {
 	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, nil); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
-	if requests.Load() != 1 {
-		t.Fatalf("downloaded mismatched file %d times", requests.Load())
+	if requests.Load() != 0 {
+		t.Fatalf("downloaded existing file %d times", requests.Load())
 	}
-	data, err := os.ReadFile(destination)
-	if err != nil || string(data) != "audio" {
-		t.Fatalf("got device data %q, error %v", data, err)
+	if info, err := os.Stat(destination); err != nil || info.Size() <= int64(len("old")) {
+		t.Fatalf("existing file was not retagged, info %v, error %v", info, err)
 	}
 }
