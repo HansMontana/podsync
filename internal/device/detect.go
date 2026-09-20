@@ -58,10 +58,11 @@ func ResolveRoot(explicit string) (string, error) {
 }
 
 func looksLikeDeviceRoot(root string) bool {
-	for _, directory := range []string{"Podsync", "Podcasts", "Playlists"} {
-		if info, err := os.Stat(filepath.Join(root, directory)); err == nil && info.IsDir() {
-			return true
-		}
+	stateDirectory := filepath.Join(root, "Podsync")
+	stateInfo, err := os.Lstat(stateDirectory)
+	if err != nil || !stateInfo.IsDir() || stateInfo.Mode()&os.ModeSymlink != 0 {
+		return false
 	}
-	return false
+	databaseInfo, err := os.Lstat(filepath.Join(stateDirectory, "podsync.db"))
+	return err == nil && databaseInfo.Mode().IsRegular()
 }

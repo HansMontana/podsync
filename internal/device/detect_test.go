@@ -27,7 +27,28 @@ func TestLooksLikeDeviceRoot(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, "Podsync"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if looksLikeDeviceRoot(root) {
+		t.Fatal("uninitialized Podsync directory was detected")
+	}
+	if err := os.WriteFile(filepath.Join(root, "Podsync", "podsync.db"), []byte("database"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if !looksLikeDeviceRoot(root) {
-		t.Fatal("Podsync directory was not detected")
+		t.Fatal("initialized Podsync directory was not detected")
+	}
+}
+
+func TestVerifyRootIdentityRejectsReplacement(t *testing.T) {
+	root := t.TempDir()
+	_, identity, err := ResolveRootIdentity(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyRootIdentity(root, identity); err != nil {
+		t.Fatalf("VerifyRootIdentity() rejected unchanged root: %v", err)
+	}
+	other := t.TempDir()
+	if err := VerifyRootIdentity(other, identity); err == nil {
+		t.Fatal("VerifyRootIdentity() accepted a different root")
 	}
 }

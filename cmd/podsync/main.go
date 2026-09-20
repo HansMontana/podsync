@@ -396,15 +396,25 @@ func update(args []string) error {
 	logger := logging.New(os.Stderr).WithComponent("update")
 	started := time.Now()
 	logger.Info("Starting update")
-	if err := reconcileDevice(*deviceRoot, *configPath, true); err != nil {
+	resolvedRoot, identity, err := device.ResolveRootIdentity(*deviceRoot)
+	if err != nil {
+		return err
+	}
+	if err := reconcileDevice(resolvedRoot, *configPath, true); err != nil {
 		return fmt.Errorf("update refresh: %w", err)
 	}
 	logger.Info("Refresh complete")
-	if err := syncDevice(syncOptions{deviceRoot: *deviceRoot, configPath: *configPath, stagingDir: *stagingDir, verifyMedia: *verifyMedia}); err != nil {
+	if err := device.VerifyRootIdentity(resolvedRoot, identity); err != nil {
+		return fmt.Errorf("before update sync: %w", err)
+	}
+	if err := syncDevice(syncOptions{deviceRoot: resolvedRoot, configPath: *configPath, stagingDir: *stagingDir, verifyMedia: *verifyMedia}); err != nil {
 		return fmt.Errorf("update sync: %w", err)
 	}
 	logger.Info("Sync complete")
-	verified, err := verifyDevice(*deviceRoot)
+	if err := device.VerifyRootIdentity(resolvedRoot, identity); err != nil {
+		return fmt.Errorf("before update verification: %w", err)
+	}
+	verified, err := verifyDevice(resolvedRoot)
 	if err != nil {
 		return fmt.Errorf("update verification: %w", err)
 	}
@@ -798,13 +808,22 @@ func openRepositoryMode(root string, readOnly bool) (device.Layout, state.Reposi
 			return device.Layout{}, nil, err
 		}
 	}
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return device.Layout{}, nil, fmt.Errorf("resolve device root: %w", err)
+	}
 	layout := device.Layout{Root: root}
-	info, err := os.Stat(root)
+	info, err := os.Lstat(root)
 	if err != nil {
 		return layout, nil, fmt.Errorf("inspect device root: %w", err)
 	}
-	if !info.IsDir() {
-		return layout, nil, fmt.Errorf("device root is not a directory")
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return layout, nil, fmt.Errorf("device root is not a real directory")
+	}
+	if stateInfo, stateErr := os.Lstat(layout.StateDirectory()); stateErr == nil && stateInfo.Mode()&os.ModeSymlink != 0 {
+		return layout, nil, fmt.Errorf("device state directory is a symlink")
+	} else if stateErr != nil && !os.IsNotExist(stateErr) {
+		return layout, nil, fmt.Errorf("inspect device state directory: %w", stateErr)
 	}
 	if !readOnly {
 		if err := os.MkdirAll(layout.StateDirectory(), 0o755); err != nil {
