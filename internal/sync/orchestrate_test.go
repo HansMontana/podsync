@@ -98,7 +98,7 @@ func TestEpisodesReusesExistingMatchingFile(t *testing.T) {
 	}, nil); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
-	if progress.completed != 1 || progress.total != 1 || progress.reused {
+	if progress.completed != 1 || progress.total != 1 || !progress.reused {
 		t.Fatalf("got progress %+v", progress)
 	}
 	if requests.Load() != 0 {
@@ -125,7 +125,7 @@ func TestEpisodesRetagsExistingMP3WithWrongKnownSize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, nil); err != nil {
+	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, nil, nil, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{VerifyMedia: true}, nil, nil, nil); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
 	if requests.Load() != 0 {
@@ -133,6 +133,37 @@ func TestEpisodesRetagsExistingMP3WithWrongKnownSize(t *testing.T) {
 	}
 	if info, err := os.Stat(destination); err != nil || info.Size() <= int64(len("old")) {
 		t.Fatalf("existing file was not retagged, info %v, error %v", info, err)
+	}
+}
+
+func TestEpisodesFastPathDoesNotInspectExistingMP3(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write([]byte("unexpected download"))
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	current := episode.Episode{FeedID: 1, GUID: "one", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}
+	relative := (media.Resolver{1: "podcast-1"}).RelativePathFor(current)
+	destination := filepath.Join(root, filepath.FromSlash(relative))
+	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(destination, []byte("existing audio without tags"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("downloaded existing file %d times", requests.Load())
+	}
+	data, err := os.ReadFile(destination)
+	if err != nil || string(data) != "existing audio without tags" {
+		t.Fatalf("existing file changed to %q, error %v", data, err)
 	}
 }
 
@@ -155,7 +186,7 @@ func TestEpisodesRedownloadsUnreadableExistingMP3(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := EpisodesWithProgressAndWarnings(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, nil, nil, nil, nil, nil); err != nil {
+	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, nil, nil, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{VerifyMedia: true}, nil, nil, nil); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
 	_ = os.Chmod(destination, 0o644)
@@ -185,7 +216,7 @@ func TestEpisodesKeepsUnreadableExistingMP3WhenRedownloadFails(t *testing.T) {
 	}
 
 	warnings := 0
-	if err := EpisodesWithProgressAndWarnings(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, []string{relative}, nil, nil, nil, func(string) {
+	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, []string{relative}, nil, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{VerifyMedia: true}, nil, nil, func(string) {
 		warnings++
 	}); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)

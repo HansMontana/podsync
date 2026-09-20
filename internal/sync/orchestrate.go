@@ -20,6 +20,10 @@ import (
 type ProgressFunc func(completed, total int, current episode.Episode, reused bool)
 type WarningFunc func(message string)
 
+type EpisodeSyncOptions struct {
+	VerifyMedia bool
+}
+
 const existingReadAttempts = 3
 
 const (
@@ -55,20 +59,24 @@ func resolverForEpisodes(episodes []episode.Episode) media.Resolver {
 }
 
 func EpisodesWithResolverAndProgressAndWarnings(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver media.Resolver, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
+	return EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, EpisodeSyncOptions{}, progress, fileProgress, warning)
+}
+
+func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver media.Resolver, options EpisodeSyncOptions, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
 	chunks, err := missingEpisodeChunks(deviceRoot, episodes, resolver)
 	if err != nil {
 		return fmt.Errorf("plan episode chunks: %w", err)
 	}
 	if len(chunks) <= 1 {
-		return syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, progress, fileProgress, warning)
+		return syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, progress, fileProgress, warning)
 	}
 
 	for _, chunk := range chunks {
-		if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, chunk, nil, nil, feedNames, resolver, progress, fileProgress, warning); err != nil {
+		if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, chunk, nil, nil, feedNames, resolver, options, progress, fileProgress, warning); err != nil {
 			return fmt.Errorf("apply episode chunk: %w", err)
 		}
 	}
-	return syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, progress, fileProgress, warning)
+	return syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, progress, fileProgress, warning)
 }
 
 func missingEpisodeChunks(deviceRoot string, episodes []episode.Episode, resolver media.Resolver) ([][]episode.Episode, error) {
@@ -106,7 +114,7 @@ func missingEpisodeChunks(deviceRoot string, episodes []episode.Episode, resolve
 	return chunks, nil
 }
 
-func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver media.Resolver, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
+func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver media.Resolver, options EpisodeSyncOptions, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
 	var copies []FileCopy
 	var keep []string
 	var staged []string
@@ -130,6 +138,13 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 		if exists {
 			changed := false
 			if !isMP3(current, relative) {
+				keep = append(keep, relative)
+				if progress != nil {
+					progress(len(keep)+len(copies), len(episodes), current, true)
+				}
+				continue
+			}
+			if !options.VerifyMedia {
 				keep = append(keep, relative)
 				if progress != nil {
 					progress(len(keep)+len(copies), len(episodes), current, true)

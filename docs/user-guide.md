@@ -219,6 +219,10 @@ succeed. A supplied configuration and reconciled state are persisted after file
 application succeeds; a final persistence failure can leave new files with the
 previous configuration/state and is recoverable by rerunning sync.
 
+Normal syncs reuse existing media with fast filesystem checks. Use
+`-verify-media` to inspect existing MP3 tags and repair missing metadata; this
+is slower on large archives. Newly downloaded MP3 files are always normalized.
+
 ## Playback State
 
 Podsync reads Rockbox playback information without writing Rockbox databases.
@@ -246,8 +250,8 @@ files.
 During sync, podsync normalizes metadata on MP3 files using the RSS episode and
 feed state. The episode title is written as the title, the feed name as album
 and artist, `Podcast` as genre, and the publication year when available. Existing
-managed MP3 files are reprocessed when their metadata needs updating. Other
-audio formats are copied without metadata changes.
+managed MP3 files are checked only with `-verify-media`. Other audio formats are
+copied without metadata changes.
 
 ## Storage and Deletion
 

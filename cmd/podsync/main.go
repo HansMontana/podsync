@@ -466,11 +466,12 @@ func generatePlaylist(args []string, briefingMode bool) error {
 }
 
 func sync(args []string) error {
-	flags := newFlagSet("sync", "Usage: podsync sync -device-root PATH [-config PATH] [-staging PATH] [-dry-run]")
+	flags := newFlagSet("sync", "Usage: podsync sync -device-root PATH [-config PATH] [-staging PATH] [-dry-run] [-verify-media]")
 	deviceRoot := flags.String("device-root", "", "mounted iPod root")
 	configPath := flags.String("config", "", "path to podsync TOML configuration (defaults to device config)")
 	stagingDir := flags.String("staging", "", "host-side staging directory (defaults to a temporary directory)")
 	dryRun := flags.Bool("dry-run", false, "show the sync plan without downloading or changing the device")
+	verifyMedia := flags.Bool("verify-media", false, "inspect existing MP3 metadata and repair missing fields")
 	if help, err := parseFlags(flags, args); err != nil {
 		return err
 	} else if help {
@@ -606,7 +607,7 @@ func sync(args []string) error {
 		fmt.Printf("would select %d episodes, write %d playlists, and delete %d managed files\n", len(episodes), len(playlistFiles)-1, len(plan.Deletes))
 		return nil
 	}
-	if err := syncer.EpisodesWithResolverAndProgressAndWarnings(context.Background(), httpClient, *stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, func(completed, total int, current episode.Episode, reused bool) {
+	if err := syncer.EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), httpClient, *stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, syncer.EpisodeSyncOptions{VerifyMedia: *verifyMedia}, func(completed, total int, current episode.Episode, reused bool) {
 		action := "staged"
 		if reused {
 			action = "reused"
