@@ -22,13 +22,15 @@ Implemented:
 - Device-local TOML configuration persistence and mounted-device layout handling
 - Logical-feed and briefing playlist generation with stable episode paths
 - Host-side bounded downloads and safe filesystem sync planning/application
+- Chunked syncs for large transfers with resumable intermediate batches
 - Rockbox playback-log and TagCache parsing with stable media-path matching, with unknown records treated as unplayed
-- CLI workflows for validation, reconciliation, refresh, feed management, status, playlist, briefing, and sync
+- Fast existing-media reuse with optional MP3 metadata verification
+- Automatic mounted-device detection, read-only managed-file verification, and `PODSYNC_DEVICE_ROOT` support
+- CLI workflows for validation, reconciliation, refresh, feed management, status, verification, playlist, briefing, and sync
 
-Not yet implemented:
+Remaining validation work:
 
-- Automatic iPod detection
-- Full interrupted-sync end-to-end coverage against a real Rockbox layout
+- Broader validation against real Rockbox playback and TagCache data
 
 See `AGENTS.md` for the durable project architecture and roadmap.
 See [`docs/user-guide.md`](docs/user-guide.md) for installation, configuration,
@@ -68,13 +70,14 @@ Run the tests:
 go test -count=1 ./...
 ```
 
-The CLI requires an explicit mounted device root because automatic device
-detection is not implemented:
+The CLI can detect one mounted device in standard user mount locations. Pass an
+explicit root when more than one device is mounted or when using a non-standard
+mount:
 
 ```bash
 podsync refresh -device-root /media/ipod -config ./configs/briefing.toml
 podsync feed list -device-root /media/ipod
-podsync sync -device-root /media/ipod --dry-run
+podsync sync -device-root /media/ipod -dry-run
 ```
 
 `sync` uses already refreshed episode state. For new content, use
@@ -86,6 +89,12 @@ Format and verify a change:
 go fmt ./...
 git diff --check
 ```
+
+Normal syncs reuse existing media with fast filesystem checks. Use
+`-verify-media` to inspect existing MP3 tags and repair missing metadata. Large
+transfers are processed in batches targeting 5 GiB or 200 episodes, whichever
+comes first. `podsync verify` checks all manifest-managed files without changing
+the device.
 
 ## AI and agentic development disclosure
 

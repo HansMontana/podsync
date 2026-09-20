@@ -9,6 +9,7 @@ url = "https://example.com/rss"
 id = "example"
 title = "Example Feed"
 source = "news"
+artist = "Example Podcast"
 order = "newest_first"
 limit = 5
 unplayed_only = true

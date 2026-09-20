@@ -34,6 +34,11 @@ Before the first real sync:
 4. Review the selected episode, playlist, and deletion counts.
 5. Run `sync` only after the plan is acceptable.
 
+Normal syncs reuse existing media with fast filesystem checks. Use
+`-verify-media` to inspect existing MP3 tags and repair missing metadata. Large
+transfers are processed in batches targeting 5 GiB or 200 episodes, whichever
+comes first.
+
 Only manifest-listed podsync paths are eligible for deletion. Podsync does not
 delete `AUDIO/`, `iPod_Control/`, or other files created outside podsync. Sync
 can write or replace its selected generated `Podcasts/<logical-feed>/...` and
@@ -284,7 +289,7 @@ deleted.
 
 ## Current Limitations
 
-- Device autodiscovery is not implemented.
 - Automatic mounting and ejection are not implemented.
-- A mounted device root must be supplied explicitly.
-- Real-device validation is still required for final hardware confidence.
+- Automatic detection requires a single mounted device in a standard location,
+  or `PODSYNC_DEVICE_ROOT` for a non-standard location.
+- Broader validation against real Rockbox playback and TagCache data remains.

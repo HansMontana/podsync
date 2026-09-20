@@ -4,10 +4,10 @@ These files demonstrate supported podsync configuration patterns. They are
 examples for documentation and testing, not recommendations or endorsements
 of the listed podcasts and news sources.
 
-- `podcasts.toml` shows ordinary podcast sources with bounded logical-feed
-  queues, ordering, and unplayed-only selection.
+- `podcasts.toml` shows ordinary podcast sources with artist metadata, bounded
+  queues, ordering, unplayed-only selection, and an unlimited archive feed.
 - `daily-briefing.toml` shows several sources partitioned into logical feeds
-  and combined into one ordered briefing.
+  with artist metadata, filtering, and one ordered briefing.
 
 Validate either file without changing a device:
 
