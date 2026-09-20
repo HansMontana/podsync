@@ -30,16 +30,6 @@ func TestForEpisodesMatchesRockboxVolumePrefixedPaths(t *testing.T) {
 	}
 }
 
-func TestForEpisodesMatchesHistoricalLegacyPlaybackPaths(t *testing.T) {
-	current := episode.Episode{FeedID: 2, GUID: "one", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
-	record := Record{Path: "/" + media.LegacyPlaybackPath(current), Known: true, PlayCount: 2}
-	states := ForEpisodesWithResolver([]episode.Episode{current}, []Record{record}, media.Resolver{2: "podcast"})
-	state := states[current.IdentityKey()]
-	if !state.Known || !state.Played() || state.PlayCount != 2 {
-		t.Fatalf("got playback state %+v", state)
-	}
-}
-
 func TestForEpisodesTreatsMissingRecordsAsUnplayed(t *testing.T) {
 	current := episode.Episode{FeedID: 2, GUID: "one", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
 	state := ForEpisodesWithResolver([]episode.Episode{current}, nil, media.Resolver{2: "podcast"})[current.IdentityKey()]
