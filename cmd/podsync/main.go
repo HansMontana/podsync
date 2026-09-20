@@ -20,6 +20,7 @@ import (
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
+	"github.com/HansMontana/podsync/internal/logging"
 	"github.com/HansMontana/podsync/internal/media"
 	"github.com/HansMontana/podsync/internal/playback"
 	"github.com/HansMontana/podsync/internal/playlists"
@@ -31,10 +32,18 @@ import (
 var httpClient = &http.Client{Timeout: 10 * time.Minute}
 
 func main() {
+	logger := logging.New(os.Stderr).WithComponent("cli")
+	started := time.Now()
+	command := "help"
+	if len(os.Args) > 1 {
+		command = os.Args[1]
+	}
+	logger.Info("Starting podsync command " + command)
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		logger.Error("Command failed: " + err.Error())
 		os.Exit(1)
 	}
+	logger.Info(fmt.Sprintf("Completed command %s in %s", command, time.Since(started).Round(time.Millisecond)))
 }
 
 func run(args []string) error {
@@ -507,6 +516,8 @@ func sync(args []string) error {
 		return nil
 	}
 	configProvided := *configPath != ""
+	logger := logging.New(os.Stderr).WithComponent("sync")
+	logger.Info("Starting sync")
 	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, *dryRun, false)
 	if err != nil {
 		return err
@@ -634,25 +645,30 @@ func sync(args []string) error {
 			fmt.Printf("would delete %s\n", relative)
 		}
 		fmt.Printf("would select %d episodes, write %d playlists, and delete %d managed files\n", len(episodes), len(playlistFiles)-1, len(plan.Deletes))
+		logger.Info(fmt.Sprintf("Dry run selected %d episodes, writes %d playlists, and deletes %d managed files", len(episodes), len(playlistFiles)-1, len(plan.Deletes)))
 		return nil
 	}
 	if err := syncer.EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), httpClient, *stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, syncer.EpisodeSyncOptions{VerifyMedia: *verifyMedia}, func(completed, total int, current episode.Episode, reused bool) {
-		action := "staged"
-		if reused {
-			action = "reused"
+		if logProgress(completed, total) {
+			logger.Info(fmt.Sprintf("Prepared episodes: %d/%d", completed, total))
 		}
-		fmt.Printf("%s %d/%d: %s\n", action, completed, total, current.Title)
 	}, func(progress syncer.FileProgress) {
 		switch progress.Phase {
 		case "copy":
-			fmt.Printf("copied %d/%d: %s\n", progress.Completed, progress.Total, progress.Relative)
+			if logProgress(progress.Completed, progress.Total) {
+				logger.Info(fmt.Sprintf("Copied files: %d/%d", progress.Completed, progress.Total))
+			}
 		case "playlist":
-			fmt.Printf("wrote playlist %d/%d: %s\n", progress.Completed, progress.Total, progress.Relative)
+			if logProgress(progress.Completed, progress.Total) {
+				logger.Info(fmt.Sprintf("Wrote playlists: %d/%d", progress.Completed, progress.Total))
+			}
 		case "delete":
-			fmt.Printf("deleted %d/%d: %s\n", progress.Completed, progress.Total, progress.Relative)
+			if logProgress(progress.Completed, progress.Total) {
+				logger.Info(fmt.Sprintf("Removed managed files: %d/%d", progress.Completed, progress.Total))
+			}
 		}
 	}, func(message string) {
-		fmt.Printf("warning: %s\n", message)
+		logger.Warn(message)
 	}); err != nil {
 		return err
 	}
@@ -664,8 +680,12 @@ func sync(args []string) error {
 	if err := repository.Save(current); err != nil {
 		return fmt.Errorf("save configured sources: %w", err)
 	}
-	fmt.Printf("synced %d episodes and %d playlists\n", len(episodes), len(playlistFiles)-1)
+	logger.Info(fmt.Sprintf("Sync complete: %d episodes, %d playlists", len(episodes), len(playlistFiles)-1))
 	return nil
+}
+
+func logProgress(completed, total int) bool {
+	return completed == 1 || completed == total || completed%50 == 0
 }
 
 func openDevice(root, configPath string, readOnly, persistConfig bool) (device.Layout, state.Repository, config.Config, error) {

@@ -241,6 +241,19 @@ Normal syncs reuse existing media with fast filesystem checks. Use
 `-verify-media` to inspect existing MP3 tags and repair missing metadata; this
 is slower on large archives. Newly downloaded MP3 files are always normalized.
 
+## Logging
+
+CLI logs are written to stderr in a concise timestamped format:
+
+```text
+2026-08-17T10:51:28.508Z  INFO  sync: Starting sync
+2026-08-17T10:51:31.102Z  WARN  sync: Keeping an unreadable existing file
+```
+
+Normal output remains on stdout. Logs report command lifecycle, sync milestones,
+recoverable warnings, failures, and final summaries without printing every
+individual file by default.
+
 ## Playback State
 
 Podsync reads Rockbox playback information without writing Rockbox databases.
