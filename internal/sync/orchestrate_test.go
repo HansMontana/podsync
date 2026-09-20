@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -260,5 +261,52 @@ func TestMissingEpisodeChunksUsesEpisodeFallbackLimit(t *testing.T) {
 	}
 	if len(chunks) != 2 || len(chunks[0]) != chunkEpisodeLimit || len(chunks[1]) != 1 {
 		t.Fatalf("got chunk sizes %v", []int{len(chunks[0]), len(chunks[1])})
+	}
+}
+
+func TestChunkedSyncResumesBeforeFinalization(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("audio"))
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	staging := t.TempDir()
+	resolver := media.Resolver{1: "podcast"}
+	episodes := make([]episode.Episode, chunkEpisodeLimit+1)
+	var manifest strings.Builder
+	for i := range episodes {
+		episodes[i] = episode.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i), Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/ogg"}}
+		manifest.WriteString(resolver.RelativePathFor(episodes[i]))
+		manifest.WriteByte('\n')
+	}
+	playlists := []PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: []byte(manifest.String())}}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var copied int
+	err := EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, server.Client(), staging, root, episodes, playlists, nil, nil, resolver, EpisodeSyncOptions{}, nil, func(progress FileProgress) {
+		if progress.Phase == "copy" {
+			copied++
+			if copied == chunkEpisodeLimit {
+				cancel()
+			}
+		}
+	}, nil)
+	if err == nil {
+		t.Fatal("interrupted sync succeeded")
+	}
+	if _, err := os.Stat(filepath.Join(root, "Podsync/managed-files.txt")); !os.IsNotExist(err) {
+		t.Fatalf("interrupted sync committed manifest, error: %v", err)
+	}
+
+	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), staging, root, episodes, playlists, nil, nil, resolver, EpisodeSyncOptions{}, nil, nil, nil); err != nil {
+		t.Fatalf("resume failed: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(root, "Podsync/managed-files.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != manifest.String() {
+		t.Fatalf("final manifest does not contain the complete desired set")
 	}
 }
