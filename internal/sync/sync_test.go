@@ -76,8 +76,14 @@ func TestRefreshFeedWithArchiveRetainsEpisodesOutsideRSSWindow(t *testing.T) {
 	}
 	defer repository.Close()
 	initial := state.State{
-		Feeds:    []feed.Feed{{ID: 1, URL: server.URL}},
-		Episodes: []episode.Episode{{FeedID: 1, GUID: "old", Enclosure: episode.Enclosure{URL: "https://example.com/old.mp3"}}},
+		Feeds: []feed.Feed{
+			{ID: 1, URL: server.URL},
+			{ID: 2, URL: "https://example.org/other.xml"},
+		},
+		Episodes: []episode.Episode{
+			{FeedID: 1, GUID: "old", Enclosure: episode.Enclosure{URL: "https://example.com/old.mp3"}},
+			{FeedID: 2, GUID: "other", Enclosure: episode.Enclosure{URL: "https://example.org/other.mp3"}},
+		},
 	}
 	if err := repository.Save(initial); err != nil {
 		t.Fatal(err)
@@ -89,8 +95,17 @@ func TestRefreshFeedWithArchiveRetainsEpisodesOutsideRSSWindow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Episodes) != 2 {
+	if len(got.Episodes) != 3 {
 		t.Fatalf("got episodes %+v", got.Episodes)
+	}
+	identities := make(map[string]struct{}, len(got.Episodes))
+	for _, current := range got.Episodes {
+		identities[current.IdentityKey()] = struct{}{}
+	}
+	for _, guid := range []string{"new", "old", "other"} {
+		if _, exists := identities[(episode.Episode{FeedID: map[string]int64{"new": 1, "old": 1, "other": 2}[guid], GUID: guid}).IdentityKey()]; !exists {
+			t.Fatalf("missing retained episode %q: %+v", guid, got.Episodes)
+		}
 	}
 }
 

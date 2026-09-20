@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
 	"github.com/HansMontana/podsync/internal/state"
 )
@@ -71,8 +72,9 @@ func RefreshFeedWithArchive(
 	refreshedFeed.LastModified = result.LastModified
 	current.Feeds[feedIndex] = refreshedFeed
 
-	retainedEpisodes := current.Episodes[:0]
-	for _, existing := range current.Episodes {
+	previousEpisodes := append([]episode.Episode(nil), current.Episodes...)
+	retainedEpisodes := make([]episode.Episode, 0, len(previousEpisodes))
+	for _, existing := range previousEpisodes {
 		if existing.FeedID != feedID {
 			retainedEpisodes = append(retainedEpisodes, existing)
 		}
@@ -82,7 +84,7 @@ func RefreshFeedWithArchive(
 		for _, refreshed := range episodes {
 			known[refreshed.IdentityKey()] = struct{}{}
 		}
-		for _, existing := range current.Episodes {
+		for _, existing := range previousEpisodes {
 			if existing.FeedID == feedID {
 				if _, exists := known[existing.IdentityKey()]; !exists {
 					episodes = append(episodes, existing)
