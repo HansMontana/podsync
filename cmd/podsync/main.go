@@ -300,11 +300,11 @@ func removeFeed(args []string) error {
 		}
 	}
 	current.Episodes = episodes
-	if err := repository.Save(current); err != nil {
-		return fmt.Errorf("remove source state: %w", err)
-	}
 	if err := config.Save(layout.ConfigPath(), cfg); err != nil {
 		return fmt.Errorf("save device config: %w", err)
+	}
+	if err := repository.Save(current); err != nil {
+		return fmt.Errorf("remove source state after config save: %w", err)
 	}
 	commandLogger("feed").Info(fmt.Sprintf("Removed source %s", *id))
 	return nil
