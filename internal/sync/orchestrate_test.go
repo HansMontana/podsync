@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/media"
 )
@@ -299,14 +300,24 @@ func TestChunkedSyncResumesBeforeFinalization(t *testing.T) {
 		t.Fatalf("interrupted sync committed manifest, error: %v", err)
 	}
 
-	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), staging, root, episodes, playlists, nil, nil, resolver, EpisodeSyncOptions{}, nil, nil, nil); err != nil {
+	resumedEpisodes := episodes[:1]
+	resumedManifest := resolver.RelativePathFor(resumedEpisodes[0]) + "\n"
+	resumedPlaylists := []PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: []byte(resumedManifest)}}
+	managed, err := (device.Layout{Root: root}).LoadManagedPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), staging, root, resumedEpisodes, resumedPlaylists, managed, nil, resolver, EpisodeSyncOptions{}, nil, nil, nil); err != nil {
 		t.Fatalf("resume failed: %v", err)
 	}
 	data, err := os.ReadFile(filepath.Join(root, "Podsync/managed-files.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(data) != manifest.String() {
-		t.Fatalf("final manifest does not contain the complete desired set")
+	if string(data) != resumedManifest {
+		t.Fatalf("final manifest does not contain the resumed desired set")
+	}
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(resolver.RelativePathFor(episodes[1])))); !os.IsNotExist(err) {
+		t.Fatalf("stale pending episode remains, error: %v", err)
 	}
 }

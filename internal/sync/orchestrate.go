@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/download"
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/media"
@@ -67,8 +68,26 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 	if err != nil {
 		return fmt.Errorf("plan episode chunks: %w", err)
 	}
+	layout := device.Layout{Root: deviceRoot}
+	pending, err := layout.LoadPendingManagedPaths()
+	if err != nil {
+		return fmt.Errorf("load pending episode ownership: %w", err)
+	}
+	pendingActive := len(pending) > 0
 	if len(chunks) <= 1 {
-		return syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, progress, fileProgress, warning)
+		err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, progress, fileProgress, warning)
+		if err != nil {
+			return err
+		}
+		if pendingActive {
+			if err := layout.ClearPendingManagedPaths(); err != nil {
+				return fmt.Errorf("clear pending episode ownership: %w", err)
+			}
+		}
+		return nil
+	}
+	if err := layout.SavePendingManagedPaths(pendingManagedPaths(episodes, playlists, resolver)); err != nil {
+		return fmt.Errorf("save pending episode ownership: %w", err)
 	}
 
 	for _, chunk := range chunks {
@@ -76,7 +95,26 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 			return fmt.Errorf("apply episode chunk: %w", err)
 		}
 	}
-	return syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, progress, fileProgress, warning)
+	if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, progress, fileProgress, warning); err != nil {
+		return err
+	}
+	if err := layout.ClearPendingManagedPaths(); err != nil {
+		return fmt.Errorf("clear pending episode ownership: %w", err)
+	}
+	return nil
+}
+
+func pendingManagedPaths(episodes []episode.Episode, playlists []PlaylistFile, resolver media.Resolver) []string {
+	paths := make([]string, 0, len(episodes)+len(playlists))
+	for _, current := range episodes {
+		paths = append(paths, resolver.RelativePathFor(current))
+	}
+	for _, playlist := range playlists {
+		if playlist.Relative != "Podsync/managed-files.txt" {
+			paths = append(paths, playlist.Relative)
+		}
+	}
+	return paths
 }
 
 func missingEpisodeChunks(deviceRoot string, episodes []episode.Episode, resolver media.Resolver) ([][]episode.Episode, error) {
