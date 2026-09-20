@@ -228,10 +228,10 @@ func addFeed(args []string) error {
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
-	if err := config.Save(layout.ConfigPath(), cfg); err != nil {
-		return fmt.Errorf("save device config: %w", err)
-	}
-	if err := reconcileState(repository, cfg); err != nil {
+	if err := saveConfigThenState(
+		func() error { return config.Save(layout.ConfigPath(), cfg) },
+		func() error { return reconcileState(repository, cfg) },
+	); err != nil {
 		return err
 	}
 	commandLogger("feed").Info(fmt.Sprintf("Added source %s", *id))
@@ -300,13 +300,23 @@ func removeFeed(args []string) error {
 		}
 	}
 	current.Episodes = episodes
-	if err := config.Save(layout.ConfigPath(), cfg); err != nil {
-		return fmt.Errorf("save device config: %w", err)
-	}
-	if err := repository.Save(current); err != nil {
-		return fmt.Errorf("remove source state after config save: %w", err)
+	if err := saveConfigThenState(
+		func() error { return config.Save(layout.ConfigPath(), cfg) },
+		func() error { return repository.Save(current) },
+	); err != nil {
+		return err
 	}
 	commandLogger("feed").Info(fmt.Sprintf("Removed source %s", *id))
+	return nil
+}
+
+func saveConfigThenState(saveConfig func() error, saveState func() error) error {
+	if err := saveConfig(); err != nil {
+		return fmt.Errorf("save device config: %w", err)
+	}
+	if err := saveState(); err != nil {
+		return fmt.Errorf("save state after config save: %w", err)
+	}
 	return nil
 }
 

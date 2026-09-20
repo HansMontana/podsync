@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,42 @@ import (
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/state"
 )
+
+func TestSaveConfigThenStateDoesNotWriteStateAfterConfigFailure(t *testing.T) {
+	expected := errors.New("config failed")
+	stateCalled := false
+	if err := saveConfigThenState(
+		func() error { return expected },
+		func() error {
+			stateCalled = true
+			return nil
+		},
+	); !errors.Is(err, expected) {
+		t.Fatalf("got error %v, want %v", err, expected)
+	}
+	if stateCalled {
+		t.Fatal("state saver ran after configuration failure")
+	}
+}
+
+func TestSaveConfigThenStateWritesStateAfterConfigSuccess(t *testing.T) {
+	var order []string
+	if err := saveConfigThenState(
+		func() error {
+			order = append(order, "config")
+			return nil
+		},
+		func() error {
+			order = append(order, "state")
+			return errors.New("state failed")
+		},
+	); err == nil {
+		t.Fatal("saveConfigThenState() accepted a state failure")
+	}
+	if strings.Join(order, ",") != "config,state" {
+		t.Fatalf("call order was %v", order)
+	}
+}
 
 func TestRefreshAndSyncCommandsUseDeviceStateAndStaging(t *testing.T) {
 	var server *httptest.Server

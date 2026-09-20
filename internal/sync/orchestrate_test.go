@@ -321,3 +321,106 @@ func TestChunkedSyncResumesBeforeFinalization(t *testing.T) {
 		t.Fatalf("stale pending episode remains, error: %v", err)
 	}
 }
+
+func TestChunkedSyncRecoversAfterFinalizationInterruption(t *testing.T) {
+	tests := []struct {
+		name        string
+		phase       string
+		playlists   []PlaylistFile
+		initialFile string
+	}{
+		{
+			name:  "playlist",
+			phase: "playlist",
+			playlists: []PlaylistFile{
+				{Relative: "Playlists/briefing.m3u8", Content: []byte("podcast episode\n")},
+				{Relative: "Podsync/managed-files.txt", Content: nil},
+			},
+		},
+		{
+			name:        "deletion",
+			phase:       "delete",
+			initialFile: "Podcasts/stale/old.mp3\n",
+			playlists:   []PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: nil}},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte("audio"))
+			}))
+			defer server.Close()
+
+			root := t.TempDir()
+			staging := t.TempDir()
+			resolver := media.Resolver{1: "podcast"}
+			episodes := make([]episode.Episode, chunkEpisodeLimit+1)
+			var manifest strings.Builder
+			for i := range episodes {
+				episodes[i] = episode.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i), Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/ogg"}}
+				manifest.WriteString(resolver.RelativePathFor(episodes[i]))
+				manifest.WriteByte('\n')
+			}
+			playlists := append([]PlaylistFile(nil), test.playlists...)
+			playlists[len(playlists)-1].Content = []byte(manifest.String())
+
+			if test.initialFile != "" {
+				path := filepath.Join(root, filepath.FromSlash("Podcasts/stale/old.mp3"))
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.MkdirAll(filepath.Join(root, "Podsync"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(root, "Podsync/managed-files.txt"), []byte(test.initialFile), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			initialManaged := []string(nil)
+			if test.initialFile != "" {
+				initialManaged = []string{"Podcasts/stale/old.mp3"}
+			}
+
+			ctx, cancel := context.WithCancel(context.Background())
+			err := EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, server.Client(), staging, root, episodes, playlists, initialManaged, nil, resolver, EpisodeSyncOptions{}, nil, func(progress FileProgress) {
+				if progress.Phase == test.phase {
+					cancel()
+				}
+			}, nil)
+			if err == nil {
+				t.Fatal("interrupted finalization succeeded")
+			}
+			pending, err := (device.Layout{Root: root}).LoadPendingManagedPaths()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(pending) == 0 {
+				t.Fatal("interrupted finalization lost pending ownership")
+			}
+
+			managed, err := (device.Layout{Root: root}).LoadManagedPaths()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), staging, root, episodes, playlists, managed, nil, resolver, EpisodeSyncOptions{}, nil, nil, nil); err != nil {
+				t.Fatalf("resume failed: %v", err)
+			}
+			pending, err = (device.Layout{Root: root}).LoadPendingManagedPaths()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(pending) != 0 {
+				t.Fatalf("pending ownership remains after resume: %v", pending)
+			}
+			if test.initialFile != "" {
+				if _, err := os.Stat(filepath.Join(root, filepath.FromSlash("Podcasts/stale/old.mp3"))); !os.IsNotExist(err) {
+					t.Fatalf("stale file remains after resume, error: %v", err)
+				}
+			}
+		})
+	}
+}
