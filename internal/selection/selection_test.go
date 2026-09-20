@@ -82,6 +82,26 @@ func TestFeedForSyncSelectsNewestEpisodesRegardlessOfPlaylistOrder(t *testing.T)
 	}
 }
 
+func TestArchiveFeedIgnoresLimitAndPlaybackFilters(t *testing.T) {
+	cfg := config.Config{
+		Sources: []config.SourceFeed{{ID: "archive", URL: "https://example.com/archive.xml"}},
+		Feeds:   []config.LogicalFeed{{ID: "archive", Source: "archive", Archive: true, Limit: 1, UnplayedOnly: true}},
+	}
+	episodes := []episode.Episode{
+		{FeedID: 1, GUID: "old", PublishedAt: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)},
+		{FeedID: 1, GUID: "new", PublishedAt: time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)},
+	}
+	got, err := FeedForSync(cfg, state.State{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/archive.xml"}}, Episodes: episodes}, "archive", map[string]playback.State{
+		"guid:1:new": {Known: true, PlayCount: 1},
+	}, false)
+	if err != nil {
+		t.Fatalf("FeedForSync() returned error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d episodes, want 2", len(got))
+	}
+}
+
 func TestFeedUnplayedLimitBackfillsOlderEpisodes(t *testing.T) {
 	cfg := config.Config{
 		Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},

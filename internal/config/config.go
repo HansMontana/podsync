@@ -38,6 +38,7 @@ type LogicalFeed struct {
 	Title        string `toml:"title"`
 	Artist       string `toml:"artist"`
 	Source       string `toml:"source"`
+	Archive      bool   `toml:"archive"`
 	Order        Order  `toml:"order"`
 	Limit        int    `toml:"limit"`
 	UnplayedOnly bool   `toml:"unplayed_only"`

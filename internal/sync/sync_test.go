@@ -65,6 +65,35 @@ func TestRefreshFeedReplacesOnlyTargetFeedAndPersistsMetadata(t *testing.T) {
 	}
 }
 
+func TestRefreshFeedWithArchiveRetainsEpisodesOutsideRSSWindow(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<rss><channel><title>Archive</title><item><guid>new</guid><title>New</title><enclosure url="https://example.com/new.mp3" type="audio/mpeg"/></item></channel></rss>`))
+	}))
+	defer server.Close()
+	repository, err := state.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	initial := state.State{
+		Feeds:    []feed.Feed{{ID: 1, URL: server.URL}},
+		Episodes: []episode.Episode{{FeedID: 1, GUID: "old", Enclosure: episode.Enclosure{URL: "https://example.com/old.mp3"}}},
+	}
+	if err := repository.Save(initial); err != nil {
+		t.Fatal(err)
+	}
+	if err := RefreshFeedWithArchive(context.Background(), repository, server.Client(), 1, true); err != nil {
+		t.Fatal(err)
+	}
+	got, err := repository.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Episodes) != 2 {
+		t.Fatalf("got episodes %+v", got.Episodes)
+	}
+}
+
 func TestRefreshFeed304LeavesStateUnchanged(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("If-None-Match") != `"current"` {

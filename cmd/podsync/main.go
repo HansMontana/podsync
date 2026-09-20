@@ -336,7 +336,14 @@ func reconcile(args []string, refresh bool) error {
 		if err != nil {
 			return err
 		}
-		if err := syncer.RefreshFeed(context.Background(), repository, httpClient, feedID); err != nil {
+		archive := false
+		for _, logical := range cfg.Feeds {
+			if logical.Source == source.ID && logical.Archive {
+				archive = true
+				break
+			}
+		}
+		if err := syncer.RefreshFeedWithArchive(context.Background(), repository, httpClient, feedID, archive); err != nil {
 			return fmt.Errorf("refresh source %q: %w", source.ID, err)
 		}
 		fmt.Printf("refreshed %s\n", source.ID)

@@ -17,6 +17,18 @@ func RefreshFeed(
 	client *http.Client,
 	feedID int64,
 ) error {
+	return RefreshFeedWithArchive(ctx, repository, client, feedID, false)
+}
+
+// RefreshFeedWithArchive retains known historical episodes for an archive
+// feed when the source RSS only exposes a recent window.
+func RefreshFeedWithArchive(
+	ctx context.Context,
+	repository state.Repository,
+	client *http.Client,
+	feedID int64,
+	archive bool,
+) error {
 	current, err := repository.Load()
 	if err != nil {
 		return fmt.Errorf("load state for feed refresh: %w", err)
@@ -63,6 +75,19 @@ func RefreshFeed(
 	for _, existing := range current.Episodes {
 		if existing.FeedID != feedID {
 			retainedEpisodes = append(retainedEpisodes, existing)
+		}
+	}
+	if archive {
+		known := make(map[string]struct{}, len(episodes))
+		for _, refreshed := range episodes {
+			known[refreshed.IdentityKey()] = struct{}{}
+		}
+		for _, existing := range current.Episodes {
+			if existing.FeedID == feedID {
+				if _, exists := known[existing.IdentityKey()]; !exists {
+					episodes = append(episodes, existing)
+				}
+			}
 		}
 	}
 	current.Episodes = append(retainedEpisodes, episodes...)

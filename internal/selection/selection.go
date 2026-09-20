@@ -15,6 +15,9 @@ import (
 func Feed(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, unplayedOnly bool) ([]episode.Episode, error) {
 	for _, logical := range cfg.Feeds {
 		if logical.ID == feedID {
+			if logical.Archive {
+				return FeedOrderedLimit(cfg, current, feedID, playbackStates, false, logical.Order, 0)
+			}
 			return FeedOrderedLimit(cfg, current, feedID, playbackStates, unplayedOnly || logical.UnplayedOnly, logical.Order, logical.Limit)
 		}
 	}
@@ -26,6 +29,9 @@ func Feed(cfg config.Config, current state.State, feedID string, playbackStates 
 func FeedForSync(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, unplayedOnly bool) ([]episode.Episode, error) {
 	for _, logical := range cfg.Feeds {
 		if logical.ID == feedID {
+			if logical.Archive {
+				return FeedOrderedLimit(cfg, current, feedID, playbackStates, false, config.NewestFirst, 0)
+			}
 			return FeedOrderedLimit(cfg, current, feedID, playbackStates, unplayedOnly || logical.UnplayedOnly, config.NewestFirst, logical.Limit)
 		}
 	}
