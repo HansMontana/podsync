@@ -6,12 +6,16 @@ under `Podsync/` on the device.
 
 ## Safety Model
 
-The current application does not detect, mount, or eject devices. Always pass
-the mounted device root explicitly:
+Podsync can detect a single mounted device in standard user mount locations.
+Pass the mounted device root explicitly when more than one device is present
+or when the mount is non-standard:
 
 ```bash
 podsync status -device-root /media/hansmontana/HANSPOD
 ```
+
+Set `PODSYNC_DEVICE_ROOT` to use a non-standard mount without repeating the
+flag.
 
 Before the first real sync:
 

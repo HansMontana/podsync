@@ -1,0 +1,67 @@
+package device
+
+import (
+	"fmt"
+	"os"
+	"os/user"
+	"path/filepath"
+	"sort"
+)
+
+// ResolveRoot returns an explicit root or detects one mounted in a standard
+// user mount location. PODSYNC_DEVICE_ROOT is useful when the mount location
+// is non-standard.
+func ResolveRoot(explicit string) (string, error) {
+	if explicit != "" {
+		return explicit, nil
+	}
+	if configured := os.Getenv("PODSYNC_DEVICE_ROOT"); configured != "" {
+		return configured, nil
+	}
+
+	currentUser, err := user.Current()
+	if err != nil {
+		return "", fmt.Errorf("detect mounted device: identify current user: %w", err)
+	}
+	parents := []string{
+		filepath.Join("/media", currentUser.Username),
+		filepath.Join("/run/media", currentUser.Username),
+		"/Volumes",
+	}
+	var candidates []string
+	for _, parent := range parents {
+		entries, readErr := os.ReadDir(parent)
+		if os.IsNotExist(readErr) {
+			continue
+		}
+		if readErr != nil {
+			return "", fmt.Errorf("inspect mount directory %q: %w", parent, readErr)
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			candidate := filepath.Join(parent, entry.Name())
+			if looksLikeDeviceRoot(candidate) {
+				candidates = append(candidates, candidate)
+			}
+		}
+	}
+	sort.Strings(candidates)
+	if len(candidates) == 0 {
+		return "", fmt.Errorf("no podsync device detected; pass -device-root PATH or set PODSYNC_DEVICE_ROOT")
+	}
+	if len(candidates) > 1 {
+		return "", fmt.Errorf("multiple possible podsync devices detected: %v; pass -device-root PATH", candidates)
+	}
+	return candidates[0], nil
+}
+
+func looksLikeDeviceRoot(root string) bool {
+	for _, directory := range []string{"Podsync", "Podcasts", "Playlists"} {
+		if info, err := os.Stat(filepath.Join(root, directory)); err == nil && info.IsDir() {
+			return true
+		}
+	}
+	return false
+}

@@ -101,19 +101,19 @@ func printCommandHelp(command string) error {
 	case "validate-config":
 		text = "Usage: podsync validate-config -config PATH\n\nValidate configuration without changing a device."
 	case "reconcile":
-		text = "Usage: podsync reconcile -device-root PATH [-config PATH]\n\nReconcile configured source feeds into the device database."
+		text = "Usage: podsync reconcile [-device-root PATH] [-config PATH]\n\nReconcile configured source feeds into the device database."
 	case "refresh":
-		text = "Usage: podsync refresh -device-root PATH [-config PATH]\n\nReconcile and refresh all configured source feeds."
+		text = "Usage: podsync refresh [-device-root PATH] [-config PATH]\n\nReconcile and refresh all configured source feeds."
 	case "status":
-		text = "Usage: podsync status -device-root PATH\n\nShow feed, episode, and playback counts without requiring config."
+		text = "Usage: podsync status [-device-root PATH]\n\nShow feed, episode, and playback counts."
 	case "feed":
 		text = "Usage: podsync feed <list|add|remove> [options]\n\nManage source feeds in device-local configuration."
 	case "playlist":
-		text = "Usage: podsync playlist -device-root PATH -id FEED [-config PATH]\n\nGenerate one logical-feed playlist."
+		text = "Usage: podsync playlist [-device-root PATH] -id FEED [-config PATH]\n\nGenerate one logical-feed playlist."
 	case "briefing":
-		text = "Usage: podsync briefing -device-root PATH -id BRIEFING [-config PATH]\n\nGenerate one briefing playlist."
+		text = "Usage: podsync briefing [-device-root PATH] -id BRIEFING [-config PATH]\n\nGenerate one briefing playlist."
 	case "sync":
-		text = "Usage: podsync sync -device-root PATH [-config PATH] [-staging PATH] [-dry-run]\n\nApply selected audio, playlists, and managed-file cleanup."
+		text = "Usage: podsync sync [-device-root PATH] [-config PATH] [-staging PATH] [-dry-run] [-verify-media]\n\nApply selected audio, playlists, and managed-file cleanup."
 	default:
 		return fmt.Errorf("unknown help topic %q\n\n%s", command, usageText())
 	}
@@ -160,7 +160,7 @@ func feedCommand(args []string) error {
 
 func listFeeds(args []string) error {
 	flags := newFlagSet("feed list", "Usage: podsync feed list -device-root PATH")
-	deviceRoot := flags.String("device-root", "", "mounted iPod root")
+	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
 	if help, err := parseFlags(flags, args); err != nil {
 		return err
 	} else if help {
@@ -183,7 +183,7 @@ func listFeeds(args []string) error {
 
 func addFeed(args []string) error {
 	flags := newFlagSet("feed add", "Usage: podsync feed add -device-root PATH -id ID -url URL [-config PATH]")
-	deviceRoot := flags.String("device-root", "", "mounted iPod root")
+	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
 	configPath := flags.String("config", "", "path to podsync TOML configuration")
 	id := flags.String("id", "", "source feed ID")
 	feedURL := flags.String("url", "", "source feed URL")
@@ -216,7 +216,7 @@ func addFeed(args []string) error {
 
 func removeFeed(args []string) error {
 	flags := newFlagSet("feed remove", "Usage: podsync feed remove -device-root PATH -id ID [-config PATH]")
-	deviceRoot := flags.String("device-root", "", "mounted iPod root")
+	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
 	configPath := flags.String("config", "", "path to podsync TOML configuration")
 	id := flags.String("id", "", "source feed ID")
 	if help, err := parseFlags(flags, args); err != nil {
@@ -312,7 +312,7 @@ func reconcile(args []string, refresh bool) error {
 		usage = "Usage: podsync refresh -device-root PATH [-config PATH]"
 	}
 	flags := newFlagSet(command, usage)
-	deviceRoot := flags.String("device-root", "", "mounted iPod root")
+	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
 	configPath := flags.String("config", "", "path to podsync TOML configuration (defaults to device config)")
 	if help, err := parseFlags(flags, args); err != nil {
 		return err
@@ -354,7 +354,7 @@ func reconcile(args []string, refresh bool) error {
 
 func status(args []string) error {
 	flags := newFlagSet("status", "Usage: podsync status -device-root PATH")
-	deviceRoot := flags.String("device-root", "", "mounted iPod root")
+	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
 	if help, err := parseFlags(flags, args); err != nil {
 		return err
 	} else if help {
@@ -396,7 +396,7 @@ func generatePlaylist(args []string, briefingMode bool) error {
 		name = "briefing"
 	}
 	flags := newFlagSet(name, fmt.Sprintf("Usage: podsync %s -device-root PATH -id ID [-config PATH]", name))
-	deviceRoot := flags.String("device-root", "", "mounted iPod root")
+	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
 	configPath := flags.String("config", "", "path to podsync TOML configuration")
 	id := flags.String("id", "", "logical feed or briefing ID")
 	if help, err := parseFlags(flags, args); err != nil {
@@ -467,7 +467,7 @@ func generatePlaylist(args []string, briefingMode bool) error {
 
 func sync(args []string) error {
 	flags := newFlagSet("sync", "Usage: podsync sync -device-root PATH [-config PATH] [-staging PATH] [-dry-run] [-verify-media]")
-	deviceRoot := flags.String("device-root", "", "mounted iPod root")
+	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
 	configPath := flags.String("config", "", "path to podsync TOML configuration (defaults to device config)")
 	stagingDir := flags.String("staging", "", "host-side staging directory (defaults to a temporary directory)")
 	dryRun := flags.Bool("dry-run", false, "show the sync plan without downloading or changing the device")
@@ -682,7 +682,11 @@ func validateStagingDirectory(deviceRoot, stagingDir string) error {
 
 func openRepositoryMode(root string, readOnly bool) (device.Layout, state.Repository, error) {
 	if root == "" {
-		return device.Layout{}, nil, fmt.Errorf("-device-root is required")
+		var err error
+		root, err = device.ResolveRoot("")
+		if err != nil {
+			return device.Layout{}, nil, err
+		}
 	}
 	layout := device.Layout{Root: root}
 	info, err := os.Stat(root)
