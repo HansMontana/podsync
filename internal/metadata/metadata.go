@@ -14,7 +14,7 @@ import (
 
 const genre = "Podcast"
 
-// NormalizeMP3 writes podsync's canonical metadata fields to an MP3 file.
+// NormalizeMP3 fills missing podcast metadata fields on an MP3 file.
 // It returns whether the file was changed.
 func NormalizeMP3(path, feedName string, current episode.Episode) (bool, error) {
 	file, err := os.Open(path)
@@ -47,11 +47,7 @@ func NormalizeMP3(path, feedName string, current episode.Episode) (bool, error) 
 	if strings.TrimSpace(feedName) == "" {
 		feedName = "Podcast"
 	}
-	year := ""
-	if !current.PublishedAt.IsZero() {
-		year = strconv.Itoa(current.PublishedAt.UTC().Year())
-	}
-	if tag.Title() == current.Title && tag.Album() == feedName && tag.Artist() == feedName && tag.Genre() == genre && tag.Year() == year {
+	if !hasMissingFields(tag, current) {
 		return false, nil
 	}
 
@@ -63,15 +59,33 @@ func NormalizeMP3(path, feedName string, current episode.Episode) (bool, error) 
 }
 
 func setFields(tag *id3v2.Tag, feedName string, current episode.Episode) {
-	tag.SetTitle(current.Title)
-	tag.SetAlbum(feedName)
-	tag.SetArtist(feedName)
-	tag.SetGenre(genre)
+	if strings.TrimSpace(tag.Title()) == "" {
+		tag.SetTitle(current.Title)
+	}
+	if strings.TrimSpace(tag.Album()) == "" {
+		tag.SetAlbum(feedName)
+	}
+	if strings.TrimSpace(tag.Artist()) == "" {
+		tag.SetArtist(feedName)
+	}
+	if strings.TrimSpace(tag.Genre()) == "" {
+		tag.SetGenre(genre)
+	}
 	year := ""
 	if !current.PublishedAt.IsZero() {
 		year = strconv.Itoa(current.PublishedAt.UTC().Year())
 	}
-	tag.SetYear(year)
+	if strings.TrimSpace(tag.Year()) == "" {
+		tag.SetYear(year)
+	}
+}
+
+func hasMissingFields(tag *id3v2.Tag, current episode.Episode) bool {
+	return strings.TrimSpace(tag.Title()) == "" ||
+		strings.TrimSpace(tag.Album()) == "" ||
+		strings.TrimSpace(tag.Artist()) == "" ||
+		strings.TrimSpace(tag.Genre()) == "" ||
+		(strings.TrimSpace(tag.Year()) == "" && !current.PublishedAt.IsZero())
 }
 
 func prependTag(path string, tag *id3v2.Tag) error {
