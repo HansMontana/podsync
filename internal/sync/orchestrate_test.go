@@ -134,3 +134,67 @@ func TestEpisodesRetagsExistingMP3WithWrongKnownSize(t *testing.T) {
 		t.Fatalf("existing file was not retagged, info %v, error %v", info, err)
 	}
 }
+
+func TestEpisodesRedownloadsUnreadableExistingMP3(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write([]byte("replacement audio"))
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	current := episode.Episode{FeedID: 1, GUID: "one", Title: "One", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}
+	relative := media.RelativePath(current)
+	destination := filepath.Join(root, filepath.FromSlash(relative))
+	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(destination, []byte("unreadable"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EpisodesWithProgressAndWarnings(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, nil, nil, nil, nil, nil); err != nil {
+		t.Fatalf("Episodes() returned error: %v", err)
+	}
+	_ = os.Chmod(destination, 0o644)
+
+	if requests.Load() != 1 {
+		t.Fatalf("downloaded replacement %d times", requests.Load())
+	}
+	data, err := os.ReadFile(destination)
+	if err != nil || len(data) <= len("replacement audio") {
+		t.Fatalf("replacement was not installed, size=%d, error=%v", len(data), err)
+	}
+}
+
+func TestEpisodesKeepsUnreadableExistingMP3WhenRedownloadFails(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	defer server.Close()
+
+	root := t.TempDir()
+	current := episode.Episode{FeedID: 1, GUID: "one", Title: "One", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}
+	relative := media.RelativePath(current)
+	destination := filepath.Join(root, filepath.FromSlash(relative))
+	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(destination, []byte("unreadable"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+
+	warnings := 0
+	if err := EpisodesWithProgressAndWarnings(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, []string{relative}, nil, nil, nil, func(string) {
+		warnings++
+	}); err != nil {
+		t.Fatalf("Episodes() returned error: %v", err)
+	}
+	_ = os.Chmod(destination, 0o644)
+
+	if warnings != 2 {
+		t.Fatalf("got %d warnings, want 2", warnings)
+	}
+	if data, err := os.ReadFile(destination); err != nil || string(data) != "unreadable" {
+		t.Fatalf("existing file changed to %q, error %v", data, err)
+	}
+}

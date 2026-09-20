@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,7 @@ import (
 )
 
 type ProgressFunc func(completed, total int, current episode.Episode, reused bool)
+type WarningFunc func(message string)
 
 // Episodes downloads selected episodes to host staging, then applies the
 // complete device file plan. Device deletions happen only after all downloads
@@ -25,6 +27,16 @@ func Episodes(ctx context.Context, client *http.Client, stagingDir, deviceRoot s
 }
 
 func EpisodesWithProgress(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, progress ProgressFunc, fileProgress FileProgressFunc) error {
+	return episodesWithProgress(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, progress, fileProgress, nil)
+}
+
+// EpisodesWithProgressAndWarnings continues past unreadable existing device
+// files, warning the caller when it must retain or replace one.
+func EpisodesWithProgressAndWarnings(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
+	return episodesWithProgress(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, progress, fileProgress, warning)
+}
+
+func episodesWithProgress(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
 	var copies []FileCopy
 	var keep []string
 	var staged []string
@@ -50,7 +62,28 @@ func EpisodesWithProgress(ctx context.Context, client *http.Client, stagingDir, 
 			if isMP3(current, relative) {
 				stagedPath, stageErr := stageExisting(deviceRoot, relative, stagingDir)
 				if stageErr != nil {
-					return fmt.Errorf("stage existing episode %q: %w", current.Title, stageErr)
+					var readErr *existingReadError
+					if !errors.As(stageErr, &readErr) {
+						return fmt.Errorf("stage existing episode %q: %w", current.Title, stageErr)
+					}
+					warn(warning, fmt.Sprintf("unreadable existing episode %q: %v; redownloading", current.Title, readErr))
+					stagedPath, err = download.Episode(ctx, client, current, stagingDir)
+					if err != nil {
+						keep = append(keep, relative)
+						warn(warning, fmt.Sprintf("could not redownload %q: %v; keeping existing file", current.Title, err))
+						continue
+					}
+					staged = append(staged, stagedPath)
+					if isMP3(current, relative) {
+						if _, metadataErr := metadata.NormalizeMP3(stagedPath, feedNames[current.FeedID], current); metadataErr != nil {
+							return fmt.Errorf("normalize metadata for %q: %w", current.Title, metadataErr)
+						}
+					}
+					copies = append(copies, FileCopy{Source: stagedPath, Relative: relative})
+					if progress != nil {
+						progress(len(keep)+len(copies), len(episodes), current, false)
+					}
+					continue
 				}
 				staged = append(staged, stagedPath)
 				var metadataErr error
@@ -109,7 +142,7 @@ func stageExisting(deviceRoot, relative, stagingDir string) (string, error) {
 	}
 	input, err := os.Open(sourcePath)
 	if err != nil {
-		return "", err
+		return "", &existingReadError{err: err}
 	}
 	defer input.Close()
 	if err := os.MkdirAll(stagingDir, 0o755); err != nil {
@@ -120,7 +153,13 @@ func stageExisting(deviceRoot, relative, stagingDir string) (string, error) {
 		return "", err
 	}
 	path := output.Name()
-	if _, err := io.Copy(output, input); err != nil {
+	reader := &existingReader{reader: input}
+	if _, err := io.Copy(output, reader); err != nil {
+		if reader.err != nil {
+			_ = output.Close()
+			_ = os.Remove(path)
+			return "", &existingReadError{err: reader.err}
+		}
 		_ = output.Close()
 		_ = os.Remove(path)
 		return "", err
@@ -130,6 +169,30 @@ func stageExisting(deviceRoot, relative, stagingDir string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+type existingReadError struct{ err error }
+
+func (e *existingReadError) Error() string { return e.err.Error() }
+func (e *existingReadError) Unwrap() error { return e.err }
+
+type existingReader struct {
+	reader io.Reader
+	err    error
+}
+
+func (r *existingReader) Read(buffer []byte) (int, error) {
+	count, err := r.reader.Read(buffer)
+	if err != nil && err != io.EOF {
+		r.err = err
+	}
+	return count, err
+}
+
+func warn(warning WarningFunc, message string) {
+	if warning != nil {
+		warning(message)
+	}
 }
 
 func reusableFile(deviceRoot, relative string, expectedLength int64) (bool, error) {
