@@ -120,6 +120,9 @@ func ForEpisodesWithResolver(episodes []episode.Episode, records []Record, resol
 	result := make(map[string]State, len(episodes))
 	for _, current := range episodes {
 		state, exists := byPath[normalizePath(resolver.RelativePathFor(current))]
+		if !exists {
+			state, exists = byPath[normalizePath(media.LegacyPlaybackPath(current))]
+		}
 		if exists {
 			result[current.IdentityKey()] = state
 		} else {

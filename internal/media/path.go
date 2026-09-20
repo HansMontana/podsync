@@ -15,6 +15,15 @@ import (
 // Resolver maps durable source-feed IDs to logical-feed IDs for device paths.
 type Resolver map[int64]string
 
+// LegacyPlaybackPath returns the historical device path format used in
+// Rockbox playback logs before logical-feed paths were introduced. It is kept
+// only for matching historical records; sync never creates or migrates to it.
+func LegacyPlaybackPath(e episode.Episode) string {
+	sum := sha256.Sum256([]byte(e.IdentityKey()))
+	name := hex.EncodeToString(sum[:])[:16] + extension(e)
+	return path.Join("Podcasts", fmt.Sprintf("feed-%d", e.FeedID), name)
+}
+
 // RelativePathFor returns the logical-feed path for an episode.
 func (r Resolver) RelativePathFor(e episode.Episode) string {
 	logicalID := r[e.FeedID]
