@@ -43,8 +43,8 @@ Only manifest-listed podsync paths are eligible for deletion. Podsync does not
 delete `AUDIO/`, `iPod_Control/`, or other files created outside podsync. Sync
 can write or replace its selected generated `Podcasts/<logical-feed>/...` and
 `Playlists/...` destinations even when they were not in an earlier manifest.
-Existing generated audio is reused when it is a non-empty regular file and its
-known enclosure size matches.
+Existing generated audio is reused when it is a non-empty regular file. MP3
+metadata is inspected only when `-verify-media` is supplied.
 
 ## Build
 
@@ -266,9 +266,9 @@ CLI logs are written to stderr in a concise timestamped format:
 2026-08-17T10:51:31.102Z	WARN	sync	Keeping an unreadable existing file
 ```
 
-Normal output remains on stdout. Logs report command lifecycle, sync milestones,
-recoverable warnings, failures, and final summaries without printing every
-individual file by default.
+Help text remains plain command output. Runtime logs report command lifecycle,
+sync milestones, recoverable warnings, failures, and final summaries without
+printing every individual file by default.
 
 ## Playback State
 

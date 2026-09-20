@@ -102,8 +102,8 @@ Normal syncs reuse existing media with fast filesystem checks. Use
 `-verify-media` to inspect existing MP3 tags and repair missing metadata. Large
 transfers are processed in batches targeting 5 GiB or 200 episodes, whichever
 comes first. `podsync verify` checks all manifest-managed files without changing
-the device. CLI logs use timestamped `INFO`, `WARN`, and `ERROR` lines on
-stderr, while command data remains on stdout.
+the device. CLI logs use timestamped `INFO`, `WARN`, and `ERROR` lines on stderr;
+help text remains plain command output.
 
 ## AI and agentic development disclosure
 

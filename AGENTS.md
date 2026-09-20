@@ -55,7 +55,9 @@ The current layout helper uses these device-relative paths:
 - `Podcasts/` for episode audio
 - `Playlists/` for generated playlists
 
-The CLI currently accepts an explicit mounted device root. Automatic device detection is not implemented.
+The CLI accepts an explicit mounted device root or detects one mounted in a
+standard user mount location. Automatic mounting and ejection are not
+implemented.
 
 ### Transient host state
 
@@ -820,10 +822,10 @@ The following product direction is intentional, but should still be implemented 
 7. Read Rockbox playback statistics, including play count and last-played information, from the iPod. (Playback-log and binary TagCache import implemented.)
 8. Match Rockbox playback records to stable episode identities without making local paths the domain identity. (Implemented for stable media paths.)
 9. Add configurable selection rules such as unplayed-only and newest-episode limits. (Implemented.)
-10. Detect the iPod and apply sync plans safely: download to transient host storage, copy final files to the iPod, and remove obsolete files conservatively. (Safe sync implemented; automatic detection remains.)
+10. Detect the iPod and apply sync plans safely: download to transient host storage, copy final files to the iPod, and remove obsolete files conservatively. (Implemented with explicit-root and standard-location detection.)
 11. Transfer generated playlists and preserve the configured briefing and feed order. (Implemented.)
-12. Add a CLI for feed management, refresh, briefing generation, sync, and status. (Implemented for explicit device roots.)
-13. Add end-to-end tests covering configuration, feed refresh, Rockbox playback state, playlist generation, and interrupted syncs. (Synthetic mounted-device coverage implemented; real-device validation remains.)
+12. Add a CLI for feed management, refresh, briefing generation, sync, update, verification, and status. (Implemented.)
+13. Add end-to-end tests covering configuration, feed refresh, Rockbox playback state, playlist generation, and interrupted syncs. (Synthetic coverage and read-only real-device verification implemented; broader real-device validation remains.)
 
 The roadmap does not authorize speculative implementation. Each increment must preserve the iPod-as-source-of-truth boundary and establish its behavior with tests before the next layer is added.
 
