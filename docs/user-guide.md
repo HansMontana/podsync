@@ -167,6 +167,22 @@ podsync refresh -device-root /media/hansmontana/HANSPOD
 refreshes committed. `sync` uses stored episodes and does not fetch RSS; use
 `reconcile` or `feed add`, then `refresh`, then `sync` for new feed content.
 
+Run the normal production workflow, which refreshes feeds, syncs selected media,
+and verifies all managed files:
+
+```bash
+podsync update
+```
+
+For deep existing-MP3 metadata verification:
+
+```bash
+podsync update -verify-media
+```
+
+The update workflow stops if refresh or sync fails. Final device verification is
+run only after a successful sync.
+
 Show state and playback counts:
 
 ```bash

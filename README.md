@@ -26,7 +26,7 @@ Implemented:
 - Rockbox playback-log and TagCache parsing with stable media-path matching, with unknown records treated as unplayed
 - Fast existing-media reuse with optional MP3 metadata verification
 - Automatic mounted-device detection, read-only managed-file verification, and `PODSYNC_DEVICE_ROOT` support
-- CLI workflows for validation, reconciliation, refresh, feed management, status, verification, playlist, briefing, and sync
+- CLI workflows for validation, reconciliation, refresh, update, feed management, status, verification, playlist, briefing, and sync
 
 Remaining validation work:
 
@@ -78,6 +78,14 @@ mount:
 podsync refresh -device-root /media/ipod -config ./configs/briefing.toml
 podsync feed list -device-root /media/ipod
 podsync sync -device-root /media/ipod -dry-run
+```
+
+For a configured device, `update` combines refresh, sync, and final device
+verification. Add `-verify-media` for deep existing-MP3 metadata verification:
+
+```bash
+podsync update
+podsync update -verify-media
 ```
 
 `sync` uses already refreshed episode state. For new content, use

@@ -69,6 +69,8 @@ func run(args []string) error {
 		return reconcile(args[1:], false)
 	case "refresh":
 		return reconcile(args[1:], true)
+	case "update":
+		return update(args[1:])
 	case "status":
 		return status(args[1:])
 	case "verify":
@@ -93,6 +95,7 @@ Commands:
   validate-config  Validate a TOML configuration file.
   reconcile        Add configured source feeds to device state.
   refresh          Reconcile and refresh all configured source feeds.
+	update           Refresh feeds, sync selected media, and verify the device.
 	status           Show device state and playback summary.
 	verify           Verify manifest-managed device files without changing them.
   feed             List, add, or remove source feeds.
@@ -116,6 +119,8 @@ func printCommandHelp(command string) error {
 		text = "Usage: podsync reconcile [-device-root PATH] [-config PATH]\n\nReconcile configured source feeds into the device database."
 	case "refresh":
 		text = "Usage: podsync refresh [-device-root PATH] [-config PATH]\n\nReconcile and refresh all configured source feeds."
+	case "update":
+		text = "Usage: podsync update [-device-root PATH] [-config PATH] [-staging PATH] [-verify-media]\n\nRefresh feeds, sync selected media, and verify the device."
 	case "status":
 		text = "Usage: podsync status [-device-root PATH]\n\nShow feed, episode, and playback counts."
 	case "verify":
@@ -333,7 +338,11 @@ func reconcile(args []string, refresh bool) error {
 	} else if help {
 		return nil
 	}
-	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false, true)
+	return reconcileDevice(*deviceRoot, *configPath, refresh)
+}
+
+func reconcileDevice(deviceRoot, configPath string, refresh bool) error {
+	layout, repository, cfg, err := openDevice(deviceRoot, configPath, false, true)
 	if err != nil {
 		return err
 	}
@@ -363,6 +372,38 @@ func reconcile(args []string, refresh bool) error {
 		fmt.Printf("refreshed %s\n", source.ID)
 	}
 	_ = layout
+	return nil
+}
+
+func update(args []string) error {
+	flags := newFlagSet("update", "Usage: podsync update [-device-root PATH] [-config PATH] [-staging PATH] [-verify-media]")
+	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
+	configPath := flags.String("config", "", "path to podsync TOML configuration (defaults to device config)")
+	stagingDir := flags.String("staging", "", "host-side staging directory (defaults to a temporary directory)")
+	verifyMedia := flags.Bool("verify-media", false, "inspect existing MP3 metadata and repair missing fields")
+	if help, err := parseFlags(flags, args); err != nil {
+		return err
+	} else if help {
+		return nil
+	}
+
+	logger := logging.New(os.Stderr).WithComponent("update")
+	started := time.Now()
+	logger.Info("Starting update")
+	if err := reconcileDevice(*deviceRoot, *configPath, true); err != nil {
+		return fmt.Errorf("update refresh: %w", err)
+	}
+	logger.Info("Refresh complete")
+	if err := syncDevice(syncOptions{deviceRoot: *deviceRoot, configPath: *configPath, stagingDir: *stagingDir, verifyMedia: *verifyMedia}); err != nil {
+		return fmt.Errorf("update sync: %w", err)
+	}
+	logger.Info("Sync complete")
+	verified, err := verifyDevice(*deviceRoot)
+	if err != nil {
+		return fmt.Errorf("update verification: %w", err)
+	}
+	logger.Info(fmt.Sprintf("Device verification complete: %d managed files", verified))
+	logger.Info(fmt.Sprintf("Update complete in %s", time.Since(started).Round(time.Millisecond)))
 	return nil
 }
 
@@ -412,20 +453,28 @@ func verify(args []string) error {
 	} else if help {
 		return nil
 	}
-	layout, repository, err := openRepositoryMode(*deviceRoot, true)
+	verified, err := verifyDevice(*deviceRoot)
 	if err != nil {
 		return err
+	}
+	fmt.Printf("verified %d managed files\n", verified)
+	return nil
+}
+
+func verifyDevice(deviceRoot string) (int, error) {
+	layout, repository, err := openRepositoryMode(deviceRoot, true)
+	if err != nil {
+		return 0, err
 	}
 	defer repository.Close()
 	managed, err := layout.LoadManagedPaths()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if err := syncer.VerifyManagedFiles(layout.Root, managed); err != nil {
-		return err
+		return 0, err
 	}
-	fmt.Printf("verified %d managed files\n", len(managed))
-	return nil
+	return len(managed), nil
 }
 
 func generatePlaylist(args []string, briefingMode bool) error {
@@ -503,6 +552,14 @@ func generatePlaylist(args []string, briefingMode bool) error {
 	return nil
 }
 
+type syncOptions struct {
+	deviceRoot  string
+	configPath  string
+	stagingDir  string
+	dryRun      bool
+	verifyMedia bool
+}
+
 func sync(args []string) error {
 	flags := newFlagSet("sync", "Usage: podsync sync -device-root PATH [-config PATH] [-staging PATH] [-dry-run] [-verify-media]")
 	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
@@ -515,10 +572,19 @@ func sync(args []string) error {
 	} else if help {
 		return nil
 	}
-	configProvided := *configPath != ""
+	return syncDevice(syncOptions{deviceRoot: *deviceRoot, configPath: *configPath, stagingDir: *stagingDir, dryRun: *dryRun, verifyMedia: *verifyMedia})
+}
+
+func syncDevice(options syncOptions) error {
+	deviceRoot := options.deviceRoot
+	configPath := options.configPath
+	stagingDir := options.stagingDir
+	dryRun := options.dryRun
+	verifyMedia := options.verifyMedia
+	configProvided := configPath != ""
 	logger := logging.New(os.Stderr).WithComponent("sync")
 	logger.Info("Starting sync")
-	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, *dryRun, false)
+	layout, repository, cfg, err := openDevice(deviceRoot, configPath, dryRun, false)
 	if err != nil {
 		return err
 	}
@@ -597,16 +663,16 @@ func sync(args []string) error {
 	if err != nil {
 		return err
 	}
-	if *stagingDir != "" {
-		if err := validateStagingDirectory(layout.Root, *stagingDir); err != nil {
+	if stagingDir != "" {
+		if err := validateStagingDirectory(layout.Root, stagingDir); err != nil {
 			return err
 		}
-	} else if !*dryRun {
-		*stagingDir, err = os.MkdirTemp("", "podsync-staging-")
+	} else if !dryRun {
+		stagingDir, err = os.MkdirTemp("", "podsync-staging-")
 		if err != nil {
 			return fmt.Errorf("create staging directory: %w", err)
 		}
-		defer os.RemoveAll(*stagingDir)
+		defer os.RemoveAll(stagingDir)
 	}
 	episodes := make([]episode.Episode, 0, len(selected))
 	for _, currentEpisode := range selected {
@@ -624,7 +690,7 @@ func sync(args []string) error {
 	}
 	manifest := syncer.PlaylistFile{Relative: layout.ManifestRelativePath(), Content: manifestContent(newManaged)}
 	playlistFiles = append(playlistFiles, manifest)
-	if *dryRun {
+	if dryRun {
 		copies := make([]syncer.FileCopy, 0, len(episodes))
 		for _, currentEpisode := range episodes {
 			copies = append(copies, syncer.FileCopy{Relative: resolver.RelativePathFor(currentEpisode)})
@@ -648,7 +714,7 @@ func sync(args []string) error {
 		logger.Info(fmt.Sprintf("Dry run selected %d episodes, writes %d playlists, and deletes %d managed files", len(episodes), len(playlistFiles)-1, len(plan.Deletes)))
 		return nil
 	}
-	if err := syncer.EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), httpClient, *stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, syncer.EpisodeSyncOptions{VerifyMedia: *verifyMedia}, func(completed, total int, current episode.Episode, reused bool) {
+	if err := syncer.EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), httpClient, stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, syncer.EpisodeSyncOptions{VerifyMedia: verifyMedia}, func(completed, total int, current episode.Episode, reused bool) {
 		if logProgress(completed, total) {
 			logger.Info(fmt.Sprintf("Prepared episodes: %d/%d", completed, total))
 		}
