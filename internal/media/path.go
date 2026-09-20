@@ -15,25 +15,9 @@ import (
 // Resolver maps durable source-feed IDs to logical-feed IDs for device paths.
 type Resolver map[int64]string
 
-// RelativePath returns the legacy stable path used by older podsync versions.
-func RelativePath(e episode.Episode) string {
-	return LegacyRelativePath(e)
-}
-
-// LegacyRelativePath returns the old feed-N/hash.ext path for migration and
-// playback compatibility.
-func LegacyRelativePath(e episode.Episode) string {
-	sum := sha256.Sum256([]byte(e.IdentityKey()))
-	name := hex.EncodeToString(sum[:])[:16] + extension(e)
-	return path.Join("Podcasts", fmt.Sprintf("feed-%d", e.FeedID), name)
-}
-
 // RelativePathFor returns the logical-feed path for an episode.
 func (r Resolver) RelativePathFor(e episode.Episode) string {
 	logicalID := r[e.FeedID]
-	if logicalID == "" {
-		return LegacyRelativePath(e)
-	}
 
 	sum := sha256.Sum256([]byte(e.IdentityKey()))
 	hash := hex.EncodeToString(sum[:])[:12]

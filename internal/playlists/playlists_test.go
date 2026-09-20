@@ -52,7 +52,7 @@ func TestLogicalFeedUsesStableDevicePathsAndConfiguredOrder(t *testing.T) {
 	if strings.Index(text, "Old") > strings.Index(text, "New") {
 		t.Fatalf("playlist is not oldest-first: %q", text)
 	}
-	if !strings.Contains(text, "../Podcasts/feed-1/") {
+	if !strings.Contains(text, "../Podcasts/world/") {
 		t.Fatalf("playlist does not use device-relative stable path: %q", text)
 	}
 }

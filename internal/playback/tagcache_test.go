@@ -16,7 +16,7 @@ func TestParseTagCacheLittleEndian(t *testing.T) {
 	if len(records) != 1 {
 		t.Fatalf("got records %+v", records)
 	}
-	if records[0].Path != "/Podcasts/feed-2/episode.mp3" || records[0].PlayCount != 4 || !records[0].LastPlayed.IsZero() {
+	if records[0].Path != "/Podcasts/podcast/episode.mp3" || records[0].PlayCount != 4 || !records[0].LastPlayed.IsZero() {
 		t.Fatalf("got record %+v", records[0])
 	}
 }
@@ -62,7 +62,7 @@ func writeTagCacheFixture(t *testing.T, order binary.ByteOrder, deleted bool) st
 	}
 
 	// Rockbox aligns values and may leave padding after the terminating NUL.
-	data := append([]byte("/Podcasts/feed-2/episode.mp3\x00"), 0, 0, 0)
+	data := append([]byte("/Podcasts/podcast/episode.mp3\x00"), 0, 0, 0)
 	filename := make([]byte, 12+8+len(data))
 	order.PutUint32(filename[0:4], tagCacheMagic)
 	order.PutUint32(filename[4:8], uint32(len(filename)-12))

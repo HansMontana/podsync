@@ -201,7 +201,6 @@ func (r contextReader) Read(p []byte) (int, error) {
 	}
 }
 
-var audioPathPattern = regexp.MustCompile(`^Podcasts/feed-[1-9][0-9]*/[a-f0-9]{16}\.[A-Za-z0-9]{1,8}$`)
 var playlistPathPattern = regexp.MustCompile(`^Playlists/.+\.m3u8$`)
 
 func validateManagedPath(relative string) error {
@@ -212,7 +211,7 @@ func validateManagedPath(relative string) error {
 	if clean != relative || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
 		return fmt.Errorf("path escapes device root: %q", relative)
 	}
-	if clean == "Podsync/managed-files.txt" || audioPathPattern.MatchString(clean) || validAudioPath(clean) || validPlaylistPath(clean) {
+	if clean == "Podsync/managed-files.txt" || validAudioPath(clean) || validPlaylistPath(clean) {
 		return nil
 	}
 	return fmt.Errorf("path is outside podsync-managed locations: %q", relative)
@@ -221,6 +220,9 @@ func validateManagedPath(relative string) error {
 func validAudioPath(value string) bool {
 	parts := strings.Split(value, "/")
 	if len(parts) != 3 || parts[0] != "Podcasts" || parts[1] == "" {
+		return false
+	}
+	if isLegacyFeedDirectory(parts[1]) {
 		return false
 	}
 	for _, character := range parts[1] {
@@ -239,6 +241,19 @@ func validAudioPath(value string) bool {
 			continue
 		}
 		return false
+	}
+	return true
+}
+
+func isLegacyFeedDirectory(value string) bool {
+	digits := strings.TrimPrefix(value, "feed-")
+	if digits == value || digits == "" || digits[0] == '0' {
+		return false
+	}
+	for _, character := range digits {
+		if character < '0' || character > '9' {
+			return false
+		}
 	}
 	return true
 }

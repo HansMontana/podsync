@@ -20,10 +20,10 @@ func TestEpisodesStagesBeforeApplyingAndDeletesOnlyManagedFiles(t *testing.T) {
 	defer server.Close()
 
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "Podcasts/feed-1"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "Podcasts/podcast-1"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "Podcasts/feed-1/aaaaaaaaaaaaaaaa.mp3"), []byte("old"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3"), []byte("old"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "Music"), 0o755); err != nil {
@@ -34,10 +34,10 @@ func TestEpisodesStagesBeforeApplyingAndDeletesOnlyManagedFiles(t *testing.T) {
 	}
 
 	current := episode.Episode{FeedID: 1, GUID: "one", Title: "One", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}
-	if err := Episodes(context.Background(), server.Client(), filepath.Join(t.TempDir(), "staging"), root, []episode.Episode{current}, nil, []string{"Podcasts/feed-1/aaaaaaaaaaaaaaaa.mp3"}); err != nil {
+	if err := Episodes(context.Background(), server.Client(), filepath.Join(t.TempDir(), "staging"), root, []episode.Episode{current}, nil, []string{"Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3"}); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "Podcasts/feed-1/aaaaaaaaaaaaaaaa.mp3")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3")); !os.IsNotExist(err) {
 		t.Fatalf("old managed file remains, error: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "Music/user.mp3")); err != nil {
@@ -45,48 +45,11 @@ func TestEpisodesStagesBeforeApplyingAndDeletesOnlyManagedFiles(t *testing.T) {
 	}
 }
 
-func TestEpisodesMigratesLegacyPathWithoutDownloading(t *testing.T) {
-	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requests.Add(1)
-		_, _ = w.Write([]byte("unexpected download"))
-	}))
-	defer server.Close()
-
-	root := t.TempDir()
-	current := episode.Episode{FeedID: 1, GUID: "one", Title: "One", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/ogg", Length: 3}}
-	legacy := media.LegacyRelativePath(current)
-	resolver := media.Resolver{1: "news"}
-	modern := resolver.RelativePathFor(current)
-	legacyPath := filepath.Join(root, filepath.FromSlash(legacy))
-	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(legacyPath, []byte("old"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := EpisodesWithResolverAndProgressAndWarnings(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, []string{legacy}, nil, resolver, nil, nil, nil); err != nil {
-		t.Fatalf("migration returned error: %v", err)
-	}
-	modernPath := filepath.Join(root, filepath.FromSlash(modern))
-	content, err := os.ReadFile(modernPath)
-	if err != nil || string(content) != "old" {
-		t.Fatalf("modern file content = %q, error = %v", content, err)
-	}
-	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
-		t.Fatalf("legacy file remains, error: %v", err)
-	}
-	if requests.Load() != 0 {
-		t.Fatalf("migration downloaded %d times", requests.Load())
-	}
-}
-
 func TestEpisodesDoesNotChangeDeviceWhenDownloadFails(t *testing.T) {
 	server := httptest.NewServer(http.NotFoundHandler())
 	defer server.Close()
 	root := t.TempDir()
-	old := filepath.Join(root, "Podcasts/feed-1/aaaaaaaaaaaaaaaa.mp3")
+	old := filepath.Join(root, "Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3")
 	if err := os.MkdirAll(filepath.Dir(old), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +58,7 @@ func TestEpisodesDoesNotChangeDeviceWhenDownloadFails(t *testing.T) {
 	}
 
 	current := episode.Episode{FeedID: 1, GUID: "one", Enclosure: episode.Enclosure{URL: server.URL}}
-	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, []string{"Podcasts/feed-1/aaaaaaaaaaaaaaaa.mp3"}); err == nil {
+	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, []string{"Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3"}); err == nil {
 		t.Fatal("Episodes() accepted a failed download")
 	}
 	if _, err := os.Stat(old); err != nil {
@@ -113,7 +76,7 @@ func TestEpisodesReusesExistingMatchingFile(t *testing.T) {
 
 	root := t.TempDir()
 	current := episode.Episode{FeedID: 1, GUID: "one", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg", Length: 5}}
-	relative := media.RelativePath(current)
+	relative := (media.Resolver{1: "podcast-1"}).RelativePathFor(current)
 	destination := filepath.Join(root, filepath.FromSlash(relative))
 	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
 		t.Fatal(err)
@@ -152,7 +115,7 @@ func TestEpisodesRetagsExistingMP3WithWrongKnownSize(t *testing.T) {
 
 	root := t.TempDir()
 	current := episode.Episode{FeedID: 1, GUID: "one", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg", Length: 5}}
-	relative := media.RelativePath(current)
+	relative := (media.Resolver{1: "podcast-1"}).RelativePathFor(current)
 	destination := filepath.Join(root, filepath.FromSlash(relative))
 	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
 		t.Fatal(err)
@@ -182,7 +145,7 @@ func TestEpisodesRedownloadsUnreadableExistingMP3(t *testing.T) {
 
 	root := t.TempDir()
 	current := episode.Episode{FeedID: 1, GUID: "one", Title: "One", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}
-	relative := media.RelativePath(current)
+	relative := (media.Resolver{1: "podcast-1"}).RelativePathFor(current)
 	destination := filepath.Join(root, filepath.FromSlash(relative))
 	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
 		t.Fatal(err)
@@ -211,7 +174,7 @@ func TestEpisodesKeepsUnreadableExistingMP3WhenRedownloadFails(t *testing.T) {
 
 	root := t.TempDir()
 	current := episode.Episode{FeedID: 1, GUID: "one", Title: "One", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}
-	relative := media.RelativePath(current)
+	relative := (media.Resolver{1: "podcast-1"}).RelativePathFor(current)
 	destination := filepath.Join(root, filepath.FromSlash(relative))
 	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
 		t.Fatal(err)

@@ -26,17 +26,27 @@ const existingReadAttempts = 3
 // complete device file plan. Device deletions happen only after all downloads
 // and device writes succeed.
 func Episodes(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string) error {
-	return EpisodesWithProgress(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, nil, nil, nil)
+	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, nil, resolverForEpisodes(episodes), nil, nil, nil)
 }
 
 func EpisodesWithProgress(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, progress ProgressFunc, fileProgress FileProgressFunc) error {
-	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, nil, progress, fileProgress, nil)
+	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolverForEpisodes(episodes), progress, fileProgress, nil)
 }
 
 // EpisodesWithProgressAndWarnings continues past unreadable existing device
 // files, warning the caller when it must retain or replace one.
 func EpisodesWithProgressAndWarnings(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
-	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, nil, progress, fileProgress, warning)
+	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolverForEpisodes(episodes), progress, fileProgress, warning)
+}
+
+func resolverForEpisodes(episodes []episode.Episode) media.Resolver {
+	resolver := make(media.Resolver)
+	for _, current := range episodes {
+		if _, exists := resolver[current.FeedID]; !exists {
+			resolver[current.FeedID] = fmt.Sprintf("podcast-%d", current.FeedID)
+		}
+	}
+	return resolver
 }
 
 func EpisodesWithResolverAndProgressAndWarnings(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver media.Resolver, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
@@ -56,39 +66,25 @@ func EpisodesWithResolverAndProgressAndWarnings(ctx context.Context, client *htt
 		default:
 		}
 		relative := resolver.RelativePathFor(current)
-		sourceRelative := relative
-		exists, err := reusableFile(deviceRoot, sourceRelative, current.Enclosure.Length)
-		if !exists {
-			sourceRelative = media.LegacyRelativePath(current)
-			exists, err = reusableFile(deviceRoot, sourceRelative, current.Enclosure.Length)
-		}
+		exists, err := reusableFile(deviceRoot, relative, current.Enclosure.Length)
 		if err != nil {
 			return fmt.Errorf("inspect existing episode %q: %w", current.Title, err)
 		}
 		if exists {
 			changed := false
-			if !isMP3(current, sourceRelative) {
-				if sourceRelative == relative {
-					keep = append(keep, relative)
-				} else {
-					stagedPath, stageErr := stageExisting(deviceRoot, sourceRelative, stagingDir)
-					if stageErr != nil {
-						return fmt.Errorf("stage existing episode %q: %w", current.Title, stageErr)
-					}
-					staged = append(staged, stagedPath)
-					copies = append(copies, FileCopy{Source: stagedPath, Relative: relative})
-				}
+			if !isMP3(current, relative) {
+				keep = append(keep, relative)
 				if progress != nil {
-					progress(len(keep)+len(copies), len(episodes), current, sourceRelative == relative)
+					progress(len(keep)+len(copies), len(episodes), current, true)
 				}
 				continue
 			}
-			if isMP3(current, sourceRelative) {
+			if isMP3(current, relative) {
 				needsNormalization := true
 				var readErr *existingReadError
 				if err := retryExistingRead(ctx, func() error {
 					var err error
-					needsNormalization, err = metadata.NeedsNormalization(filepath.Join(deviceRoot, filepath.FromSlash(sourceRelative)), current)
+					needsNormalization, err = metadata.NeedsNormalization(filepath.Join(deviceRoot, filepath.FromSlash(relative)), current)
 					return err
 				}); err != nil {
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -96,7 +92,7 @@ func EpisodesWithResolverAndProgressAndWarnings(ctx context.Context, client *htt
 					}
 					readErr = &existingReadError{err: err}
 				}
-				if readErr == nil && !needsNormalization && sourceRelative == relative {
+				if readErr == nil && !needsNormalization {
 					keep = append(keep, relative)
 					if progress != nil {
 						progress(len(keep)+len(copies), len(episodes), current, true)
@@ -108,7 +104,7 @@ func EpisodesWithResolverAndProgressAndWarnings(ctx context.Context, client *htt
 				if readErr == nil {
 					stageErr := retryExistingRead(ctx, func() error {
 						var err error
-						stagedPath, err = stageExisting(deviceRoot, sourceRelative, stagingDir)
+						stagedPath, err = stageExisting(deviceRoot, relative, stagingDir)
 						return err
 					})
 					if stageErr != nil {
@@ -148,7 +144,7 @@ func EpisodesWithResolverAndProgressAndWarnings(ctx context.Context, client *htt
 				if metadataErr != nil {
 					return fmt.Errorf("normalize metadata for %q: %w", current.Title, metadataErr)
 				}
-				if changed || sourceRelative != relative {
+				if changed {
 					copies = append(copies, FileCopy{Source: stagedPath, Relative: relative})
 				} else {
 					keep = append(keep, relative)

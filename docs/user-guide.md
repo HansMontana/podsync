@@ -23,7 +23,7 @@ Before the first real sync:
 
 Only manifest-listed podsync paths are eligible for deletion. Podsync does not
 delete `AUDIO/`, `iPod_Control/`, or other files created outside podsync. Sync
-can write or replace its selected generated `Podcasts/feed-N/...` and
+can write or replace its selected generated `Podcasts/<logical-feed>/...` and
 `Playlists/...` destinations even when they were not in an earlier manifest.
 Existing generated audio is reused when it is a non-empty regular file and its
 known enclosure size matches.

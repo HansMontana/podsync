@@ -360,7 +360,7 @@ func status(args []string) error {
 	} else if help {
 		return nil
 	}
-	layout, repository, err := openRepositoryMode(*deviceRoot, true)
+	layout, repository, cfg, err := openDevice(*deviceRoot, "", true, false)
 	if err != nil {
 		return err
 	}
@@ -375,7 +375,11 @@ func status(args []string) error {
 		return fmt.Errorf("load playback state: %w", err)
 	}
 	fmt.Printf("playback records: %d\n", len(records))
-	states := playback.ForEpisodes(current.Episodes, records)
+	logicalIDs, err := cfg.LogicalFeedIDs(current)
+	if err != nil {
+		return err
+	}
+	states := playback.ForEpisodesWithResolver(current.Episodes, records, media.Resolver(logicalIDs))
 	played := 0
 	for _, state := range states {
 		if state.Played() {
@@ -568,7 +572,7 @@ func sync(args []string) error {
 		episodes = append(episodes, currentEpisode)
 	}
 	sort.Slice(episodes, func(i, j int) bool {
-		return media.RelativePath(episodes[i]) < media.RelativePath(episodes[j])
+		return resolver.RelativePathFor(episodes[i]) < resolver.RelativePathFor(episodes[j])
 	})
 	newManaged := make([]string, 0, len(episodes)+len(playlistFiles))
 	for _, currentEpisode := range episodes {

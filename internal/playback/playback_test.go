@@ -12,7 +12,8 @@ import (
 func TestForEpisodesMatchesNormalizedDevicePaths(t *testing.T) {
 	current := episode.Episode{FeedID: 2, GUID: "one", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
 	playedAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	states := ForEpisodes([]episode.Episode{current}, []Record{{Path: "/" + media.RelativePath(current), Known: true, PlayCount: 3, LastPlayed: playedAt}})
+	resolver := media.Resolver{2: "podcast"}
+	states := ForEpisodesWithResolver([]episode.Episode{current}, []Record{{Path: "/" + resolver.RelativePathFor(current), Known: true, PlayCount: 3, LastPlayed: playedAt}}, resolver)
 	state := states[current.IdentityKey()]
 	if !state.Known || !state.Played() || state.PlayCount != 3 || !state.LastPlayed.Equal(playedAt) {
 		t.Fatalf("got playback state %+v", state)
@@ -21,7 +22,8 @@ func TestForEpisodesMatchesNormalizedDevicePaths(t *testing.T) {
 
 func TestForEpisodesMatchesRockboxVolumePrefixedPaths(t *testing.T) {
 	current := episode.Episode{FeedID: 2, GUID: "one", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
-	states := ForEpisodes([]episode.Episode{current}, []Record{{Path: "/<HDD0>/" + media.RelativePath(current), Known: true, PlayCount: 1}})
+	resolver := media.Resolver{2: "podcast"}
+	states := ForEpisodesWithResolver([]episode.Episode{current}, []Record{{Path: "/<HDD0>/" + resolver.RelativePathFor(current), Known: true, PlayCount: 1}}, resolver)
 	state := states[current.IdentityKey()]
 	if !state.Known || !state.Played() || state.PlayCount != 1 {
 		t.Fatalf("got playback state %+v", state)
@@ -30,7 +32,7 @@ func TestForEpisodesMatchesRockboxVolumePrefixedPaths(t *testing.T) {
 
 func TestForEpisodesTreatsMissingRecordsAsUnplayed(t *testing.T) {
 	current := episode.Episode{FeedID: 2, GUID: "one", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
-	state := ForEpisodes([]episode.Episode{current}, nil)[current.IdentityKey()]
+	state := ForEpisodesWithResolver([]episode.Episode{current}, nil, media.Resolver{2: "podcast"})[current.IdentityKey()]
 	if state.Known || state.Played() {
 		t.Fatalf("got playback state %+v", state)
 	}
@@ -38,7 +40,8 @@ func TestForEpisodesTreatsMissingRecordsAsUnplayed(t *testing.T) {
 
 func TestForEpisodesDoesNotTrustUnknownRecords(t *testing.T) {
 	current := episode.Episode{FeedID: 2, GUID: "one", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
-	state := ForEpisodes([]episode.Episode{current}, []Record{{Path: "/" + media.RelativePath(current), PlayCount: 4}})[current.IdentityKey()]
+	resolver := media.Resolver{2: "podcast"}
+	state := ForEpisodesWithResolver([]episode.Episode{current}, []Record{{Path: "/" + resolver.RelativePathFor(current), PlayCount: 4}}, resolver)[current.IdentityKey()]
 	if state.Known || state.Played() {
 		t.Fatalf("got playback state %+v", state)
 	}
@@ -76,8 +79,8 @@ func TestPreferRecordsUsesFallbackForMissingPaths(t *testing.T) {
 
 func TestParseLogAggregatesRockboxPlaybackEntries(t *testing.T) {
 	log := `# Started Ver. 4.x
-	1700000000:15000:20000:/Podcasts/feed-2/episode.mp3
-	1700000100:15000:20000:/Podcasts/feed-2/episode.mp3
+	1700000000:15000:20000:/Podcasts/podcast/episode.mp3
+	1700000100:15000:20000:/Podcasts/podcast/episode.mp3
 malformed
 `
 	records, err := ParseLog(strings.NewReader(log))
@@ -93,7 +96,7 @@ malformed
 }
 
 func TestParseLogAcceptsRockboxVolumePrefixedPaths(t *testing.T) {
-	log := "1700000000:15000:20000:/<HDD0>/Podcasts/feed-2/episode.mp3\n"
+	log := "1700000000:15000:20000:/<HDD0>/Podcasts/podcast/episode.mp3\n"
 	records, err := ParseLog(strings.NewReader(log))
 	if err != nil {
 		t.Fatalf("ParseLog() returned error: %v", err)
@@ -104,7 +107,7 @@ func TestParseLogAcceptsRockboxVolumePrefixedPaths(t *testing.T) {
 }
 
 func TestParseLogRejectsBriefOrMalformedPlayback(t *testing.T) {
-	log := "1700000000:14999:20000:/Podcasts/feed-2/episode.mp3\n1700000000:20001:20000:/Podcasts/feed-2/episode.mp3\n"
+	log := "1700000000:14999:20000:/Podcasts/podcast/episode.mp3\n1700000000:20001:20000:/Podcasts/podcast/episode.mp3\n"
 	records, err := ParseLog(strings.NewReader(log))
 	if err != nil || len(records) != 0 {
 		t.Fatalf("got records %+v, error %v", records, err)

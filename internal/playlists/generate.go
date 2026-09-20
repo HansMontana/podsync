@@ -14,7 +14,11 @@ import (
 )
 
 func LogicalFeed(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State) ([]byte, error) {
-	return LogicalFeedWithResolver(cfg, current, feedID, playbackStates, nil)
+	logicalIDs, err := cfg.LogicalFeedIDs(current)
+	if err != nil {
+		return nil, err
+	}
+	return LogicalFeedWithResolver(cfg, current, feedID, playbackStates, media.Resolver(logicalIDs))
 }
 
 func LogicalFeedWithResolver(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, resolver media.Resolver) ([]byte, error) {
@@ -26,7 +30,11 @@ func LogicalFeedWithResolver(cfg config.Config, current state.State, feedID stri
 }
 
 func Briefing(cfg config.Config, current state.State, briefingID string, playbackStates map[string]playback.State) ([]byte, error) {
-	return BriefingWithResolver(cfg, current, briefingID, playbackStates, nil)
+	logicalIDs, err := cfg.LogicalFeedIDs(current)
+	if err != nil {
+		return nil, err
+	}
+	return BriefingWithResolver(cfg, current, briefingID, playbackStates, media.Resolver(logicalIDs))
 }
 
 func BriefingWithResolver(cfg config.Config, current state.State, briefingID string, playbackStates map[string]playback.State, resolver media.Resolver) ([]byte, error) {
