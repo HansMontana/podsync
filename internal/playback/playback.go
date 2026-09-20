@@ -132,6 +132,11 @@ func ForEpisodes(episodes []episode.Episode, records []Record) map[string]State 
 func normalizePath(value string) string {
 	value = strings.ReplaceAll(value, "\\", "/")
 	value = strings.TrimPrefix(value, "/")
+	if strings.HasPrefix(value, "<") {
+		if volumeEnd := strings.Index(value, ">/"); volumeEnd > 0 {
+			value = value[volumeEnd+2:]
+		}
+	}
 	clean := path.Clean(value)
 	if clean == "." || strings.HasPrefix(clean, "../") {
 		return ""

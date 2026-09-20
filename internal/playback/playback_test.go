@@ -19,6 +19,15 @@ func TestForEpisodesMatchesNormalizedDevicePaths(t *testing.T) {
 	}
 }
 
+func TestForEpisodesMatchesRockboxVolumePrefixedPaths(t *testing.T) {
+	current := episode.Episode{FeedID: 2, GUID: "one", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
+	states := ForEpisodes([]episode.Episode{current}, []Record{{Path: "/<HDD0>/" + media.RelativePath(current), Known: true, PlayCount: 1}})
+	state := states[current.IdentityKey()]
+	if !state.Known || !state.Played() || state.PlayCount != 1 {
+		t.Fatalf("got playback state %+v", state)
+	}
+}
+
 func TestForEpisodesTreatsMissingRecordsAsUnplayed(t *testing.T) {
 	current := episode.Episode{FeedID: 2, GUID: "one", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
 	state := ForEpisodes([]episode.Episode{current}, nil)[current.IdentityKey()]
@@ -80,6 +89,17 @@ malformed
 	}
 	if records[0].LastPlayed.Unix() != 1700000100 {
 		t.Fatalf("got last played %v", records[0].LastPlayed)
+	}
+}
+
+func TestParseLogAcceptsRockboxVolumePrefixedPaths(t *testing.T) {
+	log := "1700000000:15000:20000:/<HDD0>/Podcasts/feed-2/episode.mp3\n"
+	records, err := ParseLog(strings.NewReader(log))
+	if err != nil {
+		t.Fatalf("ParseLog() returned error: %v", err)
+	}
+	if len(records) != 1 || records[0].PlayCount != 1 {
+		t.Fatalf("got records %+v", records)
 	}
 }
 
