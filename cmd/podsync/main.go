@@ -405,16 +405,21 @@ func generatePlaylist(args []string, briefingMode bool) error {
 	if err != nil {
 		return err
 	}
+	logicalIDs, err := cfg.LogicalFeedIDs(current)
+	if err != nil {
+		return err
+	}
+	resolver := media.Resolver(logicalIDs)
 	records, err := loadPlaybackRecords(layout)
 	if err != nil {
 		return err
 	}
-	playbackStates := playback.ForEpisodes(current.Episodes, records)
+	playbackStates := playback.ForEpisodesWithResolver(current.Episodes, records, resolver)
 	var content []byte
 	if briefingMode {
-		content, err = playlists.Briefing(cfg, current, *id, playbackStates)
+		content, err = playlists.BriefingWithResolver(cfg, current, *id, playbackStates, resolver)
 	} else {
-		content, err = playlists.LogicalFeed(cfg, current, *id, playbackStates)
+		content, err = playlists.LogicalFeedWithResolver(cfg, current, *id, playbackStates, resolver)
 	}
 	if err != nil {
 		return err
@@ -474,11 +479,16 @@ func sync(args []string) error {
 	if err != nil {
 		return err
 	}
+	logicalIDs, err := cfg.LogicalFeedIDs(current)
+	if err != nil {
+		return err
+	}
+	resolver := media.Resolver(logicalIDs)
 	records, err := loadPlaybackRecords(layout)
 	if err != nil {
 		return err
 	}
-	states := playback.ForEpisodes(current.Episodes, records)
+	states := playback.ForEpisodesWithResolver(current.Episodes, records, resolver)
 	selected := make(map[string]episode.Episode)
 	var playlistFiles []syncer.PlaylistFile
 	var managed []string
@@ -494,7 +504,7 @@ func sync(args []string) error {
 		for _, currentEpisode := range episodes {
 			selected[currentEpisode.IdentityKey()] = currentEpisode
 		}
-		content, generateErr := playlists.LogicalFeed(cfg, current, logical.ID, states)
+		content, generateErr := playlists.LogicalFeedWithResolver(cfg, current, logical.ID, states, resolver)
 		if generateErr != nil {
 			return generateErr
 		}
@@ -510,7 +520,7 @@ func sync(args []string) error {
 		}
 		tracks := make([]playlists.Track, len(plan.Episodes))
 		for i, currentEpisode := range plan.Episodes {
-			tracks[i] = playlists.Track{Episode: currentEpisode, Path: path.Join("..", media.RelativePath(currentEpisode))}
+			tracks[i] = playlists.Track{Episode: currentEpisode, Path: path.Join("..", resolver.RelativePathFor(currentEpisode))}
 		}
 		playlistFiles = append(playlistFiles, syncer.PlaylistFile{Relative: path.Join("Playlists", playlists.Filename(configured.Title, configured.ID)+".m3u8"), Content: playlists.M3U(tracks)})
 	}
@@ -538,7 +548,7 @@ func sync(args []string) error {
 	})
 	newManaged := make([]string, 0, len(episodes)+len(playlistFiles))
 	for _, currentEpisode := range episodes {
-		newManaged = append(newManaged, media.RelativePath(currentEpisode))
+		newManaged = append(newManaged, resolver.RelativePathFor(currentEpisode))
 	}
 	for _, playlist := range playlistFiles {
 		newManaged = append(newManaged, playlist.Relative)
@@ -548,7 +558,7 @@ func sync(args []string) error {
 	if *dryRun {
 		copies := make([]syncer.FileCopy, 0, len(episodes))
 		for _, currentEpisode := range episodes {
-			copies = append(copies, syncer.FileCopy{Relative: media.RelativePath(currentEpisode)})
+			copies = append(copies, syncer.FileCopy{Relative: resolver.RelativePathFor(currentEpisode)})
 		}
 		plan, err := syncer.BuildFilePlan(managed, copies, playlistFiles, nil)
 		if err != nil {
@@ -568,7 +578,7 @@ func sync(args []string) error {
 		fmt.Printf("would select %d episodes, write %d playlists, and delete %d managed files\n", len(episodes), len(playlistFiles)-1, len(plan.Deletes))
 		return nil
 	}
-	if err := syncer.EpisodesWithProgressAndWarnings(context.Background(), httpClient, *stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, func(completed, total int, current episode.Episode, reused bool) {
+	if err := syncer.EpisodesWithResolverAndProgressAndWarnings(context.Background(), httpClient, *stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, func(completed, total int, current episode.Episode, reused bool) {
 		action := "staged"
 		if reused {
 			action = "reused"

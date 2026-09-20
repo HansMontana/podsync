@@ -45,6 +45,43 @@ func TestEpisodesStagesBeforeApplyingAndDeletesOnlyManagedFiles(t *testing.T) {
 	}
 }
 
+func TestEpisodesMigratesLegacyPathWithoutDownloading(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write([]byte("unexpected download"))
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	current := episode.Episode{FeedID: 1, GUID: "one", Title: "One", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/ogg", Length: 3}}
+	legacy := media.LegacyRelativePath(current)
+	resolver := media.Resolver{1: "news"}
+	modern := resolver.RelativePathFor(current)
+	legacyPath := filepath.Join(root, filepath.FromSlash(legacy))
+	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacyPath, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EpisodesWithResolverAndProgressAndWarnings(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, []string{legacy}, nil, resolver, nil, nil, nil); err != nil {
+		t.Fatalf("migration returned error: %v", err)
+	}
+	modernPath := filepath.Join(root, filepath.FromSlash(modern))
+	content, err := os.ReadFile(modernPath)
+	if err != nil || string(content) != "old" {
+		t.Fatalf("modern file content = %q, error = %v", content, err)
+	}
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Fatalf("legacy file remains, error: %v", err)
+	}
+	if requests.Load() != 0 {
+		t.Fatalf("migration downloaded %d times", requests.Load())
+	}
+}
+
 func TestEpisodesDoesNotChangeDeviceWhenDownloadFails(t *testing.T) {
 	server := httptest.NewServer(http.NotFoundHandler())
 	defer server.Close()

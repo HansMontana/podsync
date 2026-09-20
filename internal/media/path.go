@@ -7,15 +7,65 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"unicode"
 
 	"github.com/HansMontana/podsync/internal/episode"
 )
 
-// RelativePath returns a stable, device-relative path for an episode.
+// Resolver maps durable source-feed IDs to logical-feed IDs for device paths.
+type Resolver map[int64]string
+
+// RelativePath returns the legacy stable path used by older podsync versions.
 func RelativePath(e episode.Episode) string {
+	return LegacyRelativePath(e)
+}
+
+// LegacyRelativePath returns the old feed-N/hash.ext path for migration and
+// playback compatibility.
+func LegacyRelativePath(e episode.Episode) string {
 	sum := sha256.Sum256([]byte(e.IdentityKey()))
 	name := hex.EncodeToString(sum[:])[:16] + extension(e)
 	return path.Join("Podcasts", fmt.Sprintf("feed-%d", e.FeedID), name)
+}
+
+// RelativePathFor returns the logical-feed path for an episode.
+func (r Resolver) RelativePathFor(e episode.Episode) string {
+	logicalID := r[e.FeedID]
+	if logicalID == "" {
+		return LegacyRelativePath(e)
+	}
+
+	sum := sha256.Sum256([]byte(e.IdentityKey()))
+	hash := hex.EncodeToString(sum[:])[:12]
+	title := sanitizeTitle(e.Title)
+	date := "unknown-date"
+	if !e.PublishedAt.IsZero() {
+		date = e.PublishedAt.UTC().Format("2006-01-02")
+	}
+	name := fmt.Sprintf("%s - %s -- %s%s", title, date, hash, extension(e))
+	return path.Join("Podcasts", logicalID, name)
+}
+
+func sanitizeTitle(value string) string {
+	var result strings.Builder
+	for _, character := range strings.TrimSpace(value) {
+		if unicode.IsLetter(character) || unicode.IsNumber(character) || strings.ContainsRune(" .,_-'()&!", character) {
+			result.WriteRune(character)
+			continue
+		}
+		result.WriteRune(' ')
+	}
+	clean := strings.Join(strings.Fields(result.String()), " ")
+	clean = strings.Trim(clean, " .-_'")
+	if clean == "" {
+		return "episode"
+	}
+	const maxTitleRunes = 120
+	runes := []rune(clean)
+	if len(runes) > maxTitleRunes {
+		clean = strings.TrimSpace(string(runes[:maxTitleRunes]))
+	}
+	return clean
 }
 
 func extension(e episode.Episode) string {

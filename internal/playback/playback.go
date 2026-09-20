@@ -102,6 +102,12 @@ func PreferRecords(primary, fallback []Record) []Record {
 // Episodes without a trusted matching record remain unknown and therefore
 // unplayed.
 func ForEpisodes(episodes []episode.Episode, records []Record) map[string]State {
+	return ForEpisodesWithResolver(episodes, records, nil)
+}
+
+// ForEpisodesWithResolver matches both current logical paths and legacy paths
+// while media paths are migrated.
+func ForEpisodesWithResolver(episodes []episode.Episode, records []Record, resolver media.Resolver) map[string]State {
 	byPath := make(map[string]State, len(records))
 	for _, record := range records {
 		if !record.Known {
@@ -119,7 +125,10 @@ func ForEpisodes(episodes []episode.Episode, records []Record) map[string]State 
 
 	result := make(map[string]State, len(episodes))
 	for _, current := range episodes {
-		state, exists := byPath[normalizePath(media.RelativePath(current))]
+		state, exists := byPath[normalizePath(resolver.RelativePathFor(current))]
+		if !exists {
+			state, exists = byPath[normalizePath(media.LegacyRelativePath(current))]
+		}
 		if exists {
 			result[current.IdentityKey()] = state
 		} else {

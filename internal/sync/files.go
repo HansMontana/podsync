@@ -212,10 +212,35 @@ func validateManagedPath(relative string) error {
 	if clean != relative || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
 		return fmt.Errorf("path escapes device root: %q", relative)
 	}
-	if clean == "Podsync/managed-files.txt" || audioPathPattern.MatchString(clean) || validPlaylistPath(clean) {
+	if clean == "Podsync/managed-files.txt" || audioPathPattern.MatchString(clean) || validAudioPath(clean) || validPlaylistPath(clean) {
 		return nil
 	}
 	return fmt.Errorf("path is outside podsync-managed locations: %q", relative)
+}
+
+func validAudioPath(value string) bool {
+	parts := strings.Split(value, "/")
+	if len(parts) != 3 || parts[0] != "Podcasts" || parts[1] == "" {
+		return false
+	}
+	for _, character := range parts[1] {
+		if unicode.IsLetter(character) || unicode.IsNumber(character) || strings.ContainsRune("._-", character) {
+			continue
+		}
+		return false
+	}
+	name := parts[2]
+	extension := filepath.Ext(name)
+	if extension == "" || len(name) == len(extension) {
+		return false
+	}
+	for _, character := range strings.TrimSuffix(name, extension) {
+		if unicode.IsLetter(character) || unicode.IsNumber(character) || strings.ContainsRune(" .,_-'()&!", character) {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func validPlaylistPath(path string) bool {

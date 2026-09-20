@@ -14,25 +14,37 @@ import (
 )
 
 func LogicalFeed(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State) ([]byte, error) {
+	return LogicalFeedWithResolver(cfg, current, feedID, playbackStates, nil)
+}
+
+func LogicalFeedWithResolver(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, resolver media.Resolver) ([]byte, error) {
 	episodes, err := selection.Feed(cfg, current, feedID, playbackStates, false)
 	if err != nil {
 		return nil, fmt.Errorf("select logical feed %q: %w", feedID, err)
 	}
-	return M3U(tracks(episodes)), nil
+	return M3U(tracksWithResolver(episodes, resolver)), nil
 }
 
 func Briefing(cfg config.Config, current state.State, briefingID string, playbackStates map[string]playback.State) ([]byte, error) {
+	return BriefingWithResolver(cfg, current, briefingID, playbackStates, nil)
+}
+
+func BriefingWithResolver(cfg config.Config, current state.State, briefingID string, playbackStates map[string]playback.State, resolver media.Resolver) ([]byte, error) {
 	plan, err := briefing.Build(cfg, current, briefingID, playbackStates)
 	if err != nil {
 		return nil, fmt.Errorf("build briefing %q: %w", briefingID, err)
 	}
-	return M3U(tracks(plan.Episodes)), nil
+	return M3U(tracksWithResolver(plan.Episodes, resolver)), nil
 }
 
 func tracks(episodes []episode.Episode) []Track {
+	return tracksWithResolver(episodes, nil)
+}
+
+func tracksWithResolver(episodes []episode.Episode, resolver media.Resolver) []Track {
 	result := make([]Track, len(episodes))
 	for i, current := range episodes {
-		result[i] = Track{Episode: current, Path: path.Join("..", media.RelativePath(current))}
+		result[i] = Track{Episode: current, Path: path.Join("..", resolver.RelativePathFor(current))}
 	}
 	return result
 }

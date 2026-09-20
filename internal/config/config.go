@@ -249,6 +249,43 @@ func (c Config) EnsureSources(current state.State) (state.State, error) {
 	return result, nil
 }
 
+// LogicalFeedIDs returns the first configured logical feed ID for each durable
+// source feed. A source may have multiple logical partitions; the first one
+// owns the physical media path.
+func (c Config) LogicalFeedIDs(current state.State) (map[int64]string, error) {
+	if err := c.Validate(); err != nil {
+		return nil, fmt.Errorf("validate config: %w", err)
+	}
+	sourceURLs := make(map[string]string, len(c.Sources))
+	for _, source := range c.Sources {
+		normalized, err := feed.NormalizeURL(source.URL)
+		if err != nil {
+			return nil, fmt.Errorf("normalize source %q: %w", source.ID, err)
+		}
+		sourceURLs[source.ID] = normalized
+	}
+	feedIDs := make(map[string]int64, len(current.Feeds))
+	for _, known := range current.Feeds {
+		normalized, err := feed.NormalizeURL(known.URL)
+		if err != nil {
+			return nil, fmt.Errorf("normalize existing feed %d: %w", known.ID, err)
+		}
+		feedIDs[normalized] = known.ID
+	}
+	result := make(map[int64]string)
+	for _, logical := range c.Feeds {
+		sourceURL := sourceURLs[logical.Source]
+		feedID := feedIDs[sourceURL]
+		if feedID == 0 {
+			continue
+		}
+		if _, exists := result[feedID]; !exists {
+			result[feedID] = logical.ID
+		}
+	}
+	return result, nil
+}
+
 func containsFold(value, query string) bool {
 	return query == "" || strings.Contains(strings.ToLower(value), strings.ToLower(query))
 }

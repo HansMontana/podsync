@@ -30,16 +30,16 @@ func Episodes(ctx context.Context, client *http.Client, stagingDir, deviceRoot s
 }
 
 func EpisodesWithProgress(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, progress ProgressFunc, fileProgress FileProgressFunc) error {
-	return episodesWithProgress(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, progress, fileProgress, nil)
+	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, nil, progress, fileProgress, nil)
 }
 
 // EpisodesWithProgressAndWarnings continues past unreadable existing device
 // files, warning the caller when it must retain or replace one.
 func EpisodesWithProgressAndWarnings(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
-	return episodesWithProgress(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, progress, fileProgress, warning)
+	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, nil, progress, fileProgress, warning)
 }
 
-func episodesWithProgress(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
+func EpisodesWithResolverAndProgressAndWarnings(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver media.Resolver, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
 	var copies []FileCopy
 	var keep []string
 	var staged []string
@@ -55,19 +55,40 @@ func episodesWithProgress(ctx context.Context, client *http.Client, stagingDir, 
 			return ctx.Err()
 		default:
 		}
-		relative := media.RelativePath(current)
-		exists, err := reusableFile(deviceRoot, relative, current.Enclosure.Length)
+		relative := resolver.RelativePathFor(current)
+		sourceRelative := relative
+		exists, err := reusableFile(deviceRoot, sourceRelative, current.Enclosure.Length)
+		if !exists {
+			sourceRelative = media.LegacyRelativePath(current)
+			exists, err = reusableFile(deviceRoot, sourceRelative, current.Enclosure.Length)
+		}
 		if err != nil {
 			return fmt.Errorf("inspect existing episode %q: %w", current.Title, err)
 		}
 		if exists {
 			changed := false
-			if isMP3(current, relative) {
+			if !isMP3(current, sourceRelative) {
+				if sourceRelative == relative {
+					keep = append(keep, relative)
+				} else {
+					stagedPath, stageErr := stageExisting(deviceRoot, sourceRelative, stagingDir)
+					if stageErr != nil {
+						return fmt.Errorf("stage existing episode %q: %w", current.Title, stageErr)
+					}
+					staged = append(staged, stagedPath)
+					copies = append(copies, FileCopy{Source: stagedPath, Relative: relative})
+				}
+				if progress != nil {
+					progress(len(keep)+len(copies), len(episodes), current, sourceRelative == relative)
+				}
+				continue
+			}
+			if isMP3(current, sourceRelative) {
 				needsNormalization := true
 				var readErr *existingReadError
 				if err := retryExistingRead(ctx, func() error {
 					var err error
-					needsNormalization, err = metadata.NeedsNormalization(filepath.Join(deviceRoot, filepath.FromSlash(relative)), current)
+					needsNormalization, err = metadata.NeedsNormalization(filepath.Join(deviceRoot, filepath.FromSlash(sourceRelative)), current)
 					return err
 				}); err != nil {
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -75,7 +96,7 @@ func episodesWithProgress(ctx context.Context, client *http.Client, stagingDir, 
 					}
 					readErr = &existingReadError{err: err}
 				}
-				if readErr == nil && !needsNormalization {
+				if readErr == nil && !needsNormalization && sourceRelative == relative {
 					keep = append(keep, relative)
 					if progress != nil {
 						progress(len(keep)+len(copies), len(episodes), current, true)
@@ -87,7 +108,7 @@ func episodesWithProgress(ctx context.Context, client *http.Client, stagingDir, 
 				if readErr == nil {
 					stageErr := retryExistingRead(ctx, func() error {
 						var err error
-						stagedPath, err = stageExisting(deviceRoot, relative, stagingDir)
+						stagedPath, err = stageExisting(deviceRoot, sourceRelative, stagingDir)
 						return err
 					})
 					if stageErr != nil {
@@ -127,7 +148,7 @@ func episodesWithProgress(ctx context.Context, client *http.Client, stagingDir, 
 				if metadataErr != nil {
 					return fmt.Errorf("normalize metadata for %q: %w", current.Title, metadataErr)
 				}
-				if changed {
+				if changed || sourceRelative != relative {
 					copies = append(copies, FileCopy{Source: stagedPath, Relative: relative})
 				} else {
 					keep = append(keep, relative)

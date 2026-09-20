@@ -62,7 +62,7 @@ func TestRefreshAndSyncCommandsUseDeviceStateAndStaging(t *testing.T) {
 	if !bytes.Equal(databaseBefore, databaseAfter) || !bytes.Equal(configBefore, configAfter) {
 		t.Fatal("dry-run modified device state")
 	}
-	if files, err := filepath.Glob(filepath.Join(root, "Podcasts", "feed-1", "*")); err != nil || len(files) != 0 {
+	if files, err := filepath.Glob(filepath.Join(root, "Podcasts", "news", "*")); err != nil || len(files) != 0 {
 		t.Fatalf("dry-run changed device audio: %v, error %v", files, err)
 	}
 	if err := run([]string{"sync", "-device-root", root}); err != nil {
@@ -77,7 +77,7 @@ func TestRefreshAndSyncCommandsUseDeviceStateAndStaging(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "Playlists", "news.m3u8")); err != nil {
 		t.Fatalf("playlist was not generated: %v", err)
 	}
-	files, err := filepath.Glob(filepath.Join(root, "Podcasts", "feed-1", "*"))
+	files, err := filepath.Glob(filepath.Join(root, "Podcasts", "news", "*"))
 	if err != nil || len(files) != 1 {
 		t.Fatalf("got episode files %v, error %v", files, err)
 	}
