@@ -41,6 +41,25 @@ func TestNormalizeMP3WritesAndReusesCanonicalFields(t *testing.T) {
 	}
 }
 
+func TestNormalizeMP3UsesEpisodeAuthorForArtist(t *testing.T) {
+	path := t.TempDir() + "/episode.mp3"
+	if err := os.WriteFile(path, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := NormalizeMP3(path, "Example Podcast", episode.Episode{Title: "Episode", Author: "Episode Author"})
+	if err != nil || !changed {
+		t.Fatalf("NormalizeMP3() changed=%v error=%v", changed, err)
+	}
+	tag, err := id3v2.Open(path, id3v2.Options{Parse: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tag.Close()
+	if tag.Artist() != "Episode Author" {
+		t.Fatalf("artist = %q", tag.Artist())
+	}
+}
+
 func TestNormalizeMP3PreservesExistingMetadata(t *testing.T) {
 	path := t.TempDir() + "/episode.mp3"
 	tag := id3v2.NewEmptyTag()

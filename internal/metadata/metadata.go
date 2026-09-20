@@ -91,7 +91,11 @@ func setFields(tag *id3v2.Tag, feedName string, current episode.Episode) {
 		tag.SetAlbum(feedName)
 	}
 	if strings.TrimSpace(tag.Artist()) == "" {
-		tag.SetArtist(feedName)
+		artist := strings.TrimSpace(current.Author)
+		if artist == "" {
+			artist = feedName
+		}
+		tag.SetArtist(artist)
 	}
 	if strings.TrimSpace(tag.Genre()) == "" {
 		tag.SetGenre(genre)

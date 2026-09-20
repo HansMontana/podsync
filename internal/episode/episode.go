@@ -15,6 +15,7 @@ type Episode struct {
 	FeedID      int64
 	GUID        string
 	Title       string
+	Author      string
 	Description string
 	Enclosure   Enclosure
 	PublishedAt time.Time

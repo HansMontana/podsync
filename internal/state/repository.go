@@ -97,7 +97,7 @@ func (r *SQLiteRepository) Load() (State, error) {
 	}
 
 	rows, err = r.db.Query(`
-		SELECT feed_id, guid, title, description, audio_url, audio_type, audio_length, published_at, duration
+		SELECT feed_id, guid, title, description, audio_url, audio_type, audio_length, published_at, duration, author
 		FROM episodes
 		ORDER BY feed_id, guid, audio_url, title, published_at, duration
 	`)
@@ -111,6 +111,7 @@ func (r *SQLiteRepository) Load() (State, error) {
 		var publishedAt string
 		var audioURL, audioType string
 		var audioLength int64
+		var author string
 
 		if err := rows.Scan(
 			&e.FeedID,
@@ -122,10 +123,12 @@ func (r *SQLiteRepository) Load() (State, error) {
 			&audioLength,
 			&publishedAt,
 			&e.Duration,
+			&author,
 		); err != nil {
 			return State{}, fmt.Errorf("scan episode: %w", err)
 		}
 		e.Enclosure = episode.Enclosure{URL: audioURL, Type: audioType, Length: audioLength}
+		e.Author = author
 
 		e.PublishedAt, err = time.Parse(time.RFC3339Nano, publishedAt)
 		if err != nil {
@@ -177,9 +180,9 @@ func (r *SQLiteRepository) Save(state State) error {
 	for _, e := range state.Episodes {
 		_, err := tx.Exec(`
 			INSERT INTO episodes (
-				feed_id, guid, title, description, audio_url, audio_type, audio_length, published_at, duration
+				feed_id, guid, title, description, audio_url, audio_type, audio_length, published_at, duration, author
 			)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`,
 			e.FeedID,
 			e.GUID,
@@ -190,6 +193,7 @@ func (r *SQLiteRepository) Save(state State) error {
 			e.Enclosure.Length,
 			e.PublishedAt.UTC().Format(time.RFC3339Nano),
 			e.Duration,
+			e.Author,
 		)
 		if err != nil {
 			return fmt.Errorf("save episode for feed %d: %w", e.FeedID, err)

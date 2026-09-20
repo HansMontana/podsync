@@ -33,6 +33,10 @@ func ParseRSS(r io.Reader, f Feed) (Feed, []episode.Episode, error) {
 
 	f.URL = normalizedURL
 	f.Name = strings.TrimSpace(parsed.Title)
+	feedAuthor := authorName(parsed.Author, parsed.Authors)
+	if parsed.ITunesExt != nil && strings.TrimSpace(parsed.ITunesExt.Author) != "" {
+		feedAuthor = strings.TrimSpace(parsed.ITunesExt.Author)
+	}
 
 	episodes := make([]episode.Episode, 0, len(parsed.Items))
 	for i, item := range parsed.Items {
@@ -51,10 +55,17 @@ func ParseRSS(r io.Reader, f Feed) (Feed, []episode.Episode, error) {
 			publishedAt = item.PublishedParsed.UTC()
 		}
 
+		itemAuthor := feedAuthor
+		if item.ITunesExt != nil && strings.TrimSpace(item.ITunesExt.Author) != "" {
+			itemAuthor = strings.TrimSpace(item.ITunesExt.Author)
+		} else if author := authorName(item.Author, item.Authors); author != "" {
+			itemAuthor = author
+		}
 		episodes = append(episodes, episode.Episode{
 			FeedID:      f.ID,
 			GUID:        strings.TrimSpace(item.GUID),
 			Title:       strings.TrimSpace(item.Title),
+			Author:      itemAuthor,
 			Description: strings.TrimSpace(item.Description),
 			Enclosure: episode.Enclosure{
 				URL:    strings.TrimSpace(enclosure.URL),
@@ -67,6 +78,18 @@ func ParseRSS(r io.Reader, f Feed) (Feed, []episode.Episode, error) {
 	}
 
 	return f, episodes, nil
+}
+
+func authorName(primary *gofeed.Person, authors []*gofeed.Person) string {
+	if primary != nil && strings.TrimSpace(primary.Name) != "" {
+		return strings.TrimSpace(primary.Name)
+	}
+	for _, author := range authors {
+		if author != nil && strings.TrimSpace(author.Name) != "" {
+			return strings.TrimSpace(author.Name)
+		}
+	}
+	return ""
 }
 
 func audioEnclosure(item *gofeed.Item) (*gofeed.Enclosure, bool) {

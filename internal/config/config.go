@@ -36,6 +36,7 @@ type SourceFeed struct {
 type LogicalFeed struct {
 	ID           string `toml:"id"`
 	Title        string `toml:"title"`
+	Artist       string `toml:"artist"`
 	Source       string `toml:"source"`
 	Order        Order  `toml:"order"`
 	Limit        int    `toml:"limit"`

@@ -524,6 +524,23 @@ func sync(args []string) error {
 		}
 		playlistFiles = append(playlistFiles, syncer.PlaylistFile{Relative: path.Join("Playlists", playlists.Filename(configured.Title, configured.ID)+".m3u8"), Content: playlists.M3U(tracks)})
 	}
+	artistOverrides := make(map[int64]string)
+	for _, logical := range cfg.Feeds {
+		if logical.Artist == "" {
+			continue
+		}
+		for feedID, logicalID := range logicalIDs {
+			if logicalID == logical.ID {
+				artistOverrides[feedID] = logical.Artist
+			}
+		}
+	}
+	for identity, currentEpisode := range selected {
+		if artist := artistOverrides[currentEpisode.FeedID]; artist != "" {
+			currentEpisode.Author = artist
+			selected[identity] = currentEpisode
+		}
+	}
 	managed, err = layout.LoadManagedPaths()
 	if err != nil {
 		return err

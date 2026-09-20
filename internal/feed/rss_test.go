@@ -102,6 +102,18 @@ func TestParseRSSSelectsAudioEnclosure(t *testing.T) {
 	}
 }
 
+func TestParseRSSUsesItemAndFeedAuthors(t *testing.T) {
+	input := `<rss xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"><channel><title>Example</title><itunes:author>Feed Author</itunes:author><item><title>Episode</title><itunes:author>Episode Author</itunes:author><enclosure url="https://example.com/audio.mp3" type="audio/mpeg"/></item><item><title>Fallback</title><enclosure url="https://example.com/fallback.mp3" type="audio/mpeg"/></item></channel></rss>`
+
+	_, episodes, err := ParseRSS(strings.NewReader(input), Feed{ID: 1, URL: "https://example.com/feed.xml"})
+	if err != nil {
+		t.Fatalf("ParseRSS() returned error: %v", err)
+	}
+	if len(episodes) != 2 || episodes[0].Author != "Episode Author" || episodes[1].Author != "Feed Author" {
+		t.Fatalf("got authors %+v", episodes)
+	}
+}
+
 func TestParseRSSRejectsInvalidAudioItemDuration(t *testing.T) {
 	input := `<rss><channel><title>Example</title><item><itunes:duration>bad</itunes:duration><enclosure url="https://example.com/audio.mp3" type="audio/mpeg"/></item></channel></rss>`
 
