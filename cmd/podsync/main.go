@@ -877,6 +877,12 @@ func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, l
 	if configPath == "" {
 		configPath = layout.ConfigPath()
 	}
+	if configPath == layout.ConfigPath() {
+		if err := device.RejectSymlink(configPath); err != nil {
+			_ = repository.Close()
+			return layout, nil, config.Config{}, err
+		}
+	}
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		_ = repository.Close()
@@ -938,6 +944,9 @@ func openRepositoryModeWithLock(root string, readOnly bool, heldLock *device.Loc
 		return layout, nil, fmt.Errorf("device state directory is a symlink")
 	} else if stateErr != nil && !os.IsNotExist(stateErr) {
 		return layout, nil, fmt.Errorf("inspect device state directory: %w", stateErr)
+	}
+	if err := device.RejectSymlink(layout.DatabasePath()); err != nil {
+		return layout, nil, err
 	}
 	if !readOnly {
 		if err := os.MkdirAll(layout.StateDirectory(), 0o755); err != nil {

@@ -49,12 +49,15 @@ func VerifyManagedFiles(deviceRoot string, managed []string) error {
 		if err != nil {
 			return fmt.Errorf("resolve managed path %q: %w", relative, err)
 		}
-		info, err := os.Stat(path)
+		info, err := os.Lstat(path)
 		if os.IsNotExist(err) {
 			return fmt.Errorf("managed file is missing: %q", relative)
 		}
 		if err != nil {
 			return fmt.Errorf("inspect managed file %q: %w", relative, err)
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("managed file is a symlink: %q", relative)
 		}
 		if !info.Mode().IsRegular() || info.Size() == 0 {
 			return fmt.Errorf("managed file is not a non-empty regular file: %q", relative)

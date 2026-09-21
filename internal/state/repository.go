@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/HansMontana/podsync/internal/episode"
@@ -29,6 +30,11 @@ type SQLiteRepository struct {
 }
 
 func NewSQLiteRepository(path string) (*SQLiteRepository, error) {
+	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("state database is a symlink: %q", path)
+	} else if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("inspect state database: %w", err)
+	}
 	db, err := sql.Open("sqlite", sqliteURL(path, false))
 	if err != nil {
 		return nil, fmt.Errorf("open state database: %w", err)
@@ -52,6 +58,11 @@ func NewSQLiteRepository(path string) (*SQLiteRepository, error) {
 }
 
 func NewReadOnlySQLiteRepository(path string) (*SQLiteRepository, error) {
+	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("state database is a symlink: %q", path)
+	} else if err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("inspect state database: %w", err)
+	}
 	db, err := sql.Open("sqlite", sqliteURL(path, true))
 	if err != nil {
 		return nil, fmt.Errorf("open read-only state database: %w", err)

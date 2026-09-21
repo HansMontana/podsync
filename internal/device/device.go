@@ -93,6 +93,9 @@ func (l Layout) ClearPendingManagedPaths() error {
 }
 
 func loadPathList(path string) ([]string, error) {
+	if err := RejectSymlink(path); err != nil {
+		return nil, err
+	}
 	file, err := os.Open(path)
 	if os.IsNotExist(err) {
 		return nil, nil

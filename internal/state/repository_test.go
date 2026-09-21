@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -141,5 +142,20 @@ func TestSQLiteRepositoryCreatesSchema(t *testing.T) {
 
 	if len(state.Feeds) != 0 {
 		t.Fatalf("got %d feeds from new database, want 0", len(state.Feeds))
+	}
+}
+
+func TestSQLiteRepositoryRejectsSymlinkedDatabase(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "target.db")
+	link := filepath.Join(root, "state.db")
+	if err := os.WriteFile(target, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if _, err := NewSQLiteRepository(link); err == nil {
+		t.Fatal("NewSQLiteRepository accepted a symlinked database")
 	}
 }
