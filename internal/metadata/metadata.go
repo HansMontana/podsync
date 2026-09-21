@@ -55,7 +55,7 @@ func NormalizeMP3(path, feedName string, current episode.Episode) (bool, error) 
 
 	if string(header[:]) != "ID3" {
 		tag := id3v2.NewEmptyTag()
-		tag.SetVersion(3)
+		tag.SetVersion(4)
 		setFields(tag, feedName, current)
 		if err := prependTag(path, tag); err != nil {
 			return false, err
@@ -76,6 +76,7 @@ func NormalizeMP3(path, feedName string, current episode.Episode) (bool, error) 
 		return false, nil
 	}
 
+	tag.SetVersion(4)
 	setFields(tag, feedName, current)
 	if err := tag.Save(); err != nil {
 		return false, fmt.Errorf("save ID3 tag: %w", err)
@@ -85,17 +86,17 @@ func NormalizeMP3(path, feedName string, current episode.Episode) (bool, error) 
 
 func setFields(tag *id3v2.Tag, feedName string, current episode.Episode) {
 	if strings.TrimSpace(tag.Title()) == "" {
-		tag.SetTitle(current.Title)
+		tag.SetTitle(safeText(current.Title))
 	}
 	if strings.TrimSpace(tag.Album()) == "" {
-		tag.SetAlbum(feedName)
+		tag.SetAlbum(safeText(feedName))
 	}
 	if strings.TrimSpace(tag.Artist()) == "" {
 		artist := strings.TrimSpace(current.Author)
 		if artist == "" {
 			artist = feedName
 		}
-		tag.SetArtist(artist)
+		tag.SetArtist(safeText(artist))
 	}
 	if strings.TrimSpace(tag.Genre()) == "" {
 		tag.SetGenre(genre)
@@ -107,6 +108,10 @@ func setFields(tag *id3v2.Tag, feedName string, current episode.Episode) {
 	if strings.TrimSpace(tag.Year()) == "" {
 		tag.SetYear(year)
 	}
+}
+
+func safeText(value string) string {
+	return strings.ToValidUTF8(value, "\uFFFD")
 }
 
 func hasMissingFields(tag *id3v2.Tag, current episode.Episode) bool {

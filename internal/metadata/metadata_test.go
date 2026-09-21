@@ -60,6 +60,79 @@ func TestNormalizeMP3UsesEpisodeAuthorForArtist(t *testing.T) {
 	}
 }
 
+func TestNormalizeMP3SupportsUnicodeEpisodeTitles(t *testing.T) {
+	path := t.TempDir() + "/episode.mp3"
+	if err := os.WriteFile(path, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	title := `Immersive Remix: "Fantaisie Impromptu No. 4 in C#min, Op. 66” by Carlos Hernandez`
+	changed, err := NormalizeMP3(path, "Example Podcast", episode.Episode{Title: title})
+	if err != nil || !changed {
+		t.Fatalf("NormalizeMP3() changed=%v error=%v", changed, err)
+	}
+	tag, err := id3v2.Open(path, id3v2.Options{Parse: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tag.Close()
+	if tag.Title() != title {
+		t.Fatalf("title = %q, want %q", tag.Title(), title)
+	}
+}
+
+func TestNormalizeMP3UpgradesIncompleteTagsForUnicode(t *testing.T) {
+	path := t.TempDir() + "/episode.mp3"
+	tag := id3v2.NewEmptyTag()
+	tag.SetVersion(3)
+	tag.SetAlbum("Example Podcast")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tag.WriteTo(file); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.WriteString("audio"); err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	title := `Immersive Remix: "Fantaisie Impromptu No. 4 in C#min, Op. 66” by Carlos Hernandez`
+	changed, err := NormalizeMP3(path, "Example Podcast", episode.Episode{Title: title})
+	if err != nil || !changed {
+		t.Fatalf("NormalizeMP3() changed=%v error=%v", changed, err)
+	}
+	parsed, err := id3v2.Open(path, id3v2.Options{Parse: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer parsed.Close()
+	if parsed.Title() != title {
+		t.Fatalf("title = %q, want %q", parsed.Title(), title)
+	}
+}
+
+func TestNormalizeMP3ReplacesInvalidUTF8(t *testing.T) {
+	path := t.TempDir() + "/episode.mp3"
+	if err := os.WriteFile(path, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changed, err := NormalizeMP3(path, "Example Podcast", episode.Episode{Title: string([]byte{'E', 'p', 'i', 's', 'o', 'd', 'e', 0xff})})
+	if err != nil || !changed {
+		t.Fatalf("NormalizeMP3() changed=%v error=%v", changed, err)
+	}
+	tag, err := id3v2.Open(path, id3v2.Options{Parse: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tag.Close()
+	if tag.Title() != "Episode\uFFFD" {
+		t.Fatalf("title = %q", tag.Title())
+	}
+}
+
 func TestNormalizeMP3PreservesExistingMetadata(t *testing.T) {
 	path := t.TempDir() + "/episode.mp3"
 	tag := id3v2.NewEmptyTag()
