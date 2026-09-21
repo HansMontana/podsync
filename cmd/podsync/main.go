@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path"
@@ -375,8 +376,12 @@ func reconcile(args []string, refresh bool) error {
 }
 
 func reconcileDevice(deviceRoot, configPath string, refresh bool) error {
+	return reconcileDeviceWithLock(deviceRoot, configPath, refresh, nil)
+}
+
+func reconcileDeviceWithLock(deviceRoot, configPath string, refresh bool, lock *device.Lock) error {
 	logger := commandLogger("feed")
-	layout, repository, cfg, err := openDevice(deviceRoot, configPath, false, true)
+	layout, repository, cfg, err := openDeviceWithLock(deviceRoot, configPath, false, true, lock)
 	if err != nil {
 		return err
 	}
@@ -432,14 +437,22 @@ func update(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := reconcileDevice(resolvedRoot, *configPath, true); err != nil {
+	if err := os.MkdirAll(filepath.Join(resolvedRoot, "Podsync"), 0o755); err != nil {
+		return fmt.Errorf("prepare device lock: %w", err)
+	}
+	lock, err := device.AcquireLock(resolvedRoot)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err := reconcileDeviceWithLock(resolvedRoot, *configPath, true, lock); err != nil {
 		return fmt.Errorf("update refresh: %w", err)
 	}
 	logger.Info("Refresh complete")
 	if err := device.VerifyRootIdentity(resolvedRoot, identity); err != nil {
 		return fmt.Errorf("before update sync: %w", err)
 	}
-	if err := syncDevice(syncOptions{deviceRoot: resolvedRoot, configPath: *configPath, stagingDir: *stagingDir, verifyMedia: *verifyMedia}); err != nil {
+	if err := syncDevice(syncOptions{deviceRoot: resolvedRoot, configPath: *configPath, stagingDir: *stagingDir, verifyMedia: *verifyMedia, lock: lock, identity: identity}); err != nil {
 		return fmt.Errorf("update sync: %w", err)
 	}
 	logger.Info("Sync complete")
@@ -608,6 +621,7 @@ type syncOptions struct {
 	dryRun      bool
 	verifyMedia bool
 	lock        *device.Lock
+	identity    fs.FileInfo
 }
 
 func sync(args []string) error {
@@ -626,6 +640,15 @@ func sync(args []string) error {
 }
 
 func syncDevice(options syncOptions) error {
+	identity := options.identity
+	if identity == nil {
+		resolvedRoot, captured, err := device.ResolveRootIdentity(options.deviceRoot)
+		if err != nil {
+			return err
+		}
+		options.deviceRoot = resolvedRoot
+		identity = captured
+	}
 	deviceRoot := options.deviceRoot
 	configPath := options.configPath
 	stagingDir := options.stagingDir
@@ -757,7 +780,9 @@ func syncDevice(options syncOptions) error {
 		logger.Info(fmt.Sprintf("Dry run selected %d episodes, writes %d playlists, and deletes %d managed files", len(episodes), len(playlistFiles)-1, len(plan.Deletes)))
 		return nil
 	}
-	if err := syncer.EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), httpClient, stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, syncer.EpisodeSyncOptions{VerifyMedia: verifyMedia}, func(completed, total int, current episode.Episode, reused bool) {
+	if err := syncer.EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), httpClient, stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, syncer.EpisodeSyncOptions{VerifyMedia: verifyMedia, VerifyDevice: func() error {
+		return device.VerifyRootIdentity(layout.Root, identity)
+	}}, func(completed, total int, current episode.Episode, reused bool) {
 		if logProgress(completed, total) {
 			logger.Info(fmt.Sprintf("Prepared episodes: %d/%d", completed, total))
 		}
@@ -780,6 +805,9 @@ func syncDevice(options syncOptions) error {
 		logger.Warn(message)
 	}); err != nil {
 		return err
+	}
+	if err := device.VerifyRootIdentity(layout.Root, identity); err != nil {
+		return fmt.Errorf("before persisting sync state: %w", err)
 	}
 	if configProvided {
 		if err := config.Save(layout.ConfigPath(), cfg); err != nil {

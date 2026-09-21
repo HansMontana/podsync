@@ -22,7 +22,8 @@ type ProgressFunc func(completed, total int, current episode.Episode, reused boo
 type WarningFunc func(message string)
 
 type EpisodeSyncOptions struct {
-	VerifyMedia bool
+	VerifyMedia  bool
+	VerifyDevice func() error
 }
 
 const existingReadAttempts = 3
@@ -329,6 +330,11 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 	plan, err := BuildFilePlan(managed, copies, filterSkippedPlaylists(playlists, skipped), keep)
 	if err != nil {
 		return fmt.Errorf("build episode sync plan: %w", err)
+	}
+	if options.VerifyDevice != nil {
+		if err := options.VerifyDevice(); err != nil {
+			return fmt.Errorf("verify device before file application: %w", err)
+		}
 	}
 	if err := ApplyFilePlanWithProgress(ctx, deviceRoot, plan, fileProgress); err != nil {
 		return fmt.Errorf("apply episode sync plan: %w", err)
