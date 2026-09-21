@@ -62,7 +62,7 @@ podcast state.
 
 Requirements:
 
-- Go 1.25 or later
+- Go 1.25.7 or later
 
 Run the tests:
 
@@ -89,7 +89,9 @@ podsync update -verify-media
 ```
 
 `sync` uses already refreshed episode state. For new content, use
-`reconcile`/`feed add`, then `refresh`, then `sync`.
+`reconcile` or `feed add`, then configure a logical `[[feed]]` entry, then
+`refresh` and `sync`. Refresh fetches up to ten sources concurrently and saves
+the refreshed device state as one batch.
 
 Format and verify a change:
 

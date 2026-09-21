@@ -50,7 +50,7 @@ metadata is inspected only when `-verify-media` is supplied.
 
 Requirements:
 
-- Go 1.25 or later
+- Go 1.25.7 or later
 
 Build the command:
 
@@ -163,9 +163,11 @@ Refresh all configured source feeds:
 podsync refresh -device-root /media/hansmontana/HANSPOD
 ```
 
-`refresh` processes sources sequentially. A failure leaves earlier successful
-refreshes committed. `sync` uses stored episodes and does not fetch RSS; use
-`reconcile` or `feed add`, then `refresh`, then `sync` for new feed content.
+`refresh` fetches up to ten sources concurrently and persists the refreshed
+state as one batch. If a source fails or the command is canceled, the batch is
+not persisted. `sync` uses stored episodes and does not fetch RSS; use
+`reconcile` or `feed add`, then configure a logical `[[feed]]` entry, then
+`refresh` and `sync` for new feed content.
 
 Run the normal production workflow, which refreshes feeds, syncs selected media,
 and verifies all managed files:
@@ -199,7 +201,8 @@ The output columns are durable numeric feed ID, RSS feed name, and URL. Use the
 source ID from configuration, rather than the listed numeric ID or RSS name,
 with `feed remove -id`.
 
-Add or remove a source feed:
+Add or remove a source feed. `feed add` creates only the RSS source; add a
+logical `[[feed]]` configuration entry before `sync` can select its episodes:
 
 ```bash
 podsync feed add \
@@ -262,8 +265,8 @@ is slower on large archives. Newly downloaded MP3 files are always normalized.
 CLI logs are written to stderr in a concise timestamped format:
 
 ```text
-2026-08-17T10:51:28.508Z	INFO	sync	Starting sync
-2026-08-17T10:51:31.102Z	WARN	sync	Keeping an unreadable existing file
+2026-08-17T12:51:28.508+02:00	INFO	sync	Starting sync
+2026-08-17T12:51:31.102+02:00	WARN	sync	Keeping an unreadable existing file
 ```
 
 Help text remains plain command output. Runtime logs report command lifecycle,
