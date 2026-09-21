@@ -79,6 +79,9 @@ func run(args []string) error {
 		return nil
 	}
 	if args[0] == "help" {
+		if len(args) > 2 {
+			return fmt.Errorf("unexpected argument %q", args[2])
+		}
 		if len(args) == 1 {
 			printUsage(os.Stdout)
 			return nil
@@ -177,6 +180,9 @@ func parseFlags(flags *flag.FlagSet, args []string) (bool, error) {
 	err := flags.Parse(args)
 	if errors.Is(err, flag.ErrHelp) {
 		return true, nil
+	}
+	if err == nil && flags.NArg() > 0 {
+		return false, fmt.Errorf("unexpected argument %q", flags.Arg(0))
 	}
 	return false, err
 }

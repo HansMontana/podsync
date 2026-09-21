@@ -31,6 +31,9 @@ func NormalizeURL(raw string) (string, error) {
 	if parsed.Host == "" {
 		return "", fmt.Errorf("feed URL has no host")
 	}
+	if parsed.User != nil {
+		return "", fmt.Errorf("feed URL must not contain credentials")
+	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return "", fmt.Errorf("unsupported feed URL scheme %q", parsed.Scheme)
 	}

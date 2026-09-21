@@ -365,6 +365,15 @@ func TestCLIHelpAndUnknownCommandUsage(t *testing.T) {
 	}
 }
 
+func TestCLIRejectsUnexpectedArguments(t *testing.T) {
+	if err := run([]string{"status", "unexpected"}); err == nil {
+		t.Fatal("status accepted an unexpected argument")
+	}
+	if err := run([]string{"help", "sync", "unexpected"}); err == nil {
+		t.Fatal("help accepted an unexpected argument")
+	}
+}
+
 func TestUsageTextUsesConsistentSpaceIndentation(t *testing.T) {
 	text := usageText()
 	for _, line := range strings.Split(text, "\n") {

@@ -81,6 +81,12 @@ func TestNormalizeURLRejectsMissingScheme(t *testing.T) {
 	}
 }
 
+func TestNormalizeURLRejectsCredentials(t *testing.T) {
+	if _, err := NormalizeURL("https://user:secret@example.com/feed.xml"); err == nil {
+		t.Fatal("NormalizeURL accepted credentials")
+	}
+}
+
 func TestFeedSameIdentityUsesNormalizedURL(t *testing.T) {
 	first := Feed{
 		URL: " HTTPS://EXAMPLE.COM:443/feed.xml ",
