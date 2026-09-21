@@ -694,6 +694,11 @@ func syncDevice(options syncOptions) error {
 		if err := validateStagingDirectory(layout.Root, stagingDir); err != nil {
 			return err
 		}
+		stagingDir, err = prepareStagingDirectory(stagingDir)
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(stagingDir)
 	} else if !dryRun {
 		stagingDir, err = os.MkdirTemp("", "podsync-staging-")
 		if err != nil {
@@ -763,6 +768,28 @@ func syncDevice(options syncOptions) error {
 	}
 	logger.Info(fmt.Sprintf("Sync complete: %d episodes, %d playlists", len(episodes), len(playlistFiles)-1))
 	return nil
+}
+
+func prepareStagingDirectory(parent string) (string, error) {
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return "", fmt.Errorf("create staging parent: %w", err)
+	}
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return "", fmt.Errorf("read staging parent: %w", err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "podsync-download-") {
+			if err := os.Remove(filepath.Join(parent, entry.Name())); err != nil && !os.IsNotExist(err) {
+				return "", fmt.Errorf("remove stale staging file %q: %w", entry.Name(), err)
+			}
+		}
+	}
+	runDir, err := os.MkdirTemp(parent, "podsync-run-")
+	if err != nil {
+		return "", fmt.Errorf("create run staging directory: %w", err)
+	}
+	return runDir, nil
 }
 
 func logProgress(completed, total int) bool {

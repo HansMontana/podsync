@@ -269,6 +269,27 @@ func TestValidateStagingDirectoryRejectsDevicePaths(t *testing.T) {
 	}
 }
 
+func TestPrepareStagingDirectoryCleansOwnedFilesAndUsesRunDirectory(t *testing.T) {
+	parent := t.TempDir()
+	stale := filepath.Join(parent, "podsync-download-stale")
+	if err := os.WriteFile(stale, []byte("partial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runDir, err := prepareStagingDirectory(parent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Dir(runDir) != parent {
+		t.Fatalf("run directory %q is not under %q", runDir, parent)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Fatalf("stale staging file remains, error: %v", err)
+	}
+	if err := os.RemoveAll(runDir); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestLoadPlaybackRecordsAllowsMissingTagCache(t *testing.T) {
 	root := t.TempDir()
 	if err := os.Mkdir(filepath.Join(root, ".rockbox"), 0o755); err != nil {
