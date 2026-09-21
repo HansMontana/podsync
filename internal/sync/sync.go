@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
@@ -86,26 +87,9 @@ func RefreshFeeds(ctx context.Context, repository state.Repository, client *http
 	if err != nil {
 		return fmt.Errorf("load state for feed refresh: %w", err)
 	}
-	results := make([]RefreshResult, 0, len(requests))
-	for _, request := range requests {
-		known, err := findFeed(current, request.FeedID)
-		if err != nil {
-			return err
-		}
-		response, err := feed.FetchRSS(ctx, client, known)
-		if err != nil {
-			return fmt.Errorf("refresh feed %d: %w", request.FeedID, err)
-		}
-		if response.NotModified {
-			continue
-		}
-		refreshed, episodes, err := feed.ParseRSS(bytes.NewReader(response.Body), known)
-		if err != nil {
-			return fmt.Errorf("refresh feed %d: %w", request.FeedID, err)
-		}
-		refreshed.ETag = response.ETag
-		refreshed.LastModified = response.LastModified
-		results = append(results, RefreshResult{Feed: refreshed, Episodes: episodes, Archive: request.Archive})
+	results, err := fetchRefreshResults(ctx, client, current, requests)
+	if err != nil {
+		return err
 	}
 	for _, result := range results {
 		current, err = ApplyRefresh(current, result)
@@ -119,6 +103,86 @@ func RefreshFeeds(ctx context.Context, repository state.Repository, client *http
 		}
 	}
 	return nil
+}
+
+const refreshWorkers = 10
+
+func fetchRefreshResults(ctx context.Context, client *http.Client, current state.State, requests []RefreshRequest) ([]RefreshResult, error) {
+	if len(requests) == 0 {
+		return nil, nil
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	results := make([]RefreshResult, len(requests))
+	valid := make([]bool, len(requests))
+	jobs := make(chan int)
+	var workers sync.WaitGroup
+	var firstErr error
+	var errMu sync.Mutex
+	workerCount := refreshWorkers
+	if len(requests) < workerCount {
+		workerCount = len(requests)
+	}
+	for i := 0; i < workerCount; i++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for index := range jobs {
+				if ctx.Err() != nil {
+					continue
+				}
+				request := requests[index]
+				known, err := findFeed(current, request.FeedID)
+				if err == nil {
+					response, fetchErr := feed.FetchRSS(ctx, client, known)
+					if fetchErr != nil {
+						err = fmt.Errorf("refresh feed %d: %w", request.FeedID, fetchErr)
+					} else if !response.NotModified {
+						var episodes []episode.Episode
+						var refreshed feed.Feed
+						refreshed, episodes, err = feed.ParseRSS(bytes.NewReader(response.Body), known)
+						if err == nil {
+							refreshed.ETag = response.ETag
+							refreshed.LastModified = response.LastModified
+							results[index] = RefreshResult{Feed: refreshed, Episodes: episodes, Archive: request.Archive}
+							// Each job owns a distinct result slot; application remains ordered below.
+							valid[index] = true
+						}
+					}
+				}
+				if err != nil {
+					errMu.Lock()
+					if firstErr == nil {
+						firstErr = err
+						cancel()
+					}
+					errMu.Unlock()
+				}
+			}
+		}()
+	}
+	for index := range requests {
+		select {
+		case jobs <- index:
+		case <-ctx.Done():
+			break
+		}
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	close(jobs)
+	workers.Wait()
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	ordered := make([]RefreshResult, 0, len(requests))
+	for index := range results {
+		if valid[index] {
+			ordered = append(ordered, results[index])
+		}
+	}
+	return ordered, nil
 }
 
 type RefreshRequest struct {
