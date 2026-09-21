@@ -359,6 +359,46 @@ func TestChunkedSyncResumesBeforeFinalization(t *testing.T) {
 	}
 }
 
+func TestSingleBatchInterruptionPreservesPendingOwnership(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("audio"))
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	staging := t.TempDir()
+	resolver := media.Resolver{1: "podcast"}
+	episodeValue := episode.Episode{FeedID: 1, GUID: "episode-1", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/ogg"}}
+	relative := resolver.RelativePathFor(episodeValue)
+	playlists := []PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: []byte(relative + "\n")}}
+	ctx, cancel := context.WithCancel(context.Background())
+	err := EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, server.Client(), staging, root, []episode.Episode{episodeValue}, playlists, nil, nil, resolver, EpisodeSyncOptions{}, nil, func(progress FileProgress) {
+		if progress.Phase == "copy" {
+			cancel()
+		}
+	}, nil)
+	if err == nil {
+		t.Fatal("interrupted sync succeeded")
+	}
+	pending, err := (device.Layout{Root: root}).LoadPendingManagedPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0] != relative {
+		t.Fatalf("got pending ownership %v, want %q", pending, relative)
+	}
+	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), staging, root, []episode.Episode{episodeValue}, playlists, pending, nil, resolver, EpisodeSyncOptions{}, nil, nil, nil); err != nil {
+		t.Fatalf("resume failed: %v", err)
+	}
+	pending, err = (device.Layout{Root: root}).LoadPendingManagedPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("pending ownership remains after resume: %v", pending)
+	}
+}
+
 func TestChunkedSyncRecoversAfterFinalizationInterruption(t *testing.T) {
 	tests := []struct {
 		name        string

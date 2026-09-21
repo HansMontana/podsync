@@ -74,6 +74,13 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 		return fmt.Errorf("load pending episode ownership: %w", err)
 	}
 	pendingActive := len(pending) > 0
+	pendingPaths := pendingManagedPaths(episodes, playlists, resolver)
+	if len(pendingPaths) > 0 {
+		if err := layout.SavePendingManagedPaths(pendingPaths); err != nil {
+			return fmt.Errorf("save pending episode ownership: %w", err)
+		}
+		pendingActive = true
+	}
 	if len(chunks) <= 1 {
 		skipped := make(map[string]struct{})
 		err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, skipped, progress, fileProgress, warning)
@@ -86,9 +93,6 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 			}
 		}
 		return nil
-	}
-	if err := layout.SavePendingManagedPaths(pendingManagedPaths(episodes, playlists, resolver)); err != nil {
-		return fmt.Errorf("save pending episode ownership: %w", err)
 	}
 	skipped := make(map[string]struct{})
 
