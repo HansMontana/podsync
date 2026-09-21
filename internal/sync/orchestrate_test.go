@@ -69,6 +69,43 @@ func TestEpisodesDoesNotChangeDeviceWhenDownloadFails(t *testing.T) {
 	}
 }
 
+func TestEpisodesSkipsUnsupportedMediaAndRemovesItFromPlaylists(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/video" {
+			w.Header().Set("Content-Type", "video/mp4")
+			_, _ = w.Write([]byte("video"))
+			return
+		}
+		w.Header().Set("Content-Type", "audio/mpeg")
+		_, _ = w.Write([]byte("audio"))
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	resolver := media.Resolver{1: "podcast-1"}
+	video := episode.Episode{FeedID: 1, GUID: "video", Title: "Video", Enclosure: episode.Enclosure{URL: server.URL + "/video", Type: "audio/mpeg"}}
+	audio := episode.Episode{FeedID: 1, GUID: "audio", Title: "Audio", Enclosure: episode.Enclosure{URL: server.URL + "/audio", Type: "audio/mpeg"}}
+	videoPath := resolver.RelativePathFor(video)
+	audioPath := resolver.RelativePathFor(audio)
+	playlist := PlaylistFile{Relative: "Playlists/test.m3u8", Content: []byte("#EXTM3U\n#EXTINF:0,Video\n../" + videoPath + "\n#EXTINF:0,Audio\n../" + audioPath + "\n")}
+	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{video, audio}, []PlaylistFile{playlist}, nil); err != nil {
+		t.Fatalf("Episodes() returned error: %v", err)
+	}
+	content, err := os.ReadFile(filepath.Join(root, "Playlists/test.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(content), videoPath) || !strings.Contains(string(content), audioPath) {
+		t.Fatalf("playlist = %q", content)
+	}
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(videoPath))); !os.IsNotExist(err) {
+		t.Fatalf("unsupported media was copied, error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(audioPath))); err != nil {
+		t.Fatalf("audio was not copied: %v", err)
+	}
+}
+
 func TestEpisodesReusesExistingMatchingFile(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -75,7 +75,8 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 	}
 	pendingActive := len(pending) > 0
 	if len(chunks) <= 1 {
-		err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, progress, fileProgress, warning)
+		skipped := make(map[string]struct{})
+		err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, skipped, progress, fileProgress, warning)
 		if err != nil {
 			return err
 		}
@@ -89,13 +90,20 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 	if err := layout.SavePendingManagedPaths(pendingManagedPaths(episodes, playlists, resolver)); err != nil {
 		return fmt.Errorf("save pending episode ownership: %w", err)
 	}
+	skipped := make(map[string]struct{})
 
 	for _, chunk := range chunks {
-		if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, chunk, nil, nil, feedNames, resolver, options, progress, fileProgress, warning); err != nil {
+		if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, chunk, nil, nil, feedNames, resolver, options, skipped, progress, fileProgress, warning); err != nil {
 			return fmt.Errorf("apply episode chunk: %w", err)
 		}
 	}
-	if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, progress, fileProgress, warning); err != nil {
+	remaining := make([]episode.Episode, 0, len(episodes))
+	for _, current := range episodes {
+		if _, wasSkipped := skipped[resolver.RelativePathFor(current)]; !wasSkipped {
+			remaining = append(remaining, current)
+		}
+	}
+	if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, remaining, filterSkippedPlaylists(playlists, skipped), managed, feedNames, resolver, options, skipped, progress, fileProgress, warning); err != nil {
 		return err
 	}
 	if err := layout.ClearPendingManagedPaths(); err != nil {
@@ -115,6 +123,31 @@ func pendingManagedPaths(episodes []episode.Episode, playlists []PlaylistFile, r
 		}
 	}
 	return paths
+}
+
+func filterSkippedPlaylists(playlists []PlaylistFile, skipped map[string]struct{}) []PlaylistFile {
+	if len(skipped) == 0 {
+		return playlists
+	}
+	filtered := make([]PlaylistFile, len(playlists))
+	copy(filtered, playlists)
+	for i := range filtered {
+		lines := strings.Split(string(filtered[i].Content), "\n")
+		kept := make([]string, 0, len(lines))
+		for _, line := range lines {
+			path := strings.TrimSpace(line)
+			relative := strings.TrimPrefix(path, "../")
+			if _, remove := skipped[relative]; remove {
+				if len(kept) > 0 && strings.HasPrefix(kept[len(kept)-1], "#EXTINF:") {
+					kept = kept[:len(kept)-1]
+				}
+				continue
+			}
+			kept = append(kept, line)
+		}
+		filtered[i].Content = []byte(strings.Join(kept, "\n"))
+	}
+	return filtered
 }
 
 func missingEpisodeChunks(deviceRoot string, episodes []episode.Episode, resolver media.Resolver) ([][]episode.Episode, error) {
@@ -152,7 +185,7 @@ func missingEpisodeChunks(deviceRoot string, episodes []episode.Episode, resolve
 	return chunks, nil
 }
 
-func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver media.Resolver, options EpisodeSyncOptions, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
+func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []episode.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver media.Resolver, options EpisodeSyncOptions, skipped map[string]struct{}, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
 	var copies []FileCopy
 	var keep []string
 	var staged []string
@@ -270,6 +303,11 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 
 		stagedPath, err := download.Episode(ctx, client, current, stagingDir)
 		if err != nil {
+			if errors.Is(err, download.ErrUnsupportedMedia) || errors.Is(err, download.ErrOversizedMedia) {
+				skipped[relative] = struct{}{}
+				warn(warning, fmt.Sprintf("skipping %q: %v", current.Title, err))
+				continue
+			}
 			return fmt.Errorf("stage episode %q: %w", current.Title, err)
 		}
 		staged = append(staged, stagedPath)
@@ -284,7 +322,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 		}
 	}
 
-	plan, err := BuildFilePlan(managed, copies, playlists, keep)
+	plan, err := BuildFilePlan(managed, copies, filterSkippedPlaylists(playlists, skipped), keep)
 	if err != nil {
 		return fmt.Errorf("build episode sync plan: %w", err)
 	}
