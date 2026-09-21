@@ -61,41 +61,124 @@ func RefreshFeedWithArchive(
 	if err != nil {
 		return fmt.Errorf("refresh feed %d: %w", feedID, err)
 	}
-	if len(episodes) == 0 {
-		for _, existing := range current.Episodes {
-			if existing.FeedID == feedID {
-				return fmt.Errorf("refresh feed %d: refusing to replace existing episodes with an empty feed", feedID)
-			}
-		}
-	}
 	refreshedFeed.ETag = result.ETag
 	refreshedFeed.LastModified = result.LastModified
-	current.Feeds[feedIndex] = refreshedFeed
+	updated, err := ApplyRefresh(current, RefreshResult{Feed: refreshedFeed, Episodes: episodes, Archive: archive})
+	if err != nil {
+		return err
+	}
+	if err := repository.Save(updated); err != nil {
+		return fmt.Errorf("save refreshed feed %d: %w", feedID, err)
+	}
+	return nil
+}
 
-	previousEpisodes := append([]episode.Episode(nil), current.Episodes...)
+// RefreshResult describes one fetched and parsed source feed without persisting it.
+type RefreshResult struct {
+	Feed     feed.Feed
+	Episodes []episode.Episode
+	Archive  bool
+}
+
+// RefreshFeeds fetches and persists multiple feeds with one state load and save.
+func RefreshFeeds(ctx context.Context, repository state.Repository, client *http.Client, requests []RefreshRequest) error {
+	current, err := repository.Load()
+	if err != nil {
+		return fmt.Errorf("load state for feed refresh: %w", err)
+	}
+	results := make([]RefreshResult, 0, len(requests))
+	for _, request := range requests {
+		known, err := findFeed(current, request.FeedID)
+		if err != nil {
+			return err
+		}
+		response, err := feed.FetchRSS(ctx, client, known)
+		if err != nil {
+			return fmt.Errorf("refresh feed %d: %w", request.FeedID, err)
+		}
+		if response.NotModified {
+			continue
+		}
+		refreshed, episodes, err := feed.ParseRSS(bytes.NewReader(response.Body), known)
+		if err != nil {
+			return fmt.Errorf("refresh feed %d: %w", request.FeedID, err)
+		}
+		refreshed.ETag = response.ETag
+		refreshed.LastModified = response.LastModified
+		results = append(results, RefreshResult{Feed: refreshed, Episodes: episodes, Archive: request.Archive})
+	}
+	for _, result := range results {
+		current, err = ApplyRefresh(current, result)
+		if err != nil {
+			return err
+		}
+	}
+	if len(results) > 0 {
+		if err := repository.Save(current); err != nil {
+			return fmt.Errorf("save refreshed feeds: %w", err)
+		}
+	}
+	return nil
+}
+
+type RefreshRequest struct {
+	FeedID  int64
+	Archive bool
+}
+
+func findFeed(current state.State, feedID int64) (feed.Feed, error) {
+	for _, known := range current.Feeds {
+		if known.ID == feedID {
+			return known, nil
+		}
+	}
+	return feed.Feed{}, fmt.Errorf("refresh feed %d: feed not found", feedID)
+}
+
+// ApplyRefresh replaces one source feed in memory while retaining archive history.
+func ApplyRefresh(current state.State, result RefreshResult) (state.State, error) {
+	feedIndex := -1
+	for i, known := range current.Feeds {
+		if known.ID == result.Feed.ID {
+			feedIndex = i
+			break
+		}
+	}
+	if feedIndex == -1 {
+		return state.State{}, fmt.Errorf("refresh feed %d: feed not found", result.Feed.ID)
+	}
+
+	previousEpisodes := current.Episodes
 	retainedEpisodes := make([]episode.Episode, 0, len(previousEpisodes))
 	for _, existing := range previousEpisodes {
-		if existing.FeedID != feedID {
+		if existing.FeedID != result.Feed.ID {
 			retainedEpisodes = append(retainedEpisodes, existing)
 		}
 	}
-	if archive {
-		known := make(map[string]struct{}, len(episodes))
-		for _, refreshed := range episodes {
+	if len(result.Episodes) == 0 {
+		for _, existing := range previousEpisodes {
+			if existing.FeedID == result.Feed.ID {
+				return state.State{}, fmt.Errorf("refresh feed %d: refusing to replace existing episodes with an empty feed", result.Feed.ID)
+			}
+		}
+	}
+	if result.Archive {
+		known := make(map[string]struct{}, len(result.Episodes))
+		for _, refreshed := range result.Episodes {
 			known[refreshed.IdentityKey()] = struct{}{}
 		}
 		for _, existing := range previousEpisodes {
-			if existing.FeedID == feedID {
+			if existing.FeedID == result.Feed.ID {
 				if _, exists := known[existing.IdentityKey()]; !exists {
-					episodes = append(episodes, existing)
+					result.Episodes = append(result.Episodes, existing)
 				}
 			}
 		}
 	}
-	current.Episodes = append(retainedEpisodes, episodes...)
-
-	if err := repository.Save(current); err != nil {
-		return fmt.Errorf("save refreshed feed %d: %w", feedID, err)
+	current.Feeds[feedIndex] = result.Feed
+	current.Episodes = append(retainedEpisodes, result.Episodes...)
+	if err := current.Validate(); err != nil {
+		return state.State{}, fmt.Errorf("validate refreshed state: %w", err)
 	}
-	return nil
+	return current, nil
 }

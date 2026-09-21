@@ -370,6 +370,7 @@ func reconcileDevice(deviceRoot, configPath string, refresh bool) error {
 		logger.Info(fmt.Sprintf("Reconciled %d source feeds", len(cfg.Sources)))
 		return nil
 	}
+	requests := make([]syncer.RefreshRequest, 0, len(cfg.Sources))
 	for _, source := range cfg.Sources {
 		feedID, err := sourceID(repository, source)
 		if err != nil {
@@ -382,9 +383,12 @@ func reconcileDevice(deviceRoot, configPath string, refresh bool) error {
 				break
 			}
 		}
-		if err := syncer.RefreshFeedWithArchive(context.Background(), repository, httpClient, feedID, archive); err != nil {
-			return fmt.Errorf("refresh source %q: %w", source.ID, err)
-		}
+		requests = append(requests, syncer.RefreshRequest{FeedID: feedID, Archive: archive})
+	}
+	if err := syncer.RefreshFeeds(context.Background(), repository, httpClient, requests); err != nil {
+		return fmt.Errorf("refresh feeds: %w", err)
+	}
+	for _, source := range cfg.Sources {
 		logger.Info(fmt.Sprintf("Refreshed source %s", source.ID))
 	}
 	_ = layout

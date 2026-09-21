@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -173,5 +174,35 @@ func TestRefreshFeedMalformedRSSLeavesStateUnchanged(t *testing.T) {
 	}
 	if len(got.Episodes) != 1 || got.Episodes[0].GUID != "existing" {
 		t.Fatalf("got changed state %+v", got)
+	}
+}
+
+func TestRefreshFeedsPersistsMultipleFeedsOnce(t *testing.T) {
+	servers := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		guid := "one"
+		if r.URL.Path == "/two" {
+			guid = "two"
+		}
+		_, _ = fmt.Fprintf(w, `<rss><channel><title>%s</title><item><guid>%s</guid><title>Episode</title><enclosure url="https://example.com/%s.mp3" type="audio/mpeg"/></item></channel></rss>`, guid, guid, guid)
+	}))
+	defer servers.Close()
+
+	repository, err := state.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	if err := repository.Save(state.State{Feeds: []feed.Feed{{ID: 1, URL: servers.URL + "/one"}, {ID: 2, URL: servers.URL + "/two"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := RefreshFeeds(context.Background(), repository, servers.Client(), []RefreshRequest{{FeedID: 1}, {FeedID: 2}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := repository.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Episodes) != 2 {
+		t.Fatalf("got episodes %+v", got.Episodes)
 	}
 }
