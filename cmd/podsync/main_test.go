@@ -52,6 +52,41 @@ func TestSaveConfigThenStateWritesStateAfterConfigSuccess(t *testing.T) {
 	}
 }
 
+func TestSaveStateThenConfigRestoresStateAfterConfigFailure(t *testing.T) {
+	var order []string
+	err := saveStateThenConfig(
+		func() error {
+			order = append(order, "state")
+			return nil
+		},
+		func() error {
+			order = append(order, "config")
+			return errors.New("config failed")
+		},
+		func() error {
+			order = append(order, "restore")
+			return nil
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "state restored") {
+		t.Fatalf("got error %v", err)
+	}
+	if strings.Join(order, ",") != "state,config,restore" {
+		t.Fatalf("call order was %v", order)
+	}
+}
+
+func TestSaveStateThenConfigReportsRestoreFailure(t *testing.T) {
+	err := saveStateThenConfig(
+		func() error { return nil },
+		func() error { return errors.New("config failed") },
+		func() error { return errors.New("restore failed") },
+	)
+	if err == nil || !strings.Contains(err.Error(), "restore state") {
+		t.Fatalf("got error %v", err)
+	}
+}
+
 func TestRefreshAndSyncCommandsUseDeviceStateAndStaging(t *testing.T) {
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

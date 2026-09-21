@@ -302,6 +302,10 @@ func removeFeed(args []string) error {
 	if err != nil {
 		return err
 	}
+	previous := state.State{
+		Feeds:    append([]feed.Feed(nil), current.Feeds...),
+		Episodes: append([]episode.Episode(nil), current.Episodes...),
+	}
 	remaining := current.Feeds[:0]
 	removedIDs := make(map[int64]struct{})
 	for _, known := range current.Feeds {
@@ -319,9 +323,10 @@ func removeFeed(args []string) error {
 		}
 	}
 	current.Episodes = episodes
-	if err := saveConfigThenState(
-		func() error { return config.Save(layout.ConfigPath(), cfg) },
+	if err := saveStateThenConfig(
 		func() error { return repository.Save(current) },
+		func() error { return config.Save(layout.ConfigPath(), cfg) },
+		func() error { return repository.Save(previous) },
 	); err != nil {
 		return err
 	}
@@ -335,6 +340,19 @@ func saveConfigThenState(saveConfig func() error, saveState func() error) error 
 	}
 	if err := saveState(); err != nil {
 		return fmt.Errorf("save state after config save: %w", err)
+	}
+	return nil
+}
+
+func saveStateThenConfig(saveState func() error, saveConfig func() error, restoreState func() error) error {
+	if err := saveState(); err != nil {
+		return fmt.Errorf("save state: %w", err)
+	}
+	if err := saveConfig(); err != nil {
+		if restoreErr := restoreState(); restoreErr != nil {
+			return fmt.Errorf("save device config: %w; restore state: %v", err, restoreErr)
+		}
+		return fmt.Errorf("save device config: %w; state restored", err)
 	}
 	return nil
 }
