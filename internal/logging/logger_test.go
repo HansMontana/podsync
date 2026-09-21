@@ -13,7 +13,7 @@ func TestLoggerFormatsReadableTimestampedLines(t *testing.T) {
 	logger := &Logger{
 		output: &output,
 		now: func() time.Time {
-			return time.Date(2026, 8, 17, 10, 51, 28, 508000000, time.FixedZone("UTC", 0))
+			return time.Date(2026, 8, 17, 12, 51, 28, 508000000, time.FixedZone("CEST", 2*60*60))
 		},
 		component: "sync",
 		mu:        &sync.Mutex{},
@@ -23,9 +23,9 @@ func TestLoggerFormatsReadableTimestampedLines(t *testing.T) {
 	logger.Warn("Keeping existing file")
 	logger.Error("Sync failed")
 
-	want := "2026-08-17T10:51:28.508Z\tINFO\tsync\tStarting sync\n" +
-		"2026-08-17T10:51:28.508Z\tWARN\tsync\tKeeping existing file\n" +
-		"2026-08-17T10:51:28.508Z\tERROR\tsync\tSync failed\n"
+	want := "2026-08-17T12:51:28.508+02:00\tINFO\tsync\tStarting sync\n" +
+		"2026-08-17T12:51:28.508+02:00\tWARN\tsync\tKeeping existing file\n" +
+		"2026-08-17T12:51:28.508+02:00\tERROR\tsync\tSync failed\n"
 	if output.String() != want {
 		t.Fatalf("got %q, want %q", output.String(), want)
 	}
@@ -56,7 +56,7 @@ func TestLoggerComponentsShareSynchronizedOutput(t *testing.T) {
 		t.Fatalf("got %d log lines, want 40", len(lines))
 	}
 	for _, line := range lines {
-		if !strings.Contains(line, "Z\t") || (!strings.Contains(line, "\tsync\t") && !strings.Contains(line, "\tdevice\t")) {
+		if (!strings.Contains(line, "\tINFO\t") && !strings.Contains(line, "\tWARN\t")) || (!strings.Contains(line, "\tsync\t") && !strings.Contains(line, "\tdevice\t")) {
 			t.Fatalf("malformed log line %q", line)
 		}
 	}

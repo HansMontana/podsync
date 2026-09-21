@@ -42,5 +42,5 @@ func (l *Logger) write(level, message string) {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	_, _ = fmt.Fprintf(l.output, "%s\t%s\t%s\t%s\n", l.now().UTC().Format("2006-01-02T15:04:05.000Z"), level, component, message)
+	_, _ = fmt.Fprintf(l.output, "%s\t%s\t%s\t%s\n", l.now().Format(time.RFC3339Nano), level, component, message)
 }

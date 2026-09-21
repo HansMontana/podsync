@@ -1,6 +1,7 @@
 package state
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/HansMontana/podsync/internal/episode"
@@ -93,5 +94,18 @@ func TestStateValidateRejectsDuplicateEpisodeIdentity(t *testing.T) {
 
 	if err := state.Validate(); err == nil {
 		t.Fatal("expected duplicate episode identities to be rejected")
+	}
+}
+
+func BenchmarkStateValidateEpisodes(b *testing.B) {
+	state := State{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/feed.xml"}}}
+	for i := 0; i < 20000; i++ {
+		state.Episodes = append(state.Episodes, episode.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i)})
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if err := state.Validate(); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

@@ -17,6 +17,7 @@ type State struct {
 func (s State) Validate() error {
 	feedIDs := make(map[int64]struct{})
 	feedURLs := make(map[string]struct{})
+	episodeIDs := make(map[string]struct{}, len(s.Episodes))
 
 	for _, f := range s.Feeds {
 		if f.ID <= 0 {
@@ -40,7 +41,7 @@ func (s State) Validate() error {
 		feedURLs[normalizedURL] = struct{}{}
 	}
 
-	for i, e := range s.Episodes {
+	for _, e := range s.Episodes {
 		if _, exists := feedIDs[e.FeedID]; !exists {
 			return fmt.Errorf(
 				"episode references unknown feed ID: %d",
@@ -48,14 +49,11 @@ func (s State) Validate() error {
 			)
 		}
 
-		for j := i + 1; j < len(s.Episodes); j++ {
-			if e.SameIdentity(s.Episodes[j]) {
-				return fmt.Errorf(
-					"duplicate episode identity for feed ID: %d",
-					e.FeedID,
-				)
-			}
+		identity := e.IdentityKey()
+		if _, exists := episodeIDs[identity]; exists {
+			return fmt.Errorf("duplicate episode identity for feed ID: %d", e.FeedID)
 		}
+		episodeIDs[identity] = struct{}{}
 	}
 
 	return nil
