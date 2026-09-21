@@ -48,6 +48,7 @@ order = "newest_first"
 
 [feed.filter]
 title_contains = "World"
+title_excludes = ["World War"]
 
 [[briefing]]
 id = "morning"
@@ -64,7 +65,7 @@ unplayed_only = true
 	if err != nil {
 		t.Fatalf("Parse() returned error: %v", err)
 	}
-	if cfg.Sources[0].ID != "news" || cfg.Feeds[0].Filter.TitleContains != "World" {
+	if cfg.Sources[0].ID != "news" || cfg.Feeds[0].Filter.TitleContains != "World" || len(cfg.Feeds[0].Filter.TitleExcludes) != 1 {
 		t.Fatalf("got config %+v", cfg)
 	}
 	if cfg.Briefings[0].Sections[0].UnplayedOnly != true {

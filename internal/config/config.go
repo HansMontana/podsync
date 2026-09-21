@@ -46,8 +46,9 @@ type LogicalFeed struct {
 }
 
 type Filter struct {
-	TitleContains       string `toml:"title_contains"`
-	DescriptionContains string `toml:"description_contains"`
+	TitleContains       string   `toml:"title_contains"`
+	DescriptionContains string   `toml:"description_contains"`
+	TitleExcludes       []string `toml:"title_excludes"`
 }
 
 type Briefing struct {
@@ -209,8 +210,15 @@ func validateOrder(order Order) error {
 }
 
 func (f Filter) Matches(e episode.Episode) bool {
-	return containsFold(e.Title, f.TitleContains) &&
-		containsFold(e.Description, f.DescriptionContains)
+	if !containsFold(e.Title, f.TitleContains) || !containsFold(e.Description, f.DescriptionContains) {
+		return false
+	}
+	for _, excluded := range f.TitleExcludes {
+		if containsFold(e.Title, excluded) {
+			return false
+		}
+	}
+	return true
 }
 
 // EnsureSources adds configured source feeds that are missing from durable
