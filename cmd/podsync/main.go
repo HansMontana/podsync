@@ -411,20 +411,13 @@ func reconcileDeviceWithLock(deviceRoot, configPath string, refresh bool, lock *
 		logger.Info(fmt.Sprintf("Reconciled %d source feeds", len(cfg.Sources)))
 		return nil
 	}
-	requests := make([]syncer.RefreshRequest, 0, len(cfg.Sources))
-	for _, source := range cfg.Sources {
-		feedID, err := sourceID(repository, source)
-		if err != nil {
-			return err
-		}
-		archive := false
-		for _, logical := range cfg.Feeds {
-			if logical.Source == source.ID && logical.Archive {
-				archive = true
-				break
-			}
-		}
-		requests = append(requests, syncer.RefreshRequest{FeedID: feedID, Archive: archive})
+	current, err := repository.Load()
+	if err != nil {
+		return err
+	}
+	requests, err := refreshRequests(current, cfg)
+	if err != nil {
+		return err
 	}
 	if err := syncer.RefreshFeeds(context.Background(), repository, httpClient, requests); err != nil {
 		return fmt.Errorf("refresh feeds: %w", err)
@@ -995,22 +988,32 @@ func reconcileState(repository state.Repository, cfg config.Config) error {
 	return nil
 }
 
-func sourceID(repository state.Repository, source config.SourceFeed) (int64, error) {
-	current, err := repository.Load()
-	if err != nil {
-		return 0, err
-	}
-	normalized, err := feed.NormalizeURL(source.URL)
-	if err != nil {
-		return 0, fmt.Errorf("normalize source %q: %w", source.ID, err)
-	}
+func refreshRequests(current state.State, cfg config.Config) ([]syncer.RefreshRequest, error) {
+	byURL := make(map[string]int64, len(current.Feeds))
 	for _, known := range current.Feeds {
-		knownURL, normalizeErr := feed.NormalizeURL(known.URL)
-		if normalizeErr == nil && knownURL == normalized {
-			return known.ID, nil
+		normalized, err := feed.NormalizeURL(known.URL)
+		if err != nil {
+			return nil, fmt.Errorf("normalize existing feed %d: %w", known.ID, err)
 		}
+		byURL[normalized] = known.ID
 	}
-	return 0, fmt.Errorf("source %q was not reconciled", source.ID)
+	archiveBySource := make(map[string]bool)
+	for _, logical := range cfg.Feeds {
+		archiveBySource[logical.Source] = archiveBySource[logical.Source] || logical.Archive
+	}
+	requests := make([]syncer.RefreshRequest, 0, len(cfg.Sources))
+	for _, source := range cfg.Sources {
+		normalized, err := feed.NormalizeURL(source.URL)
+		if err != nil {
+			return nil, fmt.Errorf("normalize source %q: %w", source.ID, err)
+		}
+		feedID, exists := byURL[normalized]
+		if !exists {
+			return nil, fmt.Errorf("source %q was not reconciled", source.ID)
+		}
+		requests = append(requests, syncer.RefreshRequest{FeedID: feedID, Archive: archiveBySource[source.ID]})
+	}
+	return requests, nil
 }
 
 func appendUnique(paths []string, value string) []string {

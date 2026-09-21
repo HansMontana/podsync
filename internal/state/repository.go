@@ -80,7 +80,12 @@ func sqliteURL(path string, readOnly bool) string {
 }
 
 func (r *SQLiteRepository) Load() (State, error) {
-	rows, err := r.db.Query(`
+	tx, err := r.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		return State{}, fmt.Errorf("begin state read transaction: %w", err)
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query(`
 		SELECT id, name, url, etag, last_modified
 		FROM feeds
 		ORDER BY id
@@ -94,6 +99,7 @@ func (r *SQLiteRepository) Load() (State, error) {
 		var f feed.Feed
 
 		if err := rows.Scan(&f.ID, &f.Name, &f.URL, &f.ETag, &f.LastModified); err != nil {
+			_ = rows.Close()
 			return State{}, fmt.Errorf("scan feed: %w", err)
 		}
 
@@ -101,13 +107,14 @@ func (r *SQLiteRepository) Load() (State, error) {
 	}
 
 	if err := rows.Err(); err != nil {
+		_ = rows.Close()
 		return State{}, fmt.Errorf("iterate feeds: %w", err)
 	}
 	if err := rows.Close(); err != nil {
 		return State{}, fmt.Errorf("close feed rows: %w", err)
 	}
 
-	rows, err = r.db.Query(`
+	rows, err = tx.Query(`
 		SELECT feed_id, guid, title, description, audio_url, audio_type, audio_length, published_at, duration, author
 		FROM episodes
 		ORDER BY feed_id, guid, audio_url, title, published_at, duration
@@ -136,6 +143,7 @@ func (r *SQLiteRepository) Load() (State, error) {
 			&e.Duration,
 			&author,
 		); err != nil {
+			_ = rows.Close()
 			return State{}, fmt.Errorf("scan episode: %w", err)
 		}
 		e.Enclosure = episode.Enclosure{URL: audioURL, Type: audioType, Length: audioLength}
@@ -152,9 +160,15 @@ func (r *SQLiteRepository) Load() (State, error) {
 	if err := rows.Err(); err != nil {
 		return State{}, fmt.Errorf("iterate episodes: %w", err)
 	}
+	if err := rows.Close(); err != nil {
+		return State{}, fmt.Errorf("close episode rows: %w", err)
+	}
 
 	if err := state.Validate(); err != nil {
 		return State{}, fmt.Errorf("validate loaded state: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return State{}, fmt.Errorf("commit state read transaction: %w", err)
 	}
 	return state, nil
 }

@@ -111,7 +111,8 @@ func fetchRefreshResults(ctx context.Context, client *http.Client, current state
 	if len(requests) == 0 {
 		return nil, nil
 	}
-	ctx, cancel := context.WithCancel(ctx)
+	parentCtx := ctx
+	workerCtx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 	results := make([]RefreshResult, len(requests))
 	valid := make([]bool, len(requests))
@@ -128,13 +129,13 @@ func fetchRefreshResults(ctx context.Context, client *http.Client, current state
 		go func() {
 			defer workers.Done()
 			for index := range jobs {
-				if ctx.Err() != nil {
+				if workerCtx.Err() != nil {
 					continue
 				}
 				request := requests[index]
 				known, err := findFeed(current, request.FeedID)
 				if err == nil {
-					response, fetchErr := feed.FetchRSS(ctx, client, known)
+					response, fetchErr := feed.FetchRSS(workerCtx, client, known)
 					if fetchErr != nil {
 						err = fmt.Errorf("refresh feed %d: %w", request.FeedID, fetchErr)
 					} else if !response.NotModified {
@@ -164,15 +165,18 @@ func fetchRefreshResults(ctx context.Context, client *http.Client, current state
 	for index := range requests {
 		select {
 		case jobs <- index:
-		case <-ctx.Done():
+		case <-workerCtx.Done():
 			break
 		}
-		if ctx.Err() != nil {
+		if workerCtx.Err() != nil {
 			break
 		}
 	}
 	close(jobs)
 	workers.Wait()
+	if err := parentCtx.Err(); err != nil {
+		return nil, err
+	}
 	if firstErr != nil {
 		return nil, firstErr
 	}

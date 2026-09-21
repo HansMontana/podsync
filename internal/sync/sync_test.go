@@ -206,3 +206,53 @@ func TestRefreshFeedsPersistsMultipleFeedsOnce(t *testing.T) {
 		t.Fatalf("got episodes %+v", got.Episodes)
 	}
 }
+
+func TestRefreshFeedsCancellationDoesNotPersistPartialResults(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/fail" {
+			http.Error(w, "failed", http.StatusInternalServerError)
+			return
+		}
+		_, _ = fmt.Fprint(w, `<rss><channel><title>Updated</title><item><guid>new</guid><title>Episode</title><enclosure url="https://example.com/new.mp3" type="audio/mpeg"/></item></channel></rss>`)
+	}))
+	defer server.Close()
+	repository, err := state.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	want := state.State{Feeds: []feed.Feed{{ID: 1, URL: server.URL + "/ok"}, {ID: 2, URL: server.URL + "/fail"}}, Episodes: []episode.Episode{{FeedID: 1, GUID: "old"}}}
+	if err := repository.Save(want); err != nil {
+		t.Fatal(err)
+	}
+	if err := RefreshFeeds(context.Background(), repository, server.Client(), []RefreshRequest{{FeedID: 1}, {FeedID: 2}}); err == nil {
+		t.Fatal("RefreshFeeds accepted a failed worker")
+	}
+	got, err := repository.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Episodes) != 1 || got.Episodes[0].GUID != "old" {
+		t.Fatalf("failed batch changed state: %+v", got)
+	}
+}
+
+func TestRefreshFeedsReturnsParentCancellation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("canceled refresh made an HTTP request")
+	}))
+	defer server.Close()
+	repository, err := state.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer repository.Close()
+	if err := repository.Save(state.State{Feeds: []feed.Feed{{ID: 1, URL: server.URL}}}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := RefreshFeeds(ctx, repository, server.Client(), []RefreshRequest{{FeedID: 1}}); err == nil {
+		t.Fatal("canceled RefreshFeeds returned nil")
+	}
+}
