@@ -322,6 +322,8 @@ deleted.
 
 ## Current Limitations
 
+- Database migrations are forward-only. Downgrading podsync requires restoring
+  a device backup made with the older version.
 - Automatic mounting and ejection are not implemented.
 - Automatic detection requires a single mounted device in a standard location,
   or `PODSYNC_DEVICE_ROOT` for a non-standard location.
