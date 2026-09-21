@@ -31,6 +31,24 @@ import (
 
 var httpClient = &http.Client{Timeout: 10 * time.Minute}
 
+type lockedRepository struct {
+	state.Repository
+	lock  *device.Lock
+	owned bool
+}
+
+func (r *lockedRepository) Close() error {
+	repositoryErr := r.Repository.Close()
+	var lockErr error
+	if r.owned {
+		lockErr = r.lock.Close()
+	}
+	if repositoryErr != nil {
+		return repositoryErr
+	}
+	return lockErr
+}
+
 func main() {
 	logger := commandLogger("cli")
 	started := time.Now()
@@ -589,6 +607,7 @@ type syncOptions struct {
 	stagingDir  string
 	dryRun      bool
 	verifyMedia bool
+	lock        *device.Lock
 }
 
 func sync(args []string) error {
@@ -615,7 +634,7 @@ func syncDevice(options syncOptions) error {
 	configProvided := configPath != ""
 	logger := logging.New(os.Stderr).WithComponent("sync")
 	logger.Info("Starting sync")
-	layout, repository, cfg, err := openDevice(deviceRoot, configPath, dryRun, false)
+	layout, repository, cfg, err := openDeviceWithLock(deviceRoot, configPath, dryRun, false, options.lock)
 	if err != nil {
 		return err
 	}
@@ -801,7 +820,11 @@ func logProgress(completed, total int) bool {
 }
 
 func openDevice(root, configPath string, readOnly, persistConfig bool) (device.Layout, state.Repository, config.Config, error) {
-	layout, repository, err := openRepositoryMode(root, readOnly)
+	return openDeviceWithLock(root, configPath, readOnly, persistConfig, nil)
+}
+
+func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, lock *device.Lock) (device.Layout, state.Repository, config.Config, error) {
+	layout, repository, err := openRepositoryModeWithLock(root, readOnly, lock)
 	if err != nil {
 		return layout, nil, config.Config{}, err
 	}
@@ -842,6 +865,10 @@ func validateStagingDirectory(deviceRoot, stagingDir string) error {
 }
 
 func openRepositoryMode(root string, readOnly bool) (device.Layout, state.Repository, error) {
+	return openRepositoryModeWithLock(root, readOnly, nil)
+}
+
+func openRepositoryModeWithLock(root string, readOnly bool, heldLock *device.Lock) (device.Layout, state.Repository, error) {
 	if root == "" {
 		var err error
 		root, err = device.ResolveRoot("")
@@ -871,6 +898,13 @@ func openRepositoryMode(root string, readOnly bool) (device.Layout, state.Reposi
 			return layout, nil, fmt.Errorf("create device state directory: %w", err)
 		}
 	}
+	var lock *device.Lock
+	if !readOnly && heldLock == nil {
+		lock, err = device.AcquireLock(root)
+		if err != nil {
+			return layout, nil, err
+		}
+	}
 	var repository state.Repository
 	if readOnly {
 		repository, err = state.NewReadOnlySQLiteRepository(layout.DatabasePath())
@@ -878,7 +912,15 @@ func openRepositoryMode(root string, readOnly bool) (device.Layout, state.Reposi
 		repository, err = state.NewSQLiteRepository(layout.DatabasePath())
 	}
 	if err != nil {
+		if lock != nil {
+			_ = lock.Close()
+		}
 		return layout, nil, err
+	}
+	if lock != nil {
+		repository = &lockedRepository{Repository: repository, lock: lock, owned: true}
+	} else if heldLock != nil {
+		repository = &lockedRepository{Repository: repository, lock: heldLock}
 	}
 	return layout, repository, nil
 }
