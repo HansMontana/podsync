@@ -79,8 +79,8 @@ func TestPreferRecordsUsesFallbackForMissingPaths(t *testing.T) {
 
 func TestParseLogAggregatesRockboxPlaybackEntries(t *testing.T) {
 	log := `# Started Ver. 4.x
-	1700000000:15000:20000:/Podcasts/podcast/episode.mp3
-	1700000100:15000:20000:/Podcasts/podcast/episode.mp3
+	1700000000:18000:20000:/Podcasts/podcast/episode.mp3
+	1700000100:18000:20000:/Podcasts/podcast/episode.mp3
 malformed
 `
 	records, err := ParseLog(strings.NewReader(log))
@@ -96,7 +96,7 @@ malformed
 }
 
 func TestParseLogAcceptsRockboxVolumePrefixedPaths(t *testing.T) {
-	log := "1700000000:15000:20000:/<HDD0>/Podcasts/podcast/episode.mp3\n"
+	log := "1700000000:18000:20000:/<HDD0>/Podcasts/podcast/episode.mp3\n"
 	records, err := ParseLog(strings.NewReader(log))
 	if err != nil {
 		t.Fatalf("ParseLog() returned error: %v", err)
@@ -107,10 +107,28 @@ func TestParseLogAcceptsRockboxVolumePrefixedPaths(t *testing.T) {
 }
 
 func TestParseLogRejectsBriefOrMalformedPlayback(t *testing.T) {
-	log := "1700000000:14999:20000:/Podcasts/podcast/episode.mp3\n1700000000:20001:20000:/Podcasts/podcast/episode.mp3\n"
+	log := "1700000000:17999:20000:/Podcasts/podcast/episode.mp3\n1700000000:20001:20000:/Podcasts/podcast/episode.mp3\n"
 	records, err := ParseLog(strings.NewReader(log))
 	if err != nil || len(records) != 0 {
 		t.Fatalf("got records %+v, error %v", records, err)
+	}
+}
+
+func TestParseLogRequiresNinetyPercentCompletion(t *testing.T) {
+	log := "1700000000:8999:10000:/Podcasts/podcast/short.mp3\n" +
+		"1700000001:9000:10000:/Podcasts/podcast/exact.mp3\n" +
+		"1700000002:10000:10000:/Podcasts/podcast/full.mp3\n"
+	records, err := ParseLog(strings.NewReader(log))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("got records %+v", records)
+	}
+	for _, record := range records {
+		if strings.HasSuffix(record.Path, "short.mp3") {
+			t.Fatalf("accepted sub-90%% playback: %+v", record)
+		}
 	}
 }
 

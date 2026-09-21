@@ -26,7 +26,8 @@ func ParseLog(reader io.Reader) ([]Record, error) {
 		timestamp, timestampErr := strconv.ParseInt(parts[0], 10, 64)
 		elapsed, elapsedErr := strconv.ParseInt(parts[1], 10, 64)
 		length, lengthErr := strconv.ParseInt(parts[2], 10, 64)
-		if timestampErr != nil || elapsedErr != nil || lengthErr != nil || timestamp <= 0 || elapsed < 15_000 || length <= 0 || elapsed > length || strings.TrimSpace(parts[3]) == "" {
+		minimumPlayed := length - length/10
+		if timestampErr != nil || elapsedErr != nil || lengthErr != nil || timestamp <= 0 || elapsed <= 0 || length <= 0 || elapsed > length || strings.TrimSpace(parts[3]) == "" || elapsed < minimumPlayed {
 			continue
 		}
 		key := normalizePath(parts[3])

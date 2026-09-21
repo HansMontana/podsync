@@ -280,6 +280,10 @@ Sources are used in this order:
    TagCache record; otherwise the log fills paths missing from TagCache.
 3. Missing or untrusted records are treated as unplayed.
 
+A playback-log entry counts as played only when at least 90% of the episode
+duration was reached. Short previews and abandoned partial listens remain
+unplayed.
+
 Rockbox playback logging can be enabled from its playback/settings menu. The
 log is useful for newly played files before TagCache is refreshed.
 
