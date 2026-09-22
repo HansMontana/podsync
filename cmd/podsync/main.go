@@ -483,6 +483,12 @@ func runUpdate(ctx context.Context, options updateOptions) error {
 	if err != nil {
 		return err
 	}
+	if options.identity != nil {
+		if err := device.VerifyRootIdentity(resolvedRoot, options.identity); err != nil {
+			return fmt.Errorf("verify detected device: %w", err)
+		}
+		identity = options.identity
+	}
 	if err := os.MkdirAll(filepath.Join(resolvedRoot, "Podsync"), 0o755); err != nil {
 		return fmt.Errorf("prepare device lock: %w", err)
 	}
@@ -608,17 +614,18 @@ func daemonLoop(ctx context.Context, options daemonOptions, detect daemonDetecto
 				configPath:      options.configPath,
 				stagingDir:      options.stagingDir,
 				skipVerifyMedia: options.skipVerifyMedia,
+				identity:        current.identity,
 			})
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			if ctx.Err() != nil {
 				return nil
 			}
 			if err != nil && logger != nil {
 				logger.Error("Update failed: " + err.Error())
 			} else if logger != nil {
 				logger.Info("Update complete for device session")
+				deviceSession := current
+				session = &deviceSession
 			}
-			deviceSession := current
-			session = &deviceSession
 		}
 
 		select {

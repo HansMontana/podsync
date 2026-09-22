@@ -55,6 +55,35 @@ func TestDaemonRunsOncePerDeviceSession(t *testing.T) {
 	}
 }
 
+func TestDaemonRetriesFailedUpdateBeforeCompletingSession(t *testing.T) {
+	root := t.TempDir()
+	identity, err := os.Stat(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current := daemonDevice{root: root, identity: identity}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runs := 0
+
+	err = daemonLoop(ctx, daemonOptions{pollInterval: time.Millisecond}, func() (daemonDevice, bool, error) {
+		return current, true, nil
+	}, func(context.Context, updateOptions) error {
+		runs++
+		if runs == 1 {
+			return errors.New("transient update failure")
+		}
+		cancel()
+		return nil
+	}, nil)
+	if err != nil {
+		t.Fatalf("daemonLoop() returned error: %v", err)
+	}
+	if runs != 2 {
+		t.Fatalf("daemon ran %d times, want retry followed by success", runs)
+	}
+}
+
 func TestSaveConfigThenStateDoesNotWriteStateAfterConfigFailure(t *testing.T) {
 	expected := errors.New("config failed")
 	stateCalled := false
