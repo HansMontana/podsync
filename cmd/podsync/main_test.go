@@ -155,7 +155,7 @@ func TestRefreshAndSyncCommandsUseDeviceStateAndStaging(t *testing.T) {
 	}
 }
 
-func TestUpdateCommandRunsShallowAndDeepWorkflows(t *testing.T) {
+func TestUpdateCommandRunsDeepVerificationByDefaultAndSupportsOptOut(t *testing.T) {
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/episode.mp3" {
@@ -179,10 +179,13 @@ func TestUpdateCommandRunsShallowAndDeepWorkflows(t *testing.T) {
 	}
 
 	if err := run([]string{"update", "-device-root", root, "-config", hostConfig}); err != nil {
-		t.Fatalf("shallow update failed: %v", err)
+		t.Fatalf("default update failed: %v", err)
 	}
-	if err := run([]string{"update", "-device-root", root, "-verify-media"}); err != nil {
-		t.Fatalf("deep update failed: %v", err)
+	if err := run([]string{"update", "-device-root", root}); err != nil {
+		t.Fatalf("default deep update failed: %v", err)
+	}
+	if err := run([]string{"update", "-device-root", root, "-skip-verify-media"}); err != nil {
+		t.Fatalf("opt-out update failed: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "Podsync", "managed-files.txt")); err != nil {
 		t.Fatalf("update did not finalize the manifest: %v", err)

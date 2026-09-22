@@ -80,12 +80,13 @@ podsync feed list -device-root /media/ipod
 podsync sync -device-root /media/ipod -dry-run
 ```
 
-For a configured device, `update` combines refresh, sync, and final device
-verification. Add `-verify-media` for deep existing-MP3 metadata verification:
+For a configured device, `update` combines refresh, sync, deep verification of
+selected existing MP3s, and final device verification. Use
+`-skip-verify-media` to skip deep existing-MP3 metadata verification:
 
 ```bash
 podsync update
-podsync update -verify-media
+podsync update -skip-verify-media
 ```
 
 `sync` uses already refreshed episode state. For new content, use
@@ -100,11 +101,11 @@ go fmt ./...
 git diff --check
 ```
 
-Normal syncs reuse existing media with fast filesystem checks. Use
-`-verify-media` to inspect existing MP3 tags and repair missing metadata. Large
-transfers are processed in batches targeting 5 GiB or 200 episodes, whichever
-comes first. `podsync verify` checks all manifest-managed files without changing
-the device. CLI logs use timestamped `INFO`, `WARN`, and `ERROR` lines on stderr;
+Normal syncs inspect selected existing MP3 tags and repair missing metadata.
+Use `-skip-verify-media` to use fast filesystem checks only. Large transfers
+are processed in batches targeting 5 GiB or 200 episodes, whichever comes
+first. `podsync verify` checks all manifest-managed files without changing the
+device. CLI logs use timestamped `INFO`, `WARN`, and `ERROR` lines on stderr;
 help text remains plain command output.
 
 ## AI and agentic development disclosure

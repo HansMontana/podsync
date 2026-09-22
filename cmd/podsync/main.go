@@ -146,7 +146,7 @@ func printCommandHelp(command string) error {
 	case "refresh":
 		text = "Usage: podsync refresh [-device-root PATH] [-config PATH]\n\nReconcile and refresh all configured source feeds."
 	case "update":
-		text = "Usage: podsync update [-device-root PATH] [-config PATH] [-staging PATH] [-verify-media]\n\nRefresh feeds, sync selected media, and verify the device."
+		text = "Usage: podsync update [-device-root PATH] [-config PATH] [-staging PATH] [-skip-verify-media]\n\nRefresh feeds, sync selected media, and verify the device."
 	case "status":
 		text = "Usage: podsync status [-device-root PATH]\n\nShow feed, episode, and playback counts."
 	case "verify":
@@ -158,7 +158,7 @@ func printCommandHelp(command string) error {
 	case "briefing":
 		text = "Usage: podsync briefing [-device-root PATH] -id BRIEFING [-config PATH]\n\nGenerate one briefing playlist."
 	case "sync":
-		text = "Usage: podsync sync [-device-root PATH] [-config PATH] [-staging PATH] [-dry-run] [-verify-media]\n\nApply selected audio, playlists, and managed-file cleanup."
+		text = "Usage: podsync sync [-device-root PATH] [-config PATH] [-staging PATH] [-dry-run] [-skip-verify-media]\n\nApply selected audio, playlists, and managed-file cleanup."
 	default:
 		return fmt.Errorf("unknown help topic %q\n\n%s", command, usageText())
 	}
@@ -436,11 +436,11 @@ func reconcileDeviceWithLock(deviceRoot, configPath string, refresh bool, lock *
 }
 
 func update(args []string) error {
-	flags := newFlagSet("update", "Usage: podsync update [-device-root PATH] [-config PATH] [-staging PATH] [-verify-media]")
+	flags := newFlagSet("update", "Usage: podsync update [-device-root PATH] [-config PATH] [-staging PATH] [-skip-verify-media]")
 	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
 	configPath := flags.String("config", "", "path to podsync TOML configuration (defaults to device config)")
 	stagingDir := flags.String("staging", "", "host-side staging directory (defaults to a temporary directory)")
-	verifyMedia := flags.Bool("verify-media", false, "inspect existing MP3 metadata and repair missing fields")
+	skipVerifyMedia := flags.Bool("skip-verify-media", false, "skip inspection and repair of existing MP3 metadata")
 	if help, err := parseFlags(flags, args); err != nil {
 		return err
 	} else if help {
@@ -469,7 +469,7 @@ func update(args []string) error {
 	if err := device.VerifyRootIdentity(resolvedRoot, identity); err != nil {
 		return fmt.Errorf("before update sync: %w", err)
 	}
-	if err := syncDevice(syncOptions{deviceRoot: resolvedRoot, configPath: *configPath, stagingDir: *stagingDir, verifyMedia: *verifyMedia, lock: lock, identity: identity}); err != nil {
+	if err := syncDevice(syncOptions{deviceRoot: resolvedRoot, configPath: *configPath, stagingDir: *stagingDir, skipVerifyMedia: *skipVerifyMedia, lock: lock, identity: identity}); err != nil {
 		return fmt.Errorf("update sync: %w", err)
 	}
 	logger.Info("Sync complete")
@@ -632,28 +632,28 @@ func generatePlaylist(args []string, briefingMode bool) error {
 }
 
 type syncOptions struct {
-	deviceRoot  string
-	configPath  string
-	stagingDir  string
-	dryRun      bool
-	verifyMedia bool
-	lock        *device.Lock
-	identity    fs.FileInfo
+	deviceRoot      string
+	configPath      string
+	stagingDir      string
+	dryRun          bool
+	skipVerifyMedia bool
+	lock            *device.Lock
+	identity        fs.FileInfo
 }
 
 func sync(args []string) error {
-	flags := newFlagSet("sync", "Usage: podsync sync -device-root PATH [-config PATH] [-staging PATH] [-dry-run] [-verify-media]")
+	flags := newFlagSet("sync", "Usage: podsync sync -device-root PATH [-config PATH] [-staging PATH] [-dry-run] [-skip-verify-media]")
 	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
 	configPath := flags.String("config", "", "path to podsync TOML configuration (defaults to device config)")
 	stagingDir := flags.String("staging", "", "host-side staging directory (defaults to a temporary directory)")
 	dryRun := flags.Bool("dry-run", false, "show the sync plan without downloading or changing the device")
-	verifyMedia := flags.Bool("verify-media", false, "inspect existing MP3 metadata and repair missing fields")
+	skipVerifyMedia := flags.Bool("skip-verify-media", false, "skip inspection and repair of existing MP3 metadata")
 	if help, err := parseFlags(flags, args); err != nil {
 		return err
 	} else if help {
 		return nil
 	}
-	return syncDevice(syncOptions{deviceRoot: *deviceRoot, configPath: *configPath, stagingDir: *stagingDir, dryRun: *dryRun, verifyMedia: *verifyMedia})
+	return syncDevice(syncOptions{deviceRoot: *deviceRoot, configPath: *configPath, stagingDir: *stagingDir, dryRun: *dryRun, skipVerifyMedia: *skipVerifyMedia})
 }
 
 func syncDevice(options syncOptions) error {
@@ -670,7 +670,7 @@ func syncDevice(options syncOptions) error {
 	configPath := options.configPath
 	stagingDir := options.stagingDir
 	dryRun := options.dryRun
-	verifyMedia := options.verifyMedia
+	verifyMedia := !options.skipVerifyMedia
 	configProvided := configPath != ""
 	logger := logging.New(os.Stderr).WithComponent("sync")
 	logger.Info("Starting sync")

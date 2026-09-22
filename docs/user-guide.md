@@ -34,17 +34,16 @@ Before the first real sync:
 4. Review the selected episode, playlist, and deletion counts.
 5. Run `sync` only after the plan is acceptable.
 
-Normal syncs reuse existing media with fast filesystem checks. Use
-`-verify-media` to inspect existing MP3 tags and repair missing metadata. Large
-transfers are processed in batches targeting 5 GiB or 200 episodes, whichever
-comes first.
+Normal syncs inspect selected existing MP3 tags and repair missing metadata.
+Use `-skip-verify-media` to use fast filesystem checks only. Large transfers are
+processed in batches targeting 5 GiB or 200 episodes, whichever comes first.
 
 Only manifest-listed podsync paths are eligible for deletion. Podsync does not
 delete `AUDIO/`, `iPod_Control/`, or other files created outside podsync. Sync
 can write or replace its selected generated `Podcasts/<logical-feed>/...` and
 `Playlists/...` destinations even when they were not in an earlier manifest.
 Existing generated audio is reused when it is a non-empty regular file. MP3
-metadata is inspected only when `-verify-media` is supplied.
+metadata is inspected by default for selected existing episodes.
 
 ## Build
 
@@ -176,10 +175,10 @@ and verifies all managed files:
 podsync update
 ```
 
-For deep existing-MP3 metadata verification:
+Deep existing-MP3 metadata verification runs by default. To skip it:
 
 ```bash
-podsync update -verify-media
+podsync update -skip-verify-media
 ```
 
 The update workflow stops if refresh or sync fails. Final device verification is
@@ -256,9 +255,9 @@ succeed. A supplied configuration and reconciled state are persisted after file
 application succeeds; a final persistence failure can leave new files with the
 previous configuration/state and is recoverable by rerunning sync.
 
-Normal syncs reuse existing media with fast filesystem checks. Use
-`-verify-media` to inspect existing MP3 tags and repair missing metadata; this
-is slower on large archives. Newly downloaded MP3 files are always normalized.
+Normal syncs inspect selected existing MP3 tags and repair missing metadata; use
+`-skip-verify-media` to avoid this work when needed. This is slower on large
+archives. Newly downloaded MP3 files are always normalized.
 
 ## Logging
 
@@ -304,7 +303,7 @@ files.
 During sync, podsync normalizes metadata on MP3 files using the RSS episode and
 feed state. The episode title is written as the title, the feed name as album
 and artist, `Podcast` as genre, and the publication year when available. Existing
-managed MP3 files are checked only with `-verify-media`. Other audio formats are
+selected managed MP3 files are checked by default. Other audio formats are
 copied without metadata changes.
 
 ## Storage and Deletion
