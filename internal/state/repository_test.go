@@ -234,6 +234,44 @@ func TestSQLiteRepositoryUpgradesVersionOneDatabase(t *testing.T) {
 	}
 }
 
+func TestReadOnlySQLiteRepositoryOpensCurrentSchema(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "state.db")
+	createCurrentRepository(t, dbPath).Close()
+
+	repository, err := NewReadOnlySQLiteRepository(dbPath)
+	if err != nil {
+		t.Fatalf("NewReadOnlySQLiteRepository() returned error: %v", err)
+	}
+	defer repository.Close()
+	if _, err := repository.Load(); err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+}
+
+func TestReadOnlySQLiteRepositoryRejectsOlderSchema(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "state.db")
+	repository, err := newSQLiteRepository(dbPath, versionOneMigrations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := NewReadOnlySQLiteRepository(dbPath); !errors.Is(err, ErrIncompatibleSchema) {
+		t.Fatalf("NewReadOnlySQLiteRepository() error = %v, want schema compatibility error", err)
+	}
+}
+
+func TestReadOnlySQLiteRepositoryRejectsNewerSchema(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "state.db")
+	createCurrentRepository(t, dbPath).Close()
+
+	if _, err := newReadOnlySQLiteRepository(dbPath, versionOneMigrations()); !errors.Is(err, ErrIncompatibleSchema) {
+		t.Fatalf("newReadOnlySQLiteRepository() error = %v, want schema compatibility error", err)
+	}
+}
+
 func TestSQLiteRepositoryRejectsNewerDatabaseBeforeWrites(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "state.db")
 	repository, err := NewSQLiteRepository(dbPath)
@@ -275,6 +313,49 @@ func TestSQLiteRepositoryRejectsNewerDatabaseBeforeWrites(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("migration version 2 count = %d, want 1", count)
 	}
+}
+
+func TestSQLiteRepositoryFailedMigrationRollsBackAndCanResume(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "state.db")
+	repository, err := newSQLiteRepository(dbPath, versionOneMigrations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := newSQLiteRepository(dbPath, failingMigrationSet()); err == nil {
+		t.Fatal("newSQLiteRepository() accepted a failed migration")
+	}
+	check := openSQLiteFile(t, dbPath)
+	var attempted int
+	if err := check.QueryRow("SELECT count(*) FROM pragma_table_info('episodes') WHERE name = 'attempted'").Scan(&attempted); err != nil {
+		check.Close()
+		t.Fatal(err)
+	}
+	if attempted != 0 {
+		check.Close()
+		t.Fatal("failed migration schema change was not rolled back")
+	}
+	var applied int
+	if err := check.QueryRow("SELECT count(*) FROM goose_db_version WHERE version_id = 2").Scan(&applied); err != nil {
+		check.Close()
+		t.Fatal(err)
+	}
+	if applied != 0 {
+		check.Close()
+		t.Fatalf("failed migration version was recorded: %d", applied)
+	}
+	if err := check.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	repository, err = NewSQLiteRepository(dbPath)
+	if err != nil {
+		t.Fatalf("database did not resume after failed migration: %v", err)
+	}
+	defer repository.Close()
 }
 
 func TestSQLiteRepositoryAllowsHistoricalMigrationRows(t *testing.T) {
@@ -428,6 +509,20 @@ func versionOneMigrations() fstest.MapFS {
 	return fstest.MapFS{
 		"migrations/001_initial.sql": &fstest.MapFile{Data: data},
 	}
+}
+
+func failingMigrationSet() fstest.MapFS {
+	result := versionOneMigrations()
+	result["migrations/002_failing.sql"] = &fstest.MapFile{Data: []byte(`-- +goose Up
+
+ALTER TABLE episodes ADD COLUMN attempted TEXT;
+SELECT podsync_test_failure;
+
+-- +goose Down
+
+SELECT podsync_test_failure;
+`)}
+	return result
 }
 
 func migrationFSForProvider(t *testing.T) fs.FS {

@@ -64,11 +64,19 @@ func newSQLiteRepository(path string, migrationsFS fs.FS) (*SQLiteRepository, er
 		_ = db.Close()
 		return nil, fmt.Errorf("run state migrations: %w", err)
 	}
+	if err := validateDatabaseCompatibility(path, provider.ListSources()); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("validate migrated state database: %w", err)
+	}
 
 	return &SQLiteRepository{db: db}, nil
 }
 
 func NewReadOnlySQLiteRepository(path string) (*SQLiteRepository, error) {
+	return newReadOnlySQLiteRepository(path, migrationFS)
+}
+
+func newReadOnlySQLiteRepository(path string, migrationsFS fs.FS) (*SQLiteRepository, error) {
 	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
 		return nil, fmt.Errorf("state database is a symlink: %q", path)
 	} else if err != nil && !os.IsNotExist(err) {
@@ -78,7 +86,7 @@ func NewReadOnlySQLiteRepository(path string) (*SQLiteRepository, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open read-only state database: %w", err)
 	}
-	migrations, err := fs.Sub(migrationFS, "migrations")
+	migrations, err := fs.Sub(migrationsFS, "migrations")
 	if err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("open embedded migrations: %w", err)
@@ -97,7 +105,34 @@ func NewReadOnlySQLiteRepository(path string) (*SQLiteRepository, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("%w: read-only repository requires an initialized database", ErrIncompatibleSchema)
 	}
+	if err := validateReadableSchema(db); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	return &SQLiteRepository{db: db}, nil
+}
+
+func validateReadableSchema(db *sql.DB) error {
+	rows, err := db.Query("PRAGMA table_info(episodes)")
+	if err != nil {
+		return fmt.Errorf("%w: inspect readable episode schema: %v", ErrIncompatibleSchema, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, notNull, primaryKey int
+		var name, columnType string
+		var defaultValue any
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return fmt.Errorf("%w: inspect readable episode schema: %v", ErrIncompatibleSchema, err)
+		}
+		if name == "author" {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("%w: inspect readable episode schema: %v", ErrIncompatibleSchema, err)
+	}
+	return fmt.Errorf("%w: database schema is older than this podsync binary", ErrIncompatibleSchema)
 }
 
 func validateDatabaseCompatibility(path string, sources []*goose.Source) error {
