@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -29,7 +30,13 @@ type SQLiteRepository struct {
 	db *sql.DB
 }
 
+var ErrIncompatibleSchema = errors.New("database schema is incompatible with this podsync binary")
+
 func NewSQLiteRepository(path string) (*SQLiteRepository, error) {
+	return newSQLiteRepository(path, migrationFS)
+}
+
+func newSQLiteRepository(path string, migrationsFS fs.FS) (*SQLiteRepository, error) {
 	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
 		return nil, fmt.Errorf("state database is a symlink: %q", path)
 	} else if err != nil && !os.IsNotExist(err) {
@@ -39,7 +46,7 @@ func NewSQLiteRepository(path string) (*SQLiteRepository, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open state database: %w", err)
 	}
-	migrations, err := fs.Sub(migrationFS, "migrations")
+	migrations, err := fs.Sub(migrationsFS, "migrations")
 	if err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("open embedded migrations: %w", err)
@@ -48,6 +55,10 @@ func NewSQLiteRepository(path string) (*SQLiteRepository, error) {
 	if err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("create migration provider: %w", err)
+	}
+	if err := validateDatabaseCompatibility(path, provider.ListSources()); err != nil {
+		_ = db.Close()
+		return nil, err
 	}
 	if _, err := provider.Up(context.Background()); err != nil {
 		_ = db.Close()
@@ -67,7 +78,141 @@ func NewReadOnlySQLiteRepository(path string) (*SQLiteRepository, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open read-only state database: %w", err)
 	}
+	migrations, err := fs.Sub(migrationFS, "migrations")
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("open embedded migrations: %w", err)
+	}
+	provider, err := goose.NewProvider(goose.DialectSQLite3, db, migrations)
+	if err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("create migration provider: %w", err)
+	}
+	fresh, err := inspectDatabaseCompatibility(path, provider.ListSources())
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if fresh {
+		_ = db.Close()
+		return nil, fmt.Errorf("%w: read-only repository requires an initialized database", ErrIncompatibleSchema)
+	}
 	return &SQLiteRepository{db: db}, nil
+}
+
+func validateDatabaseCompatibility(path string, sources []*goose.Source) error {
+	_, err := inspectDatabaseCompatibility(path, sources)
+	return err
+}
+
+func inspectDatabaseCompatibility(path string, sources []*goose.Source) (bool, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("inspect state database: %w", err)
+	}
+	if info.Size() == 0 {
+		return true, nil
+	}
+
+	supported := make(map[int64]struct{}, len(sources))
+	for _, source := range sources {
+		supported[source.Version] = struct{}{}
+	}
+
+	inspection, err := sql.Open("sqlite", sqliteURL(path, true))
+	if err != nil {
+		return false, fmt.Errorf("open state database for compatibility check: %w", err)
+	}
+	defer inspection.Close()
+
+	rows, err := inspection.Query(`
+		SELECT name
+		FROM sqlite_schema
+		WHERE name NOT LIKE 'sqlite_%'
+		  AND type IN ('table', 'index', 'trigger', 'view')
+		ORDER BY name
+	`)
+	if err != nil {
+		return false, fmt.Errorf("inspect state database schema: %w", err)
+	}
+	var objects []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			_ = rows.Close()
+			return false, fmt.Errorf("scan state database schema: %w", err)
+		}
+		objects = append(objects, name)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return false, fmt.Errorf("read state database schema: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return false, fmt.Errorf("close state database schema: %w", err)
+	}
+
+	gooseTable := false
+	anchors := make(map[string]struct{})
+	for _, object := range objects {
+		switch object {
+		case goose.DefaultTablename:
+			gooseTable = true
+		case "feeds", "episodes":
+			anchors[object] = struct{}{}
+		}
+	}
+	if !gooseTable {
+		if len(objects) > 0 {
+			return false, fmt.Errorf("%w: unversioned nonempty database", ErrIncompatibleSchema)
+		}
+		return true, nil
+	}
+
+	versionRows, err := inspection.Query("SELECT DISTINCT version_id FROM " + goose.DefaultTablename)
+	if err != nil {
+		return false, fmt.Errorf("%w: read migration metadata: %v", ErrIncompatibleSchema, err)
+	}
+	versionCount := 0
+	hasPositiveVersion := false
+	for versionRows.Next() {
+		var version int64
+		if err := versionRows.Scan(&version); err != nil {
+			_ = versionRows.Close()
+			return false, fmt.Errorf("%w: read migration version: %v", ErrIncompatibleSchema, err)
+		}
+		versionCount++
+		if version == 0 {
+			continue
+		}
+		hasPositiveVersion = true
+		if _, exists := supported[version]; !exists {
+			_ = versionRows.Close()
+			return false, fmt.Errorf("%w: database records unknown migration version %d", ErrIncompatibleSchema, version)
+		}
+	}
+	if err := versionRows.Err(); err != nil {
+		_ = versionRows.Close()
+		return false, fmt.Errorf("%w: read migration metadata: %v", ErrIncompatibleSchema, err)
+	}
+	if err := versionRows.Close(); err != nil {
+		return false, fmt.Errorf("%w: close migration metadata: %v", ErrIncompatibleSchema, err)
+	}
+	if versionCount == 0 {
+		return false, fmt.Errorf("%w: migration metadata is empty", ErrIncompatibleSchema)
+	}
+	if hasPositiveVersion {
+		if _, exists := anchors["feeds"]; !exists {
+			return false, fmt.Errorf("%w: migration metadata exists without feeds table", ErrIncompatibleSchema)
+		}
+		if _, exists := anchors["episodes"]; !exists {
+			return false, fmt.Errorf("%w: migration metadata exists without episodes table", ErrIncompatibleSchema)
+		}
+	}
+	return false, nil
 }
 
 func sqliteURL(path string, readOnly bool) string {

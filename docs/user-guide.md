@@ -327,6 +327,11 @@ deleted.
 
 - Database migrations are forward-only. Downgrading podsync requires restoring
   a device backup made with the older version.
+- An older protected podsync binary rejects a device database containing a
+  migration version it does not understand. Keep computers sharing an iPod on
+  compatible podsync versions.
+- Released migration identifiers are immutable: never reuse or redefine a
+  migration version after release.
 - Automatic mounting and ejection are not implemented.
 - Automatic detection requires a single mounted device in a standard location,
   or `PODSYNC_DEVICE_ROOT` for a non-standard location.
