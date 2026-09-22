@@ -3,6 +3,7 @@ package feed
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +44,9 @@ func ParseRSS(r io.Reader, f Feed) (Feed, []episode.Episode, error) {
 		enclosure, ok := audioEnclosure(item)
 		if !ok {
 			continue
+		}
+		if err := validateEnclosureURL(enclosure.URL); err != nil {
+			return Feed{}, nil, fmt.Errorf("parse item %d enclosure: %w", i, err)
 		}
 
 		duration, err := parseDuration(item)
@@ -102,6 +106,20 @@ func audioEnclosure(item *gofeed.Item) (*gofeed.Enclosure, bool) {
 		}
 	}
 	return nil, false
+}
+
+func validateEnclosureURL(raw string) error {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return fmt.Errorf("parse audio URL: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("audio URL must use HTTP or HTTPS")
+	}
+	if parsed.Host == "" {
+		return fmt.Errorf("audio URL has no host")
+	}
+	return nil
 }
 
 func enclosureLength(raw string) int64 {

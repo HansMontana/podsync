@@ -102,6 +102,15 @@ func TestParseRSSSelectsAudioEnclosure(t *testing.T) {
 	}
 }
 
+func TestParseRSSRejectsNonAbsoluteAudioURL(t *testing.T) {
+	input := `<rss><channel><title>Example</title><item><title>Episode</title><enclosure url="/audio.mp3" type="audio/mpeg"/></item></channel></rss>`
+
+	_, _, err := ParseRSS(strings.NewReader(input), Feed{ID: 1, URL: "https://example.com/feed.xml"})
+	if err == nil {
+		t.Fatal("ParseRSS() accepted a relative audio URL")
+	}
+}
+
 func TestParseRSSUsesItemAndFeedAuthors(t *testing.T) {
 	input := `<rss xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"><channel><title>Example</title><itunes:author>Feed Author</itunes:author><item><title>Episode</title><itunes:author>Episode Author</itunes:author><enclosure url="https://example.com/audio.mp3" type="audio/mpeg"/></item><item><title>Fallback</title><enclosure url="https://example.com/fallback.mp3" type="audio/mpeg"/></item></channel></rss>`
 

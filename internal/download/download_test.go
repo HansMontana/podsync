@@ -58,6 +58,19 @@ func TestEpisodeRejectsNonAudioResponse(t *testing.T) {
 	}
 }
 
+func TestEpisodeRejectsHTMLResponseDeclaredAsAudio(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte("<html><body>not audio</body></html>"))
+	}))
+	defer server.Close()
+
+	_, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}, t.TempDir())
+	if !errors.Is(err, ErrUnsupportedMedia) {
+		t.Fatalf("Episode() error = %v, want unsupported media", err)
+	}
+}
+
 func TestEpisodeRejectsVideoSignatureWithoutContentType(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte{0, 0, 0, 24, 'f', 't', 'y', 'p', 'm', 'p', '4', '2'})
@@ -70,17 +83,19 @@ func TestEpisodeRejectsVideoSignatureWithoutContentType(t *testing.T) {
 	}
 }
 
-func TestEpisodeRejectsOversizedResponseAsTypedError(t *testing.T) {
+func TestEpisodeAllowsEnclosureLengthAboveHistoricalLimit(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "audio/mpeg")
-		w.Header().Set("Content-Length", "1073741825")
 		_, _ = w.Write([]byte("audio"))
 	}))
 	defer server.Close()
 
-	_, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}, t.TempDir())
-	if !errors.Is(err, ErrOversizedMedia) {
-		t.Fatalf("Episode() error = %v, want oversized media", err)
+	path, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg", Length: 1<<30 + 1}}, t.TempDir())
+	if err != nil {
+		t.Fatalf("Episode() rejected large advisory response length: %v", err)
+	}
+	if data, readErr := os.ReadFile(path); readErr != nil || string(data) != "audio" {
+		t.Fatalf("got data %q, error %v", data, readErr)
 	}
 }
 

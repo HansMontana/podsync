@@ -324,7 +324,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 
 		stagedPath, err := download.Episode(ctx, client, current, stagingDir)
 		if err != nil {
-			if errors.Is(err, download.ErrUnsupportedMedia) || errors.Is(err, download.ErrOversizedMedia) {
+			if errors.Is(err, download.ErrUnsupportedMedia) {
 				skipped[relative] = struct{}{}
 				warn(warning, fmt.Sprintf("skipping %q: %v", current.Title, err))
 				continue

@@ -14,10 +14,7 @@ import (
 	"github.com/HansMontana/podsync/internal/episode"
 )
 
-const maxDownloadSize int64 = 1 << 30
-
 var ErrUnsupportedMedia = errors.New("unsupported media type")
-var ErrOversizedMedia = errors.New("oversized media")
 
 type UnsupportedMediaError struct {
 	ContentType string
@@ -38,9 +35,6 @@ func Episode(ctx context.Context, client *http.Client, e episode.Episode, stagin
 	if e.Enclosure.URL == "" {
 		return "", fmt.Errorf("episode has no audio URL")
 	}
-	if e.Enclosure.Length > maxDownloadSize {
-		return "", fmt.Errorf("%w: episode enclosure exceeds %d bytes", ErrOversizedMedia, maxDownloadSize)
-	}
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -60,14 +54,15 @@ func Episode(ctx context.Context, client *http.Client, e episode.Episode, stagin
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return "", fmt.Errorf("download episode: unexpected HTTP status %s", response.Status)
 	}
-	if response.ContentLength > maxDownloadSize {
-		return "", fmt.Errorf("%w: download response exceeds %d bytes", ErrOversizedMedia, maxDownloadSize)
-	}
 	contentType := response.Header.Get("Content-Type")
 	mediaType, _, _ := mime.ParseMediaType(contentType)
 	declaredAudio := strings.HasPrefix(strings.ToLower(strings.TrimSpace(e.Enclosure.Type)), "audio/")
-	if mediaType != "" && !strings.HasPrefix(strings.ToLower(mediaType), "audio/") &&
-		(!declaredAudio || strings.HasPrefix(strings.ToLower(mediaType), "video/") || mediaType == "application/mp4") {
+	declaredType := strings.ToLower(strings.TrimSpace(e.Enclosure.Type))
+	if strings.HasPrefix(declaredType, "video/") || declaredType == "application/mp4" {
+		return "", &UnsupportedMediaError{ContentType: declaredType}
+	}
+	if isKnownNonAudioType(mediaType) || strings.HasPrefix(strings.ToLower(mediaType), "video/") || mediaType == "application/mp4" ||
+		(mediaType != "" && !strings.HasPrefix(strings.ToLower(mediaType), "audio/") && !genericBinaryType(mediaType) && !(declaredAudio && mediaType == "text/plain")) {
 		return "", &UnsupportedMediaError{ContentType: mediaType}
 	}
 	prefix := make([]byte, 512)
@@ -76,9 +71,8 @@ func Episode(ctx context.Context, client *http.Client, e episode.Episode, stagin
 		return "", fmt.Errorf("read media header: %w", readErr)
 	}
 	detected := http.DetectContentType(prefix[:n])
-	declaredType := strings.ToLower(strings.TrimSpace(e.Enclosure.Type))
 	looksLikeMP4 := n >= 8 && bytes.Equal(prefix[4:8], []byte("ftyp"))
-	if strings.HasPrefix(detected, "video/") || (looksLikeMP4 && declaredType != "audio/mp4") {
+	if isKnownNonAudioType(detected) || strings.HasPrefix(detected, "video/") || (looksLikeMP4 && declaredType != "audio/mp4") {
 		return "", &UnsupportedMediaError{ContentType: mediaType, Detected: detected}
 	}
 
@@ -93,14 +87,10 @@ func Episode(ctx context.Context, client *http.Client, e episode.Episode, stagin
 		}
 	}()
 
-	bytesWritten, err := io.Copy(file, io.LimitReader(io.MultiReader(bytes.NewReader(prefix[:n]), response.Body), maxDownloadSize+1))
+	bytesWritten, err := io.Copy(file, io.MultiReader(bytes.NewReader(prefix[:n]), response.Body))
 	if err != nil {
 		_ = file.Close()
 		return "", fmt.Errorf("write staged episode: %w", err)
-	}
-	if bytesWritten > maxDownloadSize {
-		_ = file.Close()
-		return "", fmt.Errorf("%w: download exceeds %d bytes", ErrOversizedMedia, maxDownloadSize)
 	}
 	if bytesWritten == 0 {
 		_ = file.Close()
@@ -110,4 +100,23 @@ func Episode(ctx context.Context, client *http.Client, e episode.Episode, stagin
 		return "", fmt.Errorf("close staged episode: %w", err)
 	}
 	return path, nil
+}
+
+func isKnownNonAudioType(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "text/html", "text/xml", "application/xml", "application/xhtml+xml", "application/json", "application/javascript":
+		return true
+	default:
+		return false
+	}
+}
+
+func genericBinaryType(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "application/octet-stream", "binary/octet-stream", "application/ogg":
+		return true
+	default:
+		return false
+	}
 }
