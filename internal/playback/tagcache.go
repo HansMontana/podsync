@@ -78,10 +78,14 @@ func ParseTagCache(directory string) ([]Record, error) {
 		if entry.flag&tagCacheDeleted != 0 {
 			continue
 		}
+		playCount := entry.values[tagPlayCount]
+		if playCount < 0 {
+			return nil, fmt.Errorf("invalid TagCache play count %d", playCount)
+		}
 		records = append(records, Record{
 			Path:      path,
 			Known:     true,
-			PlayCount: int(entry.values[tagPlayCount]),
+			PlayCount: int(playCount),
 			// TagCache lastplayed is an internal ordinal, not a wall-clock time.
 		})
 	}
@@ -100,7 +104,7 @@ func openMaster(path string) (*os.File, binary.ByteOrder, int64, int64, error) {
 	if err != nil {
 		return nil, nil, 0, 0, fmt.Errorf("open TagCache master index: %w", err)
 	}
-	var header [20]byte
+	var header [tagCacheMasterHeader]byte
 	if _, err := io.ReadFull(file, header[:]); err != nil {
 		file.Close()
 		return nil, nil, 0, 0, fmt.Errorf("read TagCache master header: %w", err)
@@ -114,6 +118,11 @@ func openMaster(path string) (*os.File, binary.ByteOrder, int64, int64, error) {
 		}
 	}
 	count := int64(order.Uint32(header[8:12]))
+	dirty := order.Uint32(header[20:24])
+	if dirty != 0 {
+		file.Close()
+		return nil, nil, 0, 0, fmt.Errorf("TagCache master index is dirty")
+	}
 	entrySize := int64(tagCacheTagCount*4 + 4)
 	info, err := file.Stat()
 	if err != nil || info.Size() < tagCacheMasterHeader+count*entrySize {

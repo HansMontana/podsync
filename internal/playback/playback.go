@@ -1,6 +1,7 @@
 package playback
 
 import (
+	"encoding/hex"
 	"path"
 	"sort"
 	"strings"
@@ -27,6 +28,11 @@ type Record struct {
 	Known      bool
 	PlayCount  int
 	LastPlayed time.Time
+}
+
+type hashedState struct {
+	State
+	Directory string
 }
 
 func MergeRecords(records []Record) []Record {
@@ -80,10 +86,14 @@ func PreferRecords(primary, fallback []Record) []Record {
 		}
 		if current, exists := byPath[key]; !exists {
 			byPath[key] = record
-		} else if record.PlayCount > 0 && current.PlayCount == 0 {
-			// A valid log proves playback after an uncommitted TagCache update.
-			current.PlayCount = record.PlayCount
-			current.LastPlayed = record.LastPlayed
+		} else {
+			if record.PlayCount > 0 && current.PlayCount == 0 {
+				// A valid log proves playback after an uncommitted TagCache update.
+				current.PlayCount = record.PlayCount
+			}
+			if record.LastPlayed.After(current.LastPlayed) {
+				current.LastPlayed = record.LastPlayed
+			}
 			byPath[key] = current
 		}
 	}
@@ -103,6 +113,7 @@ func PreferRecords(primary, fallback []Record) []Record {
 // therefore unplayed.
 func ForEpisodesWithResolver(episodes []episode.Episode, records []Record, resolver media.Resolver) map[string]State {
 	byPath := make(map[string]State, len(records))
+	byIdentityHash := make(map[string]hashedState, len(records))
 	for _, record := range records {
 		if !record.Known {
 			continue
@@ -115,11 +126,26 @@ func ForEpisodesWithResolver(episodes []episode.Episode, records []Record, resol
 		if !current.Known || record.PlayCount > current.PlayCount || record.LastPlayed.After(current.LastPlayed) {
 			byPath[key] = State{Known: true, PlayCount: record.PlayCount, LastPlayed: record.LastPlayed}
 		}
+		if hash := identityHashFromPath(key); hash != "" {
+			current := byIdentityHash[hash]
+			if !current.Known || record.PlayCount > current.PlayCount || record.LastPlayed.After(current.LastPlayed) {
+				byIdentityHash[hash] = hashedState{
+					State:     State{Known: true, PlayCount: record.PlayCount, LastPlayed: record.LastPlayed},
+					Directory: path.Dir(key),
+				}
+			}
+		}
 	}
 
 	result := make(map[string]State, len(episodes))
 	for _, current := range episodes {
-		state, exists := byPath[normalizePath(resolver.RelativePathFor(current))]
+		relative := normalizePath(resolver.RelativePathFor(current))
+		state, exists := byPath[relative]
+		if !exists {
+			if hashed, found := byIdentityHash[media.IdentityHash(current)]; found && hashed.Directory == path.Dir(relative) {
+				state, exists = hashed.State, true
+			}
+		}
 		if exists {
 			result[current.IdentityKey()] = state
 		} else {
@@ -127,6 +153,22 @@ func ForEpisodesWithResolver(episodes []episode.Episode, records []Record, resol
 		}
 	}
 	return result
+}
+
+func identityHashFromPath(value string) string {
+	name := path.Base(value)
+	marker := strings.LastIndex(name, " -- ")
+	if marker < 0 {
+		return ""
+	}
+	hash := strings.TrimSuffix(name[marker+4:], path.Ext(name))
+	if len(hash) != 12 {
+		return ""
+	}
+	if _, err := hex.DecodeString(hash); err != nil {
+		return ""
+	}
+	return hash
 }
 
 func normalizePath(value string) string {

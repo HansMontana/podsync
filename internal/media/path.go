@@ -19,8 +19,7 @@ type Resolver map[int64]string
 func (r Resolver) RelativePathFor(e episode.Episode) string {
 	logicalID := r[e.FeedID]
 
-	sum := sha256.Sum256([]byte(e.IdentityKey()))
-	hash := hex.EncodeToString(sum[:])[:12]
+	hash := IdentityHash(e)
 	title := sanitizeTitle(e.Title)
 	date := "unknown-date"
 	if !e.PublishedAt.IsZero() {
@@ -28,6 +27,12 @@ func (r Resolver) RelativePathFor(e episode.Episode) string {
 	}
 	name := fmt.Sprintf("%s - %s -- %s%s", title, date, hash, extension(e))
 	return path.Join("Podcasts", logicalID, name)
+}
+
+// IdentityHash returns the short identity suffix used in managed filenames.
+func IdentityHash(e episode.Episode) string {
+	sum := sha256.Sum256([]byte(e.IdentityKey()))
+	return hex.EncodeToString(sum[:])[:12]
 }
 
 func sanitizeTitle(value string) string {

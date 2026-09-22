@@ -1,6 +1,7 @@
 package playback
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -27,6 +28,27 @@ func TestForEpisodesMatchesRockboxVolumePrefixedPaths(t *testing.T) {
 	state := states[current.IdentityKey()]
 	if !state.Known || !state.Played() || state.PlayCount != 1 {
 		t.Fatalf("got playback state %+v", state)
+	}
+}
+
+func TestForEpisodesMatchesMetadataChangedPathByIdentityHash(t *testing.T) {
+	current := episode.Episode{FeedID: 2, GUID: "one", Title: "Corrected title", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
+	previous := current
+	previous.Title = "Original title"
+	resolver := media.Resolver{2: "podcast"}
+	state := ForEpisodesWithResolver([]episode.Episode{current}, []Record{{Path: "/" + resolver.RelativePathFor(previous), Known: true, PlayCount: 2}}, resolver)[current.IdentityKey()]
+	if !state.Known || !state.Played() || state.PlayCount != 2 {
+		t.Fatalf("got playback state %+v", state)
+	}
+}
+
+func TestForEpisodesDoesNotMatchChangedLogicalFeedPathByIdentityHash(t *testing.T) {
+	current := episode.Episode{FeedID: 2, GUID: "one", Title: "Corrected title", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
+	previous := current
+	previous.Title = "Original title"
+	state := ForEpisodesWithResolver([]episode.Episode{current}, []Record{{Path: "/" + (media.Resolver{2: "old-podcast"}).RelativePathFor(previous), Known: true, PlayCount: 2}}, media.Resolver{2: "podcast"})[current.IdentityKey()]
+	if state.Known || state.Played() {
+		t.Fatalf("got playback state %+v after logical-feed change", state)
 	}
 }
 
@@ -136,5 +158,27 @@ func TestPreferRecordsKeepsPlayedLogEvidence(t *testing.T) {
 	got := PreferRecords([]Record{{Path: "/Podcasts/one.mp3", Known: true}}, []Record{{Path: "/Podcasts/one.mp3", Known: true, PlayCount: 1}})
 	if len(got) != 1 || got[0].PlayCount != 1 {
 		t.Fatalf("got records %+v", got)
+	}
+}
+
+func TestPreferRecordsKeepsFallbackLastPlayedTimestamp(t *testing.T) {
+	playedAt := time.Date(2026, 9, 23, 12, 0, 0, 0, time.UTC)
+	got := PreferRecords(
+		[]Record{{Path: "/Podcasts/one.mp3", Known: true, PlayCount: 2}},
+		[]Record{{Path: "/Podcasts/one.mp3", Known: true, PlayCount: 1, LastPlayed: playedAt}},
+	)
+	if len(got) != 1 || got[0].PlayCount != 2 || !got[0].LastPlayed.Equal(playedAt) {
+		t.Fatalf("got records %+v", got)
+	}
+}
+
+func TestParseLogSkipsOversizedLineAndContinues(t *testing.T) {
+	log := strings.Repeat("x", 1<<20+1) + "\n" + fmt.Sprintf("1700000000:9000:10000:/Podcasts/podcast/episode.mp3\n")
+	records, err := ParseLog(strings.NewReader(log))
+	if err != nil {
+		t.Fatalf("ParseLog() returned error: %v", err)
+	}
+	if len(records) != 1 || records[0].PlayCount != 1 {
+		t.Fatalf("got records %+v", records)
 	}
 }

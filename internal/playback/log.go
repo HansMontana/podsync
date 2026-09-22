@@ -13,39 +13,47 @@ import (
 // timestamp:elapsed:length:path; comment and malformed lines are ignored.
 func ParseLog(reader io.Reader) ([]Record, error) {
 	byPath := make(map[string]Record)
-	scanner := bufio.NewScanner(reader)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+	buffered := bufio.NewReaderSize(reader, 64*1024)
+	const maxLogLine = 1 << 20
+	var line []byte
+	overlong := false
+	for {
+		fragment, err := buffered.ReadSlice('\n')
+		if overlong {
+			if err == nil {
+				overlong = false
+			}
+			if err == io.EOF {
+				break
+			}
+			if err != nil && err != bufio.ErrBufferFull {
+				return nil, fmt.Errorf("read Rockbox playback log: %w", err)
+			}
 			continue
 		}
-		parts := strings.SplitN(line, ":", 4)
-		if len(parts) != 4 {
+		if len(line)+len(fragment) > maxLogLine {
+			line = nil
+			overlong = true
+			if err == nil {
+				overlong = false
+			}
+		} else {
+			line = append(line, fragment...)
+		}
+		if err == nil {
+			parseLogLine(byPath, line)
+			line = nil
 			continue
 		}
-		timestamp, timestampErr := strconv.ParseInt(parts[0], 10, 64)
-		elapsed, elapsedErr := strconv.ParseInt(parts[1], 10, 64)
-		length, lengthErr := strconv.ParseInt(parts[2], 10, 64)
-		minimumPlayed := length - length/10
-		if timestampErr != nil || elapsedErr != nil || lengthErr != nil || timestamp <= 0 || elapsed <= 0 || length <= 0 || elapsed > length || strings.TrimSpace(parts[3]) == "" || elapsed < minimumPlayed {
-			continue
+		if err == io.EOF {
+			if len(line) > 0 {
+				parseLogLine(byPath, line)
+			}
+			break
 		}
-		key := normalizePath(parts[3])
-		if key == "" {
-			continue
+		if err != bufio.ErrBufferFull {
+			return nil, fmt.Errorf("read Rockbox playback log: %w", err)
 		}
-		current := byPath[key]
-		current.Path = parts[3]
-		current.PlayCount++
-		playedAt := time.Unix(timestamp, 0).UTC()
-		if playedAt.After(current.LastPlayed) {
-			current.LastPlayed = playedAt
-		}
-		current.Known = true
-		byPath[key] = current
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read Rockbox playback log: %w", err)
 	}
 
 	result := make([]Record, 0, len(byPath))
@@ -53,4 +61,35 @@ func ParseLog(reader io.Reader) ([]Record, error) {
 		result = append(result, record)
 	}
 	return result, nil
+}
+
+func parseLogLine(byPath map[string]Record, raw []byte) {
+	line := strings.TrimSpace(string(raw))
+	if line == "" || strings.HasPrefix(line, "#") {
+		return
+	}
+	parts := strings.SplitN(line, ":", 4)
+	if len(parts) != 4 {
+		return
+	}
+	timestamp, timestampErr := strconv.ParseInt(parts[0], 10, 64)
+	elapsed, elapsedErr := strconv.ParseInt(parts[1], 10, 64)
+	length, lengthErr := strconv.ParseInt(parts[2], 10, 64)
+	minimumPlayed := length - length/10
+	if timestampErr != nil || elapsedErr != nil || lengthErr != nil || timestamp <= 0 || elapsed <= 0 || length <= 0 || elapsed > length || strings.TrimSpace(parts[3]) == "" || elapsed < minimumPlayed {
+		return
+	}
+	key := normalizePath(parts[3])
+	if key == "" {
+		return
+	}
+	current := byPath[key]
+	current.Path = parts[3]
+	current.PlayCount++
+	playedAt := time.Unix(timestamp, 0).UTC()
+	if playedAt.After(current.LastPlayed) {
+		current.LastPlayed = playedAt
+	}
+	current.Known = true
+	byPath[key] = current
 }

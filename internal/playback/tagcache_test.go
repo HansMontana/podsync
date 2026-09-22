@@ -43,6 +43,22 @@ func TestParseTagCacheSkipsDeletedEntries(t *testing.T) {
 	}
 }
 
+func TestParseTagCacheRejectsDirtyMaster(t *testing.T) {
+	directory := writeTagCacheFixture(t, binary.LittleEndian, false)
+	path := filepath.Join(directory, "database_idx.tcd")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binary.LittleEndian.PutUint32(data[20:24], 1)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ParseTagCache(directory); err == nil {
+		t.Fatal("ParseTagCache() accepted a dirty master")
+	}
+}
+
 func writeTagCacheFixture(t *testing.T, order binary.ByteOrder, deleted bool) string {
 	t.Helper()
 	directory := t.TempDir()
