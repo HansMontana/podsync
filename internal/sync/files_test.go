@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -157,5 +158,55 @@ func TestApplyFilePlanCancellationLeavesExistingDestinationUntouched(t *testing.
 	data, err := os.ReadFile(destination)
 	if err != nil || string(data) != "old" {
 		t.Fatalf("existing destination changed to %q, error %v", data, err)
+	}
+}
+
+func TestApplyFilePlanVerifiesDeviceBeforeEachMutation(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(t.TempDir(), "episode.mp3")
+	if err := os.WriteFile(source, []byte("audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stale := filepath.Join(root, "Podcasts/podcast-1/stale.mp3")
+	if err := os.MkdirAll(filepath.Dir(stale), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stale, []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	checks := 0
+	plan := FilePlan{
+		Copies: []FileCopy{{Source: source, Relative: "Podcasts/podcast-1/current.mp3"}},
+		Playlists: []PlaylistFile{
+			{Relative: "Playlists/current.m3u8", Content: []byte("playlist\n")},
+			{Relative: "Podsync/managed-files.txt", Content: []byte("Podcasts/podcast-1/current.mp3\n")},
+		},
+		Deletes: []string{"Podcasts/podcast-1/stale.mp3"},
+		VerifyDevice: func() error {
+			checks++
+			if checks == 3 {
+				return errors.New("device replaced")
+			}
+			return nil
+		},
+	}
+
+	if err := ApplyFilePlan(context.Background(), root, plan); err == nil {
+		t.Fatal("ApplyFilePlan() accepted a device verification failure")
+	}
+	if checks != 3 {
+		t.Fatalf("device verification ran %d times, want 3", checks)
+	}
+	if _, err := os.Stat(filepath.Join(root, "Podcasts/podcast-1/current.mp3")); err != nil {
+		t.Fatalf("copy was not installed before verification failure: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "Playlists/current.m3u8")); err != nil {
+		t.Fatalf("playlist was not installed before verification failure: %v", err)
+	}
+	if _, err := os.Stat(stale); err != nil {
+		t.Fatalf("stale file was removed after verification failure: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "Podsync/managed-files.txt")); !os.IsNotExist(err) {
+		t.Fatalf("manifest was installed after verification failure, error: %v", err)
 	}
 }

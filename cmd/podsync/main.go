@@ -73,6 +73,12 @@ func commandLogger(component string) *logging.Logger {
 }
 
 func run(args []string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return runContext(ctx, args)
+}
+
+func runContext(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		printUsage(os.Stderr)
 		return nil
@@ -95,23 +101,23 @@ func run(args []string) error {
 	case "validate-config":
 		return validateConfig(args[1:])
 	case "reconcile":
-		return reconcile(args[1:], false)
+		return reconcile(ctx, args[1:], false)
 	case "refresh":
-		return reconcile(args[1:], true)
+		return reconcile(ctx, args[1:], true)
 	case "update":
-		return update(args[1:])
+		return update(ctx, args[1:])
 	case "status":
 		return status(args[1:])
 	case "verify":
 		return verify(args[1:])
 	case "feed":
-		return feedCommand(args[1:])
+		return feedCommand(ctx, args[1:])
 	case "playlist":
-		return generatePlaylist(args[1:], false)
+		return generatePlaylist(ctx, args[1:], false)
 	case "briefing":
-		return generatePlaylist(args[1:], true)
+		return generatePlaylist(ctx, args[1:], true)
 	case "sync":
-		return sync(args[1:])
+		return sync(ctx, args[1:])
 	case "daemon":
 		return daemon(args[1:])
 	default:
@@ -195,7 +201,7 @@ func parseFlags(flags *flag.FlagSet, args []string) (bool, error) {
 	return false, err
 }
 
-func feedCommand(args []string) error {
+func feedCommand(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return printCommandHelp("feed")
 	}
@@ -206,9 +212,9 @@ func feedCommand(args []string) error {
 	case "list":
 		return listFeeds(args[1:])
 	case "add":
-		return addFeed(args[1:])
+		return addFeed(ctx, args[1:])
 	case "remove":
-		return removeFeed(args[1:])
+		return removeFeed(ctx, args[1:])
 	default:
 		return fmt.Errorf("unknown feed command %q\n\n%s", args[0], usageText())
 	}
@@ -238,7 +244,7 @@ func listFeeds(args []string) error {
 	return nil
 }
 
-func addFeed(args []string) error {
+func addFeed(ctx context.Context, args []string) error {
 	flags := newFlagSet("feed add", "Usage: podsync feed add -device-root PATH -id ID -url URL [-config PATH]")
 	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
 	configPath := flags.String("config", "", "path to podsync TOML configuration")
@@ -251,6 +257,9 @@ func addFeed(args []string) error {
 	}
 	if *id == "" || *feedURL == "" {
 		return fmt.Errorf("-id and -url are required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false, true)
 	if err != nil {
@@ -271,7 +280,7 @@ func addFeed(args []string) error {
 	return nil
 }
 
-func removeFeed(args []string) error {
+func removeFeed(ctx context.Context, args []string) error {
 	flags := newFlagSet("feed remove", "Usage: podsync feed remove -device-root PATH -id ID [-config PATH]")
 	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
 	configPath := flags.String("config", "", "path to podsync TOML configuration")
@@ -283,6 +292,9 @@ func removeFeed(args []string) error {
 	}
 	if *id == "" {
 		return fmt.Errorf("-id is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false, true)
 	if err != nil {
@@ -389,7 +401,7 @@ func validateConfig(args []string) error {
 	return nil
 }
 
-func reconcile(args []string, refresh bool) error {
+func reconcile(ctx context.Context, args []string, refresh bool) error {
 	command := "reconcile"
 	usage := "Usage: podsync reconcile -device-root PATH [-config PATH]"
 	if refresh {
@@ -404,7 +416,7 @@ func reconcile(args []string, refresh bool) error {
 	} else if help {
 		return nil
 	}
-	return reconcileDevice(*deviceRoot, *configPath, refresh)
+	return reconcileDeviceWithLockContext(ctx, *deviceRoot, *configPath, refresh, nil)
 }
 
 func reconcileDevice(deviceRoot, configPath string, refresh bool) error {
@@ -447,7 +459,7 @@ func reconcileDeviceWithLockContext(ctx context.Context, deviceRoot, configPath 
 	return nil
 }
 
-func update(args []string) error {
+func update(ctx context.Context, args []string) error {
 	flags := newFlagSet("update", "Usage: podsync update [-device-root PATH] [-config PATH] [-staging PATH] [-skip-verify-media]")
 	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
 	configPath := flags.String("config", "", "path to podsync TOML configuration (defaults to device config)")
@@ -458,7 +470,7 @@ func update(args []string) error {
 	} else if help {
 		return nil
 	}
-	return runUpdate(context.Background(), updateOptions{
+	return runUpdate(ctx, updateOptions{
 		deviceRoot:      *deviceRoot,
 		configPath:      *configPath,
 		stagingDir:      *stagingDir,
@@ -732,7 +744,7 @@ func verifyDevice(deviceRoot string) (int, error) {
 	return len(managed), nil
 }
 
-func generatePlaylist(args []string, briefingMode bool) error {
+func generatePlaylist(ctx context.Context, args []string, briefingMode bool) error {
 	name := "playlist"
 	if briefingMode {
 		name = "briefing"
@@ -748,6 +760,9 @@ func generatePlaylist(args []string, briefingMode bool) error {
 	}
 	if *id == "" {
 		return fmt.Errorf("-id is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false, true)
 	if err != nil {
@@ -800,7 +815,7 @@ func generatePlaylist(args []string, briefingMode bool) error {
 	}
 	managed = appendUnique(managed, relative)
 	manifest := syncer.PlaylistFile{Relative: layout.ManifestRelativePath(), Content: manifestContent(managed)}
-	if err := syncer.ApplyFilePlan(context.Background(), layout.Root, syncer.FilePlan{Playlists: []syncer.PlaylistFile{{Relative: relative, Content: content}, manifest}}); err != nil {
+	if err := syncer.ApplyFilePlan(ctx, layout.Root, syncer.FilePlan{Playlists: []syncer.PlaylistFile{{Relative: relative, Content: content}, manifest}}); err != nil {
 		return err
 	}
 	commandLogger("playlist").Info(fmt.Sprintf("Wrote %s", relative))
@@ -817,7 +832,7 @@ type syncOptions struct {
 	identity        fs.FileInfo
 }
 
-func sync(args []string) error {
+func sync(ctx context.Context, args []string) error {
 	flags := newFlagSet("sync", "Usage: podsync sync -device-root PATH [-config PATH] [-staging PATH] [-dry-run] [-skip-verify-media]")
 	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
 	configPath := flags.String("config", "", "path to podsync TOML configuration (defaults to device config)")
@@ -829,7 +844,7 @@ func sync(args []string) error {
 	} else if help {
 		return nil
 	}
-	return syncDevice(syncOptions{deviceRoot: *deviceRoot, configPath: *configPath, stagingDir: *stagingDir, dryRun: *dryRun, skipVerifyMedia: *skipVerifyMedia})
+	return syncDeviceContext(ctx, syncOptions{deviceRoot: *deviceRoot, configPath: *configPath, stagingDir: *stagingDir, dryRun: *dryRun, skipVerifyMedia: *skipVerifyMedia})
 }
 
 func syncDevice(options syncOptions) error {

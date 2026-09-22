@@ -32,10 +32,11 @@ type FileProgress struct {
 type FileProgressFunc func(FileProgress)
 
 type FilePlan struct {
-	Copies    []FileCopy
-	Playlists []PlaylistFile
-	Keep      []string
-	Deletes   []string
+	Copies       []FileCopy
+	Playlists    []PlaylistFile
+	Keep         []string
+	Deletes      []string
+	VerifyDevice func() error
 }
 
 // VerifyManagedFiles checks that every manifest entry is a valid, non-empty
@@ -115,7 +116,7 @@ func ApplyFilePlan(ctx context.Context, deviceRoot string, plan FilePlan) error 
 func ApplyFilePlanWithProgress(ctx context.Context, deviceRoot string, plan FilePlan, progress FileProgressFunc) error {
 	copyTotal := len(plan.Copies)
 	for i, copy := range plan.Copies {
-		if err := copyFile(ctx, deviceRoot, copy); err != nil {
+		if err := copyFile(ctx, deviceRoot, copy, plan.VerifyDevice); err != nil {
 			return err
 		}
 		if progress != nil {
@@ -136,7 +137,7 @@ func ApplyFilePlanWithProgress(ctx context.Context, deviceRoot string, plan File
 			manifest = &playlist
 			continue
 		}
-		if err := writeFile(ctx, deviceRoot, playlist.Relative, playlist.Content); err != nil {
+		if err := writeFile(ctx, deviceRoot, playlist.Relative, playlist.Content, plan.VerifyDevice); err != nil {
 			return err
 		}
 		playlistCompleted++
@@ -150,6 +151,11 @@ func ApplyFilePlanWithProgress(ctx context.Context, deviceRoot string, plan File
 			return ctx.Err()
 		default:
 		}
+		if plan.VerifyDevice != nil {
+			if err := plan.VerifyDevice(); err != nil {
+				return fmt.Errorf("verify device before deleting %q: %w", relative, err)
+			}
+		}
 		destination, err := safeDevicePath(deviceRoot, relative, false)
 		if err != nil {
 			return fmt.Errorf("delete %q: %w", relative, err)
@@ -162,27 +168,27 @@ func ApplyFilePlanWithProgress(ctx context.Context, deviceRoot string, plan File
 		}
 	}
 	if manifest != nil {
-		if err := writeFile(ctx, deviceRoot, manifest.Relative, manifest.Content); err != nil {
+		if err := writeFile(ctx, deviceRoot, manifest.Relative, manifest.Content, plan.VerifyDevice); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func copyFile(ctx context.Context, root string, copy FileCopy) error {
+func copyFile(ctx context.Context, root string, copy FileCopy, verifyDevice func() error) error {
 	input, err := os.Open(copy.Source)
 	if err != nil {
 		return fmt.Errorf("open copy source %q: %w", copy.Source, err)
 	}
 	defer input.Close()
-	return writeFromReader(ctx, root, copy.Relative, input)
+	return writeFromReader(ctx, root, copy.Relative, input, verifyDevice)
 }
 
-func writeFile(ctx context.Context, root, relative string, content []byte) error {
-	return writeFromReader(ctx, root, relative, bytes.NewReader(content))
+func writeFile(ctx context.Context, root, relative string, content []byte, verifyDevice func() error) error {
+	return writeFromReader(ctx, root, relative, bytes.NewReader(content), verifyDevice)
 }
 
-func writeFromReader(ctx context.Context, root, relative string, reader io.Reader) error {
+func writeFromReader(ctx context.Context, root, relative string, reader io.Reader, verifyDevice func() error) error {
 	destination, err := safeDevicePath(root, relative, true)
 	if err != nil {
 		return fmt.Errorf("resolve destination: %w", err)
@@ -208,6 +214,11 @@ func writeFromReader(ctx context.Context, root, relative string, reader io.Reade
 	}
 	if err := temporary.Close(); err != nil {
 		return fmt.Errorf("close temporary destination: %w", err)
+	}
+	if verifyDevice != nil {
+		if err := verifyDevice(); err != nil {
+			return fmt.Errorf("verify device before installing %q: %w", relative, err)
+		}
 	}
 	if err := os.Rename(temporaryPath, destination); err != nil {
 		return fmt.Errorf("install %q: %w", relative, err)

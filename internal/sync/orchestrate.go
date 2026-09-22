@@ -335,6 +335,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 		if err := options.VerifyDevice(); err != nil {
 			return fmt.Errorf("verify device before file application: %w", err)
 		}
+		plan.VerifyDevice = options.VerifyDevice
 	}
 	if err := ApplyFilePlanWithProgress(ctx, deviceRoot, plan, fileProgress); err != nil {
 		return fmt.Errorf("apply episode sync plan: %w", err)
