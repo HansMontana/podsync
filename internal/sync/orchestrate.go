@@ -75,7 +75,7 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 		return fmt.Errorf("load pending episode ownership: %w", err)
 	}
 	pendingActive := len(pending) > 0
-	pendingPaths := pendingManagedPaths(episodes, playlists, resolver)
+	pendingPaths := appendUniquePaths(pending, pendingManagedPaths(episodes, playlists, resolver))
 	if len(pendingPaths) > 0 {
 		if err := layout.SavePendingManagedPaths(pendingPaths); err != nil {
 			return fmt.Errorf("save pending episode ownership: %w", err)
@@ -128,6 +128,22 @@ func pendingManagedPaths(episodes []episode.Episode, playlists []PlaylistFile, r
 		}
 	}
 	return paths
+}
+
+func appendUniquePaths(paths, additions []string) []string {
+	result := append([]string(nil), paths...)
+	seen := make(map[string]struct{}, len(result)+len(additions))
+	for _, path := range result {
+		seen[path] = struct{}{}
+	}
+	for _, path := range additions {
+		if _, exists := seen[path]; exists {
+			continue
+		}
+		result = append(result, path)
+		seen[path] = struct{}{}
+	}
+	return result
 }
 
 func filterSkippedPlaylists(playlists []PlaylistFile, skipped map[string]struct{}) []PlaylistFile {

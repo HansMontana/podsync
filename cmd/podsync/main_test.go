@@ -311,6 +311,44 @@ func TestFeedCommandsManageDeviceConfiguration(t *testing.T) {
 	}
 }
 
+func TestStandalonePlaylistDoesNotPromoteUnrelatedPendingOwnership(t *testing.T) {
+	root := t.TempDir()
+	hostConfig := filepath.Join(t.TempDir(), "config.toml")
+	cfg := config.Config{
+		Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
+		Feeds:   []config.LogicalFeed{{ID: "news", Source: "news", Order: config.NewestFirst}},
+	}
+	if err := config.Save(hostConfig, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"reconcile", "-device-root", root, "-config", hostConfig}); err != nil {
+		t.Fatalf("reconcile command failed: %v", err)
+	}
+	layout := device.Layout{Root: root}
+	if err := layout.SavePendingManagedPaths([]string{"Podcasts/old/episode.mp3"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"playlist", "-device-root", root, "-id", "news"}); err != nil {
+		t.Fatalf("playlist command failed: %v", err)
+	}
+	pending, err := layout.LoadPendingManagedPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0] != "Podcasts/old/episode.mp3" {
+		t.Fatalf("got pending ownership %v, want unrelated path preserved", pending)
+	}
+	managed, err := layout.LoadCommittedManagedPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range managed {
+		if path == "Podcasts/old/episode.mp3" {
+			t.Fatal("standalone playlist promoted unrelated pending path")
+		}
+	}
+}
+
 func TestSyncFailureDoesNotPersistSuppliedConfiguration(t *testing.T) {
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

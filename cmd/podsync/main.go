@@ -809,14 +809,30 @@ func generatePlaylist(ctx context.Context, args []string, briefingMode bool) err
 		}
 	}
 	relative := path.Join("Playlists", playlists.Filename(title, *id)+".m3u8")
-	managed, err := layout.LoadManagedPaths()
+	managed, err := layout.LoadCommittedManagedPaths()
 	if err != nil {
 		return err
+	}
+	pending, err := layout.LoadPendingManagedPaths()
+	if err != nil {
+		return err
+	}
+	pending = appendUnique(pending, relative)
+	if err := layout.SavePendingManagedPaths(pending); err != nil {
+		return fmt.Errorf("save pending playlist ownership: %w", err)
 	}
 	managed = appendUnique(managed, relative)
 	manifest := syncer.PlaylistFile{Relative: layout.ManifestRelativePath(), Content: manifestContent(managed)}
 	if err := syncer.ApplyFilePlan(ctx, layout.Root, syncer.FilePlan{Playlists: []syncer.PlaylistFile{{Relative: relative, Content: content}, manifest}}); err != nil {
 		return err
+	}
+	pending = removePath(pending, relative)
+	if len(pending) == 0 {
+		if err := layout.ClearPendingManagedPaths(); err != nil {
+			return fmt.Errorf("clear pending playlist ownership: %w", err)
+		}
+	} else if err := layout.SavePendingManagedPaths(pending); err != nil {
+		return fmt.Errorf("update pending playlist ownership: %w", err)
 	}
 	commandLogger("playlist").Info(fmt.Sprintf("Wrote %s", relative))
 	return nil
@@ -1224,6 +1240,16 @@ func appendUnique(paths []string, value string) []string {
 		}
 	}
 	return append(paths, value)
+}
+
+func removePath(paths []string, value string) []string {
+	result := paths[:0]
+	for _, path := range paths {
+		if path != value {
+			result = append(result, path)
+		}
+	}
+	return result
 }
 
 func manifestContent(paths []string) []byte {

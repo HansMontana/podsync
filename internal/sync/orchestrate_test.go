@@ -387,6 +387,26 @@ func TestSingleBatchInterruptionPreservesPendingOwnership(t *testing.T) {
 	if len(pending) != 1 || pending[0] != relative {
 		t.Fatalf("got pending ownership %v, want %q", pending, relative)
 	}
+
+	secondEpisode := episode.Episode{FeedID: 1, GUID: "episode-2", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/ogg"}}
+	secondRelative := resolver.RelativePathFor(secondEpisode)
+	secondPlaylists := []PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: []byte(secondRelative + "\n")}}
+	secondContext, secondCancel := context.WithCancel(context.Background())
+	secondErr := EpisodesWithResolverAndProgressAndWarningsWithOptions(secondContext, server.Client(), staging, root, []episode.Episode{secondEpisode}, secondPlaylists, nil, nil, resolver, EpisodeSyncOptions{}, nil, func(progress FileProgress) {
+		if progress.Phase == "copy" {
+			secondCancel()
+		}
+	}, nil)
+	if secondErr == nil {
+		t.Fatal("second interrupted sync succeeded")
+	}
+	pending, err = (device.Layout{Root: root}).LoadPendingManagedPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 2 || pending[0] != relative || pending[1] != secondRelative {
+		t.Fatalf("got pending ownership after second interruption %v, want both paths", pending)
+	}
 	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), staging, root, []episode.Episode{episodeValue}, playlists, pending, nil, resolver, EpisodeSyncOptions{}, nil, nil, nil); err != nil {
 		t.Fatalf("resume failed: %v", err)
 	}

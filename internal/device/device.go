@@ -50,7 +50,7 @@ func (l Layout) ManifestRelativePath() string {
 }
 
 func (l Layout) LoadManagedPaths() ([]string, error) {
-	paths, err := loadPathList(l.ManifestPath())
+	paths, err := l.LoadCommittedManagedPaths()
 	if err != nil {
 		return nil, err
 	}
@@ -69,6 +69,10 @@ func (l Layout) LoadManagedPaths() ([]string, error) {
 		}
 	}
 	return paths, nil
+}
+
+func (l Layout) LoadCommittedManagedPaths() ([]string, error) {
+	return loadPathList(l.ManifestPath())
 }
 
 func (l Layout) LoadPendingManagedPaths() ([]string, error) {
