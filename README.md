@@ -24,7 +24,8 @@ Implemented:
 - Host-side bounded downloads and safe filesystem sync planning/application
 - Chunked syncs for large transfers with resumable intermediate batches
 - Rockbox playback-log and TagCache parsing with stable media-path matching, with unknown records treated as unplayed
-- Fast existing-media reuse with optional MP3 metadata verification
+- Existing-media reuse with default MP3 metadata verification and an opt-out
+- Linux daemon mode for one update per mounted-device session
 - Automatic mounted-device detection, read-only managed-file verification, and `PODSYNC_DEVICE_ROOT` support
 - CLI workflows for validation, reconciliation, refresh, update, feed management, status, verification, playlist, briefing, and sync
 
@@ -93,6 +94,10 @@ podsync update -skip-verify-media
 `reconcile` or `feed add`, then configure a logical `[[feed]]` entry, then
 `refresh` and `sync`. Refresh fetches up to ten sources concurrently and saves
 the refreshed device state as one batch.
+
+Linux daemon mode waits for an initialized, already-mounted device and runs one
+`update` per mount session. It does not mount or eject devices. See the user
+guide for the systemd service example and container deployment notes.
 
 Format and verify a change:
 

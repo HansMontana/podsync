@@ -17,6 +17,11 @@ podsync status -device-root /media/hansmontana/HANSPOD
 Set `PODSYNC_DEVICE_ROOT` to use a non-standard mount without repeating the
 flag.
 
+Podsync does not mount or eject devices. Linux desktop environments or a
+container host must mount the iPod first. One-shot commands can initialize a
+new device; daemon mode only processes an initialized device containing
+`Podsync/podsync.db`.
+
 Run a read-only device integrity check with:
 
 ```bash
@@ -62,6 +67,47 @@ Run the test suite:
 ```bash
 go test -count=1 ./...
 ```
+
+## Linux Daemon
+
+The optional Linux-only daemon waits for an initialized, already-mounted iPod
+and runs one `update` per mount session. It polls for device appearance and
+does not mount or eject the device. The existing `update` command remains a
+one-shot command and can be used to initialize a new device first.
+
+Run it directly:
+
+```bash
+podsync daemon
+```
+
+For a user-level systemd service, copy
+`contrib/systemd/podsync-daemon.service` to
+`~/.config/systemd/user/podsync-daemon.service`, adjust `ExecStart` if needed,
+then enable it:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now podsync-daemon.service
+```
+
+View daemon logs with:
+
+```bash
+journalctl --user -u podsync-daemon.service
+```
+
+For a future Linux container deployment, mount the iPod on the host and bind
+mount it into the container at a stable path. Pass that path explicitly:
+
+```bash
+podsync daemon -device-root /ipod
+```
+
+The container needs network access and write access to the mounted iPod. Keep
+the SQLite database and TOML configuration on the iPod; do not create a second
+authoritative host or container database. USB mounting and ejecting remain host
+responsibilities.
 
 ## Configuration
 

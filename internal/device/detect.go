@@ -1,12 +1,15 @@
 package device
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/user"
 	"path/filepath"
 	"sort"
 )
+
+var ErrNoDevice = errors.New("no podsync device detected")
 
 // ResolveRoot returns an explicit root or detects one mounted in a standard
 // user mount location. PODSYNC_DEVICE_ROOT is useful when the mount location
@@ -49,12 +52,18 @@ func ResolveRoot(explicit string) (string, error) {
 	}
 	sort.Strings(candidates)
 	if len(candidates) == 0 {
-		return "", fmt.Errorf("no podsync device detected; pass -device-root PATH or set PODSYNC_DEVICE_ROOT")
+		return "", fmt.Errorf("%w; pass -device-root PATH or set PODSYNC_DEVICE_ROOT", ErrNoDevice)
 	}
 	if len(candidates) > 1 {
 		return "", fmt.Errorf("multiple possible podsync devices detected: %v; pass -device-root PATH", candidates)
 	}
 	return candidates[0], nil
+}
+
+// LooksLikeDeviceRoot reports whether root contains an initialized podsync
+// database and is safe to consider for daemon processing.
+func LooksLikeDeviceRoot(root string) bool {
+	return looksLikeDeviceRoot(root)
 }
 
 func looksLikeDeviceRoot(root string) bool {

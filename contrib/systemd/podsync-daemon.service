@@ -1,0 +1,11 @@
+[Unit]
+Description=Podsync mounted iPod daemon
+
+[Service]
+# Install podsync at this path, or replace it with the absolute binary path.
+ExecStart=/usr/local/bin/podsync daemon
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=default.target

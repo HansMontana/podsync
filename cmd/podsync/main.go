@@ -10,10 +10,13 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"os/signal"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/HansMontana/podsync/internal/briefing"
@@ -109,6 +112,8 @@ func run(args []string) error {
 		return generatePlaylist(args[1:], true)
 	case "sync":
 		return sync(args[1:])
+	case "daemon":
+		return daemon(args[1:])
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", args[0], usageText())
 	}
@@ -128,6 +133,7 @@ Commands:
   playlist         Generate one logical-feed playlist.
   briefing         Generate one briefing playlist.
   sync             Download selected audio and apply device files.
+  daemon           Run one update per mounted device session (Linux only).
 
 Use "podsync help <command>" or "podsync <command> --help" for details.`
 }
@@ -159,6 +165,8 @@ func printCommandHelp(command string) error {
 		text = "Usage: podsync briefing [-device-root PATH] -id BRIEFING [-config PATH]\n\nGenerate one briefing playlist."
 	case "sync":
 		text = "Usage: podsync sync [-device-root PATH] [-config PATH] [-staging PATH] [-dry-run] [-skip-verify-media]\n\nApply selected audio, playlists, and managed-file cleanup."
+	case "daemon":
+		text = "Usage: podsync daemon [-device-root PATH] [-config PATH] [-staging PATH] [-poll-interval DURATION] [-skip-verify-media]\n\nRun one update per mounted device session on Linux."
 	default:
 		return fmt.Errorf("unknown help topic %q\n\n%s", command, usageText())
 	}
@@ -404,6 +412,10 @@ func reconcileDevice(deviceRoot, configPath string, refresh bool) error {
 }
 
 func reconcileDeviceWithLock(deviceRoot, configPath string, refresh bool, lock *device.Lock) error {
+	return reconcileDeviceWithLockContext(context.Background(), deviceRoot, configPath, refresh, lock)
+}
+
+func reconcileDeviceWithLockContext(ctx context.Context, deviceRoot, configPath string, refresh bool, lock *device.Lock) error {
 	logger := commandLogger("feed")
 	layout, repository, cfg, err := openDeviceWithLock(deviceRoot, configPath, false, true, lock)
 	if err != nil {
@@ -425,7 +437,7 @@ func reconcileDeviceWithLock(deviceRoot, configPath string, refresh bool, lock *
 	if err != nil {
 		return err
 	}
-	if err := syncer.RefreshFeeds(context.Background(), repository, httpClient, requests); err != nil {
+	if err := syncer.RefreshFeeds(ctx, repository, httpClient, requests); err != nil {
 		return fmt.Errorf("refresh feeds: %w", err)
 	}
 	for _, source := range cfg.Sources {
@@ -446,33 +458,61 @@ func update(args []string) error {
 	} else if help {
 		return nil
 	}
+	return runUpdate(context.Background(), updateOptions{
+		deviceRoot:      *deviceRoot,
+		configPath:      *configPath,
+		stagingDir:      *stagingDir,
+		skipVerifyMedia: *skipVerifyMedia,
+	})
+}
 
+type updateOptions struct {
+	deviceRoot      string
+	configPath      string
+	stagingDir      string
+	skipVerifyMedia bool
+	lock            *device.Lock
+	identity        fs.FileInfo
+}
+
+func runUpdate(ctx context.Context, options updateOptions) error {
 	logger := logging.New(os.Stderr).WithComponent("update")
 	started := time.Now()
 	logger.Info("Starting update")
-	resolvedRoot, identity, err := device.ResolveRootIdentity(*deviceRoot)
+	resolvedRoot, identity, err := device.ResolveRootIdentity(options.deviceRoot)
 	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Join(resolvedRoot, "Podsync"), 0o755); err != nil {
 		return fmt.Errorf("prepare device lock: %w", err)
 	}
-	lock, err := device.AcquireLock(resolvedRoot)
+	lock := options.lock
+	if lock == nil {
+		lock, err = device.AcquireLock(resolvedRoot)
+	}
 	if err != nil {
 		return err
 	}
-	defer lock.Close()
-	if err := reconcileDeviceWithLock(resolvedRoot, *configPath, true, lock); err != nil {
+	if options.lock == nil {
+		defer lock.Close()
+	}
+	if err := reconcileDeviceWithLockContext(ctx, resolvedRoot, options.configPath, true, lock); err != nil {
 		return fmt.Errorf("update refresh: %w", err)
 	}
 	logger.Info("Refresh complete")
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := device.VerifyRootIdentity(resolvedRoot, identity); err != nil {
 		return fmt.Errorf("before update sync: %w", err)
 	}
-	if err := syncDevice(syncOptions{deviceRoot: resolvedRoot, configPath: *configPath, stagingDir: *stagingDir, skipVerifyMedia: *skipVerifyMedia, lock: lock, identity: identity}); err != nil {
+	if err := syncDeviceContext(ctx, syncOptions{deviceRoot: resolvedRoot, configPath: options.configPath, stagingDir: options.stagingDir, skipVerifyMedia: options.skipVerifyMedia, lock: lock, identity: identity}); err != nil {
 		return fmt.Errorf("update sync: %w", err)
 	}
 	logger.Info("Sync complete")
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := device.VerifyRootIdentity(resolvedRoot, identity); err != nil {
 		return fmt.Errorf("before update verification: %w", err)
 	}
@@ -483,6 +523,135 @@ func update(args []string) error {
 	logger.Info(fmt.Sprintf("Device verification complete: %d managed files", verified))
 	logger.Info(fmt.Sprintf("Update complete in %s", time.Since(started).Round(time.Millisecond)))
 	return nil
+}
+
+type daemonOptions struct {
+	deviceRoot      string
+	configPath      string
+	stagingDir      string
+	pollInterval    time.Duration
+	skipVerifyMedia bool
+}
+
+type daemonDevice struct {
+	root     string
+	identity fs.FileInfo
+}
+
+type daemonDetector func() (daemonDevice, bool, error)
+type daemonRunner func(context.Context, updateOptions) error
+
+func daemon(args []string) error {
+	if runtime.GOOS != "linux" {
+		return fmt.Errorf("daemon mode is currently supported on Linux only")
+	}
+	flags := newFlagSet("daemon", "Usage: podsync daemon [-device-root PATH] [-config PATH] [-staging PATH] [-poll-interval DURATION] [-skip-verify-media]")
+	deviceRoot := flags.String("device-root", "", "mounted iPod root (auto-detected if omitted)")
+	configPath := flags.String("config", "", "path to podsync TOML configuration (defaults to device config)")
+	stagingDir := flags.String("staging", "", "host-side staging directory (defaults to a temporary directory)")
+	pollInterval := flags.Duration("poll-interval", 30*time.Second, "how often to check for a mounted iPod")
+	skipVerifyMedia := flags.Bool("skip-verify-media", false, "skip inspection and repair of existing MP3 metadata")
+	if help, err := parseFlags(flags, args); err != nil {
+		return err
+	} else if help {
+		return nil
+	}
+	if *pollInterval <= 0 {
+		return fmt.Errorf("poll interval must be positive")
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return runDaemon(ctx, daemonOptions{
+		deviceRoot:      *deviceRoot,
+		configPath:      *configPath,
+		stagingDir:      *stagingDir,
+		pollInterval:    *pollInterval,
+		skipVerifyMedia: *skipVerifyMedia,
+	})
+}
+
+func runDaemon(ctx context.Context, options daemonOptions) error {
+	logger := commandLogger("daemon")
+	return daemonLoop(ctx, options, func() (daemonDevice, bool, error) {
+		return detectDaemonDevice(options.deviceRoot)
+	}, func(ctx context.Context, update updateOptions) error {
+		return runUpdate(ctx, update)
+	}, logger)
+}
+
+func daemonLoop(ctx context.Context, options daemonOptions, detect daemonDetector, run daemonRunner, logger *logging.Logger) error {
+	var session *daemonDevice
+	ticker := time.NewTicker(options.pollInterval)
+	defer ticker.Stop()
+
+	for {
+		current, present, err := detect()
+		if err != nil {
+			if logger != nil {
+				logger.Warn("device detection failed: " + err.Error())
+			}
+			present = false
+			session = nil
+		}
+		if !present {
+			if session != nil && logger != nil {
+				logger.Info("Device removed")
+			}
+			session = nil
+		} else if session == nil || session.root != current.root || !os.SameFile(session.identity, current.identity) {
+			if logger != nil {
+				logger.Info("Device detected; running one update")
+			}
+			err := run(ctx, updateOptions{
+				deviceRoot:      current.root,
+				configPath:      options.configPath,
+				stagingDir:      options.stagingDir,
+				skipVerifyMedia: options.skipVerifyMedia,
+			})
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				return nil
+			}
+			if err != nil && logger != nil {
+				logger.Error("Update failed: " + err.Error())
+			} else if logger != nil {
+				logger.Info("Update complete for device session")
+			}
+			deviceSession := current
+			session = &deviceSession
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
+func detectDaemonDevice(explicitRoot string) (daemonDevice, bool, error) {
+	root := explicitRoot
+	if root == "" {
+		var err error
+		root, err = device.ResolveRoot("")
+		if err != nil {
+			if errors.Is(err, device.ErrNoDevice) {
+				return daemonDevice{}, false, nil
+			}
+			return daemonDevice{}, false, err
+		}
+	}
+	if !device.LooksLikeDeviceRoot(root) {
+		return daemonDevice{}, false, nil
+	}
+	resolvedRoot, identity, err := device.ResolveRootIdentity(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return daemonDevice{}, false, nil
+		}
+		return daemonDevice{}, false, err
+	}
+	return daemonDevice{root: resolvedRoot, identity: identity}, true, nil
 }
 
 func status(args []string) error {
@@ -657,6 +826,10 @@ func sync(args []string) error {
 }
 
 func syncDevice(options syncOptions) error {
+	return syncDeviceContext(context.Background(), options)
+}
+
+func syncDeviceContext(ctx context.Context, options syncOptions) error {
 	identity := options.identity
 	if identity == nil {
 		resolvedRoot, captured, err := device.ResolveRootIdentity(options.deviceRoot)
@@ -797,7 +970,7 @@ func syncDevice(options syncOptions) error {
 		logger.Info(fmt.Sprintf("Dry run selected %d episodes, writes %d playlists, and deletes %d managed files", len(episodes), len(playlistFiles)-1, len(plan.Deletes)))
 		return nil
 	}
-	if err := syncer.EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), httpClient, stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, syncer.EpisodeSyncOptions{VerifyMedia: verifyMedia, VerifyDevice: func() error {
+	if err := syncer.EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, httpClient, stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, syncer.EpisodeSyncOptions{VerifyMedia: verifyMedia, VerifyDevice: func() error {
 		return device.VerifyRootIdentity(layout.Root, identity)
 	}}, func(completed, total int, current episode.Episode, reused bool) {
 		if logProgress(completed, total) {
