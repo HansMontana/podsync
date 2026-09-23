@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"path"
 
+	"github.com/HansMontana/podsync/internal/adapters/playlists"
 	"github.com/HansMontana/podsync/internal/media"
 	"github.com/HansMontana/podsync/internal/playback"
-	"github.com/HansMontana/podsync/internal/playlists"
 	syncer "github.com/HansMontana/podsync/internal/sync"
 )
 
