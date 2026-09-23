@@ -11,8 +11,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/episode"
-	"github.com/HansMontana/podsync/internal/feed"
 )
 
 type Order string
@@ -134,7 +132,7 @@ func (c Config) Validate() error {
 		if _, exists := sources[source.ID]; exists {
 			return fmt.Errorf("duplicate source ID %q", source.ID)
 		}
-		normalized, err := feed.NormalizeURL(source.URL)
+		normalized, err := catalog.NormalizeURL(source.URL)
 		if err != nil {
 			return fmt.Errorf("source %q URL: %w", source.ID, err)
 		}
@@ -209,7 +207,7 @@ func validateOrder(order Order) error {
 	return nil
 }
 
-func (f Filter) Matches(e episode.Episode) bool {
+func (f Filter) Matches(e catalog.Episode) bool {
 	if !containsFold(e.Title, f.TitleContains) || !containsFold(e.Description, f.DescriptionContains) {
 		return false
 	}
@@ -228,10 +226,10 @@ func (c Config) EnsureSources(current catalog.Catalog) (catalog.Catalog, error) 
 		return catalog.Catalog{}, fmt.Errorf("validate config: %w", err)
 	}
 	result := current
-	byURL := make(map[string]feed.Feed, len(result.Feeds))
+	byURL := make(map[string]catalog.Feed, len(result.Feeds))
 	maxID := int64(0)
 	for _, known := range result.Feeds {
-		normalized, err := feed.NormalizeURL(known.URL)
+		normalized, err := catalog.NormalizeURL(known.URL)
 		if err != nil {
 			return catalog.Catalog{}, fmt.Errorf("normalize existing feed %d: %w", known.ID, err)
 		}
@@ -241,7 +239,7 @@ func (c Config) EnsureSources(current catalog.Catalog) (catalog.Catalog, error) 
 		}
 	}
 	for _, source := range c.Sources {
-		normalized, err := feed.NormalizeURL(source.URL)
+		normalized, err := catalog.NormalizeURL(source.URL)
 		if err != nil {
 			return catalog.Catalog{}, fmt.Errorf("normalize source %q: %w", source.ID, err)
 		}
@@ -249,7 +247,7 @@ func (c Config) EnsureSources(current catalog.Catalog) (catalog.Catalog, error) 
 			continue
 		}
 		maxID++
-		known := feed.Feed{ID: maxID, Name: source.ID, URL: normalized}
+		known := catalog.Feed{ID: maxID, Name: source.ID, URL: normalized}
 		result.Feeds = append(result.Feeds, known)
 		byURL[normalized] = known
 	}
@@ -268,7 +266,7 @@ func (c Config) LogicalFeedIDs(current catalog.Catalog) (map[int64]string, error
 	}
 	sourceURLs := make(map[string]string, len(c.Sources))
 	for _, source := range c.Sources {
-		normalized, err := feed.NormalizeURL(source.URL)
+		normalized, err := catalog.NormalizeURL(source.URL)
 		if err != nil {
 			return nil, fmt.Errorf("normalize source %q: %w", source.ID, err)
 		}
@@ -276,7 +274,7 @@ func (c Config) LogicalFeedIDs(current catalog.Catalog) (map[int64]string, error
 	}
 	feedIDs := make(map[string]int64, len(current.Feeds))
 	for _, known := range current.Feeds {
-		normalized, err := feed.NormalizeURL(known.URL)
+		normalized, err := catalog.NormalizeURL(known.URL)
 		if err != nil {
 			return nil, fmt.Errorf("normalize existing feed %d: %w", known.ID, err)
 		}

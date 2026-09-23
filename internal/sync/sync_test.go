@@ -9,8 +9,6 @@ import (
 	"testing"
 
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/episode"
-	"github.com/HansMontana/podsync/internal/feed"
 	"github.com/HansMontana/podsync/internal/state"
 )
 
@@ -29,18 +27,18 @@ func TestRefreshFeedReplacesOnlyTargetFeedAndPersistsMetadata(t *testing.T) {
 	}
 	defer repository.Close()
 
-	wantOther := episode.Episode{
+	wantOther := catalog.Episode{
 		FeedID:    2,
 		GUID:      "other-episode",
-		Enclosure: episode.Enclosure{URL: "https://example.com/other.mp3", Type: "audio/mpeg"},
+		Enclosure: catalog.Enclosure{URL: "https://example.com/other.mp3", Type: "audio/mpeg"},
 	}
 	initial := catalog.Catalog{
-		Feeds: []feed.Feed{
+		Feeds: []catalog.Feed{
 			{ID: 1, Name: "Old feed", URL: server.URL},
 			{ID: 2, Name: "Other feed", URL: "https://example.org/feed.xml"},
 		},
-		Episodes: []episode.Episode{
-			{FeedID: 1, GUID: "old-episode", Enclosure: episode.Enclosure{URL: "https://example.com/old.mp3"}},
+		Episodes: []catalog.Episode{
+			{FeedID: 1, GUID: "old-episode", Enclosure: catalog.Enclosure{URL: "https://example.com/old.mp3"}},
 			wantOther,
 		},
 	}
@@ -78,13 +76,13 @@ func TestRefreshFeedWithArchiveRetainsEpisodesOutsideRSSWindow(t *testing.T) {
 	}
 	defer repository.Close()
 	initial := catalog.Catalog{
-		Feeds: []feed.Feed{
+		Feeds: []catalog.Feed{
 			{ID: 1, URL: server.URL},
 			{ID: 2, URL: "https://example.org/other.xml"},
 		},
-		Episodes: []episode.Episode{
-			{FeedID: 1, GUID: "old", Enclosure: episode.Enclosure{URL: "https://example.com/old.mp3"}},
-			{FeedID: 2, GUID: "other", Enclosure: episode.Enclosure{URL: "https://example.org/other.mp3"}},
+		Episodes: []catalog.Episode{
+			{FeedID: 1, GUID: "old", Enclosure: catalog.Enclosure{URL: "https://example.com/old.mp3"}},
+			{FeedID: 2, GUID: "other", Enclosure: catalog.Enclosure{URL: "https://example.org/other.mp3"}},
 		},
 	}
 	if err := repository.Save(initial); err != nil {
@@ -105,7 +103,7 @@ func TestRefreshFeedWithArchiveRetainsEpisodesOutsideRSSWindow(t *testing.T) {
 		identities[current.IdentityKey()] = struct{}{}
 	}
 	for _, guid := range []string{"new", "old", "other"} {
-		if _, exists := identities[(episode.Episode{FeedID: map[string]int64{"new": 1, "old": 1, "other": 2}[guid], GUID: guid}).IdentityKey()]; !exists {
+		if _, exists := identities[(catalog.Episode{FeedID: map[string]int64{"new": 1, "old": 1, "other": 2}[guid], GUID: guid}).IdentityKey()]; !exists {
 			t.Fatalf("missing retained episode %q: %+v", guid, got.Episodes)
 		}
 	}
@@ -127,8 +125,8 @@ func TestRefreshFeed304LeavesStateUnchanged(t *testing.T) {
 	defer repository.Close()
 
 	want := catalog.Catalog{
-		Feeds:    []feed.Feed{{ID: 1, Name: "Current", URL: server.URL, ETag: `"current"`}},
-		Episodes: []episode.Episode{{FeedID: 1, GUID: "existing"}},
+		Feeds:    []catalog.Feed{{ID: 1, Name: "Current", URL: server.URL, ETag: `"current"`}},
+		Episodes: []catalog.Episode{{FeedID: 1, GUID: "existing"}},
 	}
 	if err := repository.Save(want); err != nil {
 		t.Fatalf("Save() returned error: %v", err)
@@ -159,8 +157,8 @@ func TestRefreshFeedMalformedRSSLeavesStateUnchanged(t *testing.T) {
 	defer repository.Close()
 
 	want := catalog.Catalog{
-		Feeds:    []feed.Feed{{ID: 1, Name: "Current", URL: server.URL}},
-		Episodes: []episode.Episode{{FeedID: 1, GUID: "existing"}},
+		Feeds:    []catalog.Feed{{ID: 1, Name: "Current", URL: server.URL}},
+		Episodes: []catalog.Episode{{FeedID: 1, GUID: "existing"}},
 	}
 	if err := repository.Save(want); err != nil {
 		t.Fatalf("Save() returned error: %v", err)
@@ -193,7 +191,7 @@ func TestRefreshFeedsPersistsMultipleFeedsOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repository.Close()
-	if err := repository.Save(catalog.Catalog{Feeds: []feed.Feed{{ID: 1, URL: servers.URL + "/one"}, {ID: 2, URL: servers.URL + "/two"}}}); err != nil {
+	if err := repository.Save(catalog.Catalog{Feeds: []catalog.Feed{{ID: 1, URL: servers.URL + "/one"}, {ID: 2, URL: servers.URL + "/two"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := RefreshFeeds(context.Background(), repository, servers.Client(), []RefreshRequest{{FeedID: 1}, {FeedID: 2}}); err != nil {
@@ -222,7 +220,7 @@ func TestRefreshFeedsCancellationDoesNotPersistPartialResults(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repository.Close()
-	want := catalog.Catalog{Feeds: []feed.Feed{{ID: 1, URL: server.URL + "/ok"}, {ID: 2, URL: server.URL + "/fail"}}, Episodes: []episode.Episode{{FeedID: 1, GUID: "old"}}}
+	want := catalog.Catalog{Feeds: []catalog.Feed{{ID: 1, URL: server.URL + "/ok"}, {ID: 2, URL: server.URL + "/fail"}}, Episodes: []catalog.Episode{{FeedID: 1, GUID: "old"}}}
 	if err := repository.Save(want); err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +246,7 @@ func TestRefreshFeedsReturnsParentCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repository.Close()
-	if err := repository.Save(catalog.Catalog{Feeds: []feed.Feed{{ID: 1, URL: server.URL}}}); err != nil {
+	if err := repository.Save(catalog.Catalog{Feeds: []catalog.Feed{{ID: 1, URL: server.URL}}}); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())

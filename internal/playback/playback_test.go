@@ -6,15 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/media"
 )
 
 func TestForEpisodesMatchesNormalizedDevicePaths(t *testing.T) {
-	current := episode.Episode{FeedID: 2, GUID: "one", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
+	current := catalog.Episode{FeedID: 2, GUID: "one", Enclosure: catalog.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
 	playedAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 	resolver := media.Resolver{2: "podcast"}
-	states := ForEpisodesWithResolver([]episode.Episode{current}, []Record{{Path: "/" + resolver.RelativePathFor(current), Known: true, PlayCount: 3, LastPlayed: playedAt}}, resolver)
+	states := ForEpisodesWithResolver([]catalog.Episode{current}, []Record{{Path: "/" + resolver.RelativePathFor(current), Known: true, PlayCount: 3, LastPlayed: playedAt}}, resolver)
 	state := states[current.IdentityKey()]
 	if !state.Known || !state.Played() || state.PlayCount != 3 || !state.LastPlayed.Equal(playedAt) {
 		t.Fatalf("got playback state %+v", state)
@@ -22,9 +22,9 @@ func TestForEpisodesMatchesNormalizedDevicePaths(t *testing.T) {
 }
 
 func TestForEpisodesMatchesRockboxVolumePrefixedPaths(t *testing.T) {
-	current := episode.Episode{FeedID: 2, GUID: "one", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
+	current := catalog.Episode{FeedID: 2, GUID: "one", Enclosure: catalog.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
 	resolver := media.Resolver{2: "podcast"}
-	states := ForEpisodesWithResolver([]episode.Episode{current}, []Record{{Path: "/<HDD0>/" + resolver.RelativePathFor(current), Known: true, PlayCount: 1}}, resolver)
+	states := ForEpisodesWithResolver([]catalog.Episode{current}, []Record{{Path: "/<HDD0>/" + resolver.RelativePathFor(current), Known: true, PlayCount: 1}}, resolver)
 	state := states[current.IdentityKey()]
 	if !state.Known || !state.Played() || state.PlayCount != 1 {
 		t.Fatalf("got playback state %+v", state)
@@ -32,38 +32,38 @@ func TestForEpisodesMatchesRockboxVolumePrefixedPaths(t *testing.T) {
 }
 
 func TestForEpisodesMatchesMetadataChangedPathByIdentityHash(t *testing.T) {
-	current := episode.Episode{FeedID: 2, GUID: "one", Title: "Corrected title", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
+	current := catalog.Episode{FeedID: 2, GUID: "one", Title: "Corrected title", Enclosure: catalog.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
 	previous := current
 	previous.Title = "Original title"
 	resolver := media.Resolver{2: "podcast"}
-	state := ForEpisodesWithResolver([]episode.Episode{current}, []Record{{Path: "/" + resolver.RelativePathFor(previous), Known: true, PlayCount: 2}}, resolver)[current.IdentityKey()]
+	state := ForEpisodesWithResolver([]catalog.Episode{current}, []Record{{Path: "/" + resolver.RelativePathFor(previous), Known: true, PlayCount: 2}}, resolver)[current.IdentityKey()]
 	if !state.Known || !state.Played() || state.PlayCount != 2 {
 		t.Fatalf("got playback state %+v", state)
 	}
 }
 
 func TestForEpisodesDoesNotMatchChangedLogicalFeedPathByIdentityHash(t *testing.T) {
-	current := episode.Episode{FeedID: 2, GUID: "one", Title: "Corrected title", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
+	current := catalog.Episode{FeedID: 2, GUID: "one", Title: "Corrected title", Enclosure: catalog.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
 	previous := current
 	previous.Title = "Original title"
-	state := ForEpisodesWithResolver([]episode.Episode{current}, []Record{{Path: "/" + (media.Resolver{2: "old-podcast"}).RelativePathFor(previous), Known: true, PlayCount: 2}}, media.Resolver{2: "podcast"})[current.IdentityKey()]
+	state := ForEpisodesWithResolver([]catalog.Episode{current}, []Record{{Path: "/" + (media.Resolver{2: "old-podcast"}).RelativePathFor(previous), Known: true, PlayCount: 2}}, media.Resolver{2: "podcast"})[current.IdentityKey()]
 	if state.Known || state.Played() {
 		t.Fatalf("got playback state %+v after logical-feed change", state)
 	}
 }
 
 func TestForEpisodesTreatsMissingRecordsAsUnplayed(t *testing.T) {
-	current := episode.Episode{FeedID: 2, GUID: "one", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
-	state := ForEpisodesWithResolver([]episode.Episode{current}, nil, media.Resolver{2: "podcast"})[current.IdentityKey()]
+	current := catalog.Episode{FeedID: 2, GUID: "one", Enclosure: catalog.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
+	state := ForEpisodesWithResolver([]catalog.Episode{current}, nil, media.Resolver{2: "podcast"})[current.IdentityKey()]
 	if state.Known || state.Played() {
 		t.Fatalf("got playback state %+v", state)
 	}
 }
 
 func TestForEpisodesDoesNotTrustUnknownRecords(t *testing.T) {
-	current := episode.Episode{FeedID: 2, GUID: "one", Enclosure: episode.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
+	current := catalog.Episode{FeedID: 2, GUID: "one", Enclosure: catalog.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
 	resolver := media.Resolver{2: "podcast"}
-	state := ForEpisodesWithResolver([]episode.Episode{current}, []Record{{Path: "/" + resolver.RelativePathFor(current), PlayCount: 4}}, resolver)[current.IdentityKey()]
+	state := ForEpisodesWithResolver([]catalog.Episode{current}, []Record{{Path: "/" + resolver.RelativePathFor(current), PlayCount: 4}}, resolver)[current.IdentityKey()]
 	if state.Known || state.Played() {
 		t.Fatalf("got playback state %+v", state)
 	}

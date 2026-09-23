@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
 
 var ErrUnsupportedMedia = errors.New("unsupported media type")
@@ -31,7 +31,7 @@ func (e *UnsupportedMediaError) Error() string {
 func (e *UnsupportedMediaError) Unwrap() error { return ErrUnsupportedMedia }
 
 // Episode downloads audio into host-side staging storage.
-func Episode(ctx context.Context, client *http.Client, e episode.Episode, stagingDir string) (path string, err error) {
+func Episode(ctx context.Context, client *http.Client, e catalog.Episode, stagingDir string) (path string, err error) {
 	if e.Enclosure.URL == "" {
 		return "", fmt.Errorf("episode has no audio URL")
 	}

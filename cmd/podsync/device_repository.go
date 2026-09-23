@@ -9,7 +9,6 @@ import (
 	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/feed"
 	"github.com/HansMontana/podsync/internal/state"
 	syncer "github.com/HansMontana/podsync/internal/sync"
 )
@@ -165,7 +164,7 @@ func reconcileState(repository state.Repository, cfg config.Config) error {
 func refreshRequests(current catalog.Catalog, cfg config.Config) ([]syncer.RefreshRequest, error) {
 	byURL := make(map[string]int64, len(current.Feeds))
 	for _, known := range current.Feeds {
-		normalized, err := feed.NormalizeURL(known.URL)
+		normalized, err := catalog.NormalizeURL(known.URL)
 		if err != nil {
 			return nil, fmt.Errorf("normalize existing feed %d: %w", known.ID, err)
 		}
@@ -177,7 +176,7 @@ func refreshRequests(current catalog.Catalog, cfg config.Config) ([]syncer.Refre
 	}
 	requests := make([]syncer.RefreshRequest, 0, len(cfg.Sources))
 	for _, source := range cfg.Sources {
-		normalized, err := feed.NormalizeURL(source.URL)
+		normalized, err := catalog.NormalizeURL(source.URL)
 		if err != nil {
 			return nil, fmt.Errorf("normalize source %q: %w", source.ID, err)
 		}

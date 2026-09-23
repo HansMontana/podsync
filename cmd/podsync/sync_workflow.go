@@ -13,7 +13,7 @@ import (
 	"github.com/HansMontana/podsync/internal/briefing"
 	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/device"
-	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/logging"
 	"github.com/HansMontana/podsync/internal/media"
 	"github.com/HansMontana/podsync/internal/playback"
@@ -92,7 +92,7 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		return err
 	}
 	states := playback.ForEpisodesWithResolver(current.Episodes, records, resolver)
-	selected := make(map[string]episode.Episode)
+	selected := make(map[string]catalog.Episode)
 	var playlistFiles []syncer.PlaylistFile
 	var managed []string
 	feedNames := make(map[int64]string, len(current.Feeds))
@@ -164,7 +164,7 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		}
 		defer os.RemoveAll(stagingDir)
 	}
-	episodes := make([]episode.Episode, 0, len(selected))
+	episodes := make([]catalog.Episode, 0, len(selected))
 	for _, currentEpisode := range selected {
 		episodes = append(episodes, currentEpisode)
 	}
@@ -194,7 +194,7 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 	}
 	if err := syncer.EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, httpClient, stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, syncer.EpisodeSyncOptions{VerifyMedia: verifyMedia, VerifyDevice: func() error {
 		return device.VerifyRootIdentity(layout.Root, identity)
-	}}, func(completed, total int, current episode.Episode, reused bool) {
+	}}, func(completed, total int, current catalog.Episode, reused bool) {
 		if logProgress(completed, total) {
 			logger.Info(fmt.Sprintf("Prepared episodes: %d/%d", completed, total))
 		}

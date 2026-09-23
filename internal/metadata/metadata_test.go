@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/bogem/id3v2/v2"
 )
 
@@ -14,7 +14,7 @@ func TestNormalizeMP3WritesAndReusesCanonicalFields(t *testing.T) {
 	if err := os.WriteFile(path, []byte("audio"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	episodeValue := episode.Episode{Title: "Episode title", PublishedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC)}
+	episodeValue := catalog.Episode{Title: "Episode title", PublishedAt: time.Date(2026, 9, 20, 0, 0, 0, 0, time.UTC)}
 	changed, err := NormalizeMP3(path, "Example Podcast", episodeValue)
 	if err != nil {
 		t.Fatalf("NormalizeMP3() returned error: %v", err)
@@ -46,7 +46,7 @@ func TestNormalizeMP3UsesEpisodeAuthorForArtist(t *testing.T) {
 	if err := os.WriteFile(path, []byte("audio"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	changed, err := NormalizeMP3(path, "Example Podcast", episode.Episode{Title: "Episode", Author: "Episode Author"})
+	changed, err := NormalizeMP3(path, "Example Podcast", catalog.Episode{Title: "Episode", Author: "Episode Author"})
 	if err != nil || !changed {
 		t.Fatalf("NormalizeMP3() changed=%v error=%v", changed, err)
 	}
@@ -66,7 +66,7 @@ func TestNormalizeMP3SupportsUnicodeEpisodeTitles(t *testing.T) {
 		t.Fatal(err)
 	}
 	title := `Immersive Remix: "Fantaisie Impromptu No. 4 in C#min, Op. 66” by Carlos Hernandez`
-	changed, err := NormalizeMP3(path, "Example Podcast", episode.Episode{Title: title})
+	changed, err := NormalizeMP3(path, "Example Podcast", catalog.Episode{Title: title})
 	if err != nil || !changed {
 		t.Fatalf("NormalizeMP3() changed=%v error=%v", changed, err)
 	}
@@ -100,7 +100,7 @@ func TestNormalizeMP3UpgradesIncompleteTagsForUnicode(t *testing.T) {
 	}
 
 	title := `Immersive Remix: "Fantaisie Impromptu No. 4 in C#min, Op. 66” by Carlos Hernandez`
-	changed, err := NormalizeMP3(path, "Example Podcast", episode.Episode{Title: title})
+	changed, err := NormalizeMP3(path, "Example Podcast", catalog.Episode{Title: title})
 	if err != nil || !changed {
 		t.Fatalf("NormalizeMP3() changed=%v error=%v", changed, err)
 	}
@@ -119,7 +119,7 @@ func TestNormalizeMP3ReplacesInvalidUTF8(t *testing.T) {
 	if err := os.WriteFile(path, []byte("audio"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	changed, err := NormalizeMP3(path, "Example Podcast", episode.Episode{Title: string([]byte{'E', 'p', 'i', 's', 'o', 'd', 'e', 0xff})})
+	changed, err := NormalizeMP3(path, "Example Podcast", catalog.Episode{Title: string([]byte{'E', 'p', 'i', 's', 'o', 'd', 'e', 0xff})})
 	if err != nil || !changed {
 		t.Fatalf("NormalizeMP3() changed=%v error=%v", changed, err)
 	}
@@ -156,7 +156,7 @@ func TestNormalizeMP3PreservesExistingMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	changed, err := NormalizeMP3(path, "Configured podcast", episode.Episode{Title: "Feed title"})
+	changed, err := NormalizeMP3(path, "Configured podcast", catalog.Episode{Title: "Feed title"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +197,7 @@ func TestNeedsNormalizationReadsTagsWithoutChangingAudio(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	needs, err := NeedsNormalization(path, episode.Episode{Title: "Feed title"})
+	needs, err := NeedsNormalization(path, catalog.Episode{Title: "Feed title"})
 	if err != nil {
 		t.Fatal(err)
 	}

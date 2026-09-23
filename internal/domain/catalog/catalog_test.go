@@ -3,20 +3,17 @@ package catalog
 import (
 	"fmt"
 	"testing"
-
-	"github.com/HansMontana/podsync/internal/episode"
-	"github.com/HansMontana/podsync/internal/feed"
 )
 
 func TestCatalogValidateAcceptsValidCatalog(t *testing.T) {
 	catalog := Catalog{
-		Feeds: []feed.Feed{
+		Feeds: []Feed{
 			{
 				ID:  1,
 				URL: "https://example.com/feed.xml",
 			},
 		},
-		Episodes: []episode.Episode{
+		Episodes: []Episode{
 			{
 				FeedID: 1,
 				GUID:   "episode-1",
@@ -31,7 +28,7 @@ func TestCatalogValidateAcceptsValidCatalog(t *testing.T) {
 
 func TestCatalogValidateRejectsDuplicateFeedIDs(t *testing.T) {
 	catalog := Catalog{
-		Feeds: []feed.Feed{
+		Feeds: []Feed{
 			{ID: 1, URL: "https://example.com/one.xml"},
 			{ID: 1, URL: "https://example.com/two.xml"},
 		},
@@ -44,7 +41,7 @@ func TestCatalogValidateRejectsDuplicateFeedIDs(t *testing.T) {
 
 func TestCatalogValidateRejectsDuplicateFeedURLs(t *testing.T) {
 	catalog := Catalog{
-		Feeds: []feed.Feed{
+		Feeds: []Feed{
 			{ID: 1, URL: "https://example.com/feed.xml"},
 			{ID: 2, URL: "https://EXAMPLE.com:443/feed.xml"},
 		},
@@ -57,10 +54,10 @@ func TestCatalogValidateRejectsDuplicateFeedURLs(t *testing.T) {
 
 func TestCatalogValidateRejectsEpisodeWithUnknownFeed(t *testing.T) {
 	catalog := Catalog{
-		Feeds: []feed.Feed{
+		Feeds: []Feed{
 			{ID: 1, URL: "https://example.com/feed.xml"},
 		},
-		Episodes: []episode.Episode{
+		Episodes: []Episode{
 			{
 				FeedID: 999,
 				GUID:   "episode-1",
@@ -75,10 +72,10 @@ func TestCatalogValidateRejectsEpisodeWithUnknownFeed(t *testing.T) {
 
 func TestCatalogValidateRejectsDuplicateEpisodeIdentity(t *testing.T) {
 	catalog := Catalog{
-		Feeds: []feed.Feed{
+		Feeds: []Feed{
 			{ID: 1, URL: "https://example.com/feed.xml"},
 		},
-		Episodes: []episode.Episode{
+		Episodes: []Episode{
 			{
 				FeedID: 1,
 				GUID:   "episode-1",
@@ -98,9 +95,9 @@ func TestCatalogValidateRejectsDuplicateEpisodeIdentity(t *testing.T) {
 }
 
 func BenchmarkCatalogValidateEpisodes(b *testing.B) {
-	catalog := Catalog{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/feed.xml"}}}
+	catalog := Catalog{Feeds: []Feed{{ID: 1, URL: "https://example.com/feed.xml"}}}
 	for i := 0; i < 20000; i++ {
-		catalog.Episodes = append(catalog.Episodes, episode.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i)})
+		catalog.Episodes = append(catalog.Episodes, Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i)})
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

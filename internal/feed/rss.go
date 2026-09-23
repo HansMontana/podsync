@@ -8,28 +8,28 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/mmcdole/gofeed"
 )
 
 // ParseRSS parses an RSS 2.0 podcast and returns only items with audio
 // enclosures. The supplied feed provides the durable identity and URL.
-func ParseRSS(r io.Reader, f Feed) (Feed, []episode.Episode, error) {
-	normalizedURL, err := NormalizeURL(f.URL)
+func ParseRSS(r io.Reader, f catalog.Feed) (catalog.Feed, []catalog.Episode, error) {
+	normalizedURL, err := catalog.NormalizeURL(f.URL)
 	if err != nil {
-		return Feed{}, nil, fmt.Errorf("normalize feed URL: %w", err)
+		return catalog.Feed{}, nil, fmt.Errorf("normalize feed URL: %w", err)
 	}
 
 	parser := gofeed.NewParser()
 	parsed, err := parser.Parse(r)
 	if err != nil {
-		return Feed{}, nil, fmt.Errorf("decode RSS: %w", err)
+		return catalog.Feed{}, nil, fmt.Errorf("decode RSS: %w", err)
 	}
 	if parsed.FeedType != "rss" {
-		return Feed{}, nil, fmt.Errorf("unsupported feed type %q: only RSS is supported", parsed.FeedType)
+		return catalog.Feed{}, nil, fmt.Errorf("unsupported feed type %q: only RSS is supported", parsed.FeedType)
 	}
 	if strings.TrimSpace(parsed.Title) == "" {
-		return Feed{}, nil, fmt.Errorf("RSS channel has no title")
+		return catalog.Feed{}, nil, fmt.Errorf("RSS channel has no title")
 	}
 
 	f.URL = normalizedURL
@@ -39,19 +39,19 @@ func ParseRSS(r io.Reader, f Feed) (Feed, []episode.Episode, error) {
 		feedAuthor = strings.TrimSpace(parsed.ITunesExt.Author)
 	}
 
-	episodes := make([]episode.Episode, 0, len(parsed.Items))
+	episodes := make([]catalog.Episode, 0, len(parsed.Items))
 	for i, item := range parsed.Items {
 		enclosure, ok := audioEnclosure(item)
 		if !ok {
 			continue
 		}
 		if err := validateEnclosureURL(enclosure.URL); err != nil {
-			return Feed{}, nil, fmt.Errorf("parse item %d enclosure: %w", i, err)
+			return catalog.Feed{}, nil, fmt.Errorf("parse item %d enclosure: %w", i, err)
 		}
 
 		duration, err := parseDuration(item)
 		if err != nil {
-			return Feed{}, nil, fmt.Errorf("parse item %d duration: %w", i, err)
+			return catalog.Feed{}, nil, fmt.Errorf("parse item %d duration: %w", i, err)
 		}
 
 		var publishedAt time.Time
@@ -65,13 +65,13 @@ func ParseRSS(r io.Reader, f Feed) (Feed, []episode.Episode, error) {
 		} else if author := authorName(item.Author, item.Authors); author != "" {
 			itemAuthor = author
 		}
-		episodes = append(episodes, episode.Episode{
+		episodes = append(episodes, catalog.Episode{
 			FeedID:      f.ID,
 			GUID:        strings.TrimSpace(item.GUID),
 			Title:       strings.TrimSpace(item.Title),
 			Author:      itemAuthor,
 			Description: strings.TrimSpace(item.Description),
-			Enclosure: episode.Enclosure{
+			Enclosure: catalog.Enclosure{
 				URL:    strings.TrimSpace(enclosure.URL),
 				Type:   strings.TrimSpace(enclosure.Type),
 				Length: enclosureLength(enclosure.Length),

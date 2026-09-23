@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
 
 func TestEpisodeDownloadsToStaging(t *testing.T) {
@@ -20,7 +20,7 @@ func TestEpisodeDownloadsToStaging(t *testing.T) {
 	defer server.Close()
 
 	staging := filepath.Join(t.TempDir(), "staging")
-	path, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}, staging)
+	path, err := Episode(context.Background(), server.Client(), catalog.Episode{Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/mpeg"}}, staging)
 	if err != nil {
 		t.Fatalf("Episode() returned error: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestEpisodeRejectsFailedResponse(t *testing.T) {
 	server := httptest.NewServer(http.NotFoundHandler())
 	defer server.Close()
 
-	if _, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL}}, t.TempDir()); err == nil {
+	if _, err := Episode(context.Background(), server.Client(), catalog.Episode{Enclosure: catalog.Enclosure{URL: server.URL}}, t.TempDir()); err == nil {
 		t.Fatal("Episode() accepted a failed response")
 	}
 }
@@ -52,7 +52,7 @@ func TestEpisodeRejectsNonAudioResponse(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}, t.TempDir())
+	_, err := Episode(context.Background(), server.Client(), catalog.Episode{Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/mpeg"}}, t.TempDir())
 	if !errors.Is(err, ErrUnsupportedMedia) {
 		t.Fatalf("Episode() error = %v, want unsupported media", err)
 	}
@@ -65,7 +65,7 @@ func TestEpisodeRejectsHTMLResponseDeclaredAsAudio(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}, t.TempDir())
+	_, err := Episode(context.Background(), server.Client(), catalog.Episode{Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/mpeg"}}, t.TempDir())
 	if !errors.Is(err, ErrUnsupportedMedia) {
 		t.Fatalf("Episode() error = %v, want unsupported media", err)
 	}
@@ -77,7 +77,7 @@ func TestEpisodeRejectsVideoSignatureWithoutContentType(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}, t.TempDir())
+	_, err := Episode(context.Background(), server.Client(), catalog.Episode{Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/mpeg"}}, t.TempDir())
 	if !errors.Is(err, ErrUnsupportedMedia) {
 		t.Fatalf("Episode() error = %v, want unsupported media", err)
 	}
@@ -90,7 +90,7 @@ func TestEpisodeAllowsEnclosureLengthAboveHistoricalLimit(t *testing.T) {
 	}))
 	defer server.Close()
 
-	path, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg", Length: 1<<30 + 1}}, t.TempDir())
+	path, err := Episode(context.Background(), server.Client(), catalog.Episode{Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/mpeg", Length: 1<<30 + 1}}, t.TempDir())
 	if err != nil {
 		t.Fatalf("Episode() rejected large advisory response length: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestEpisodeAllowsEnclosureLengthAboveHistoricalLimit(t *testing.T) {
 }
 
 func TestEpisodeRejectsMissingAudioURL(t *testing.T) {
-	if _, err := Episode(context.Background(), nil, episode.Episode{}, t.TempDir()); err == nil {
+	if _, err := Episode(context.Background(), nil, catalog.Episode{}, t.TempDir()); err == nil {
 		t.Fatal("Episode() accepted an episode without an audio URL")
 	}
 }
@@ -108,7 +108,7 @@ func TestEpisodeRejectsMissingAudioURL(t *testing.T) {
 func TestEpisodeRejectsEmptyDownload(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer server.Close()
-	if _, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL}}, t.TempDir()); err == nil {
+	if _, err := Episode(context.Background(), server.Client(), catalog.Episode{Enclosure: catalog.Enclosure{URL: server.URL}}, t.TempDir()); err == nil {
 		t.Fatal("Episode() accepted an empty download")
 	}
 }
@@ -118,7 +118,7 @@ func TestEpisodeAllowsAdvisoryEnclosureSizeMismatch(t *testing.T) {
 		_, _ = w.Write([]byte("audio"))
 	}))
 	defer server.Close()
-	path, err := Episode(context.Background(), server.Client(), episode.Episode{Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg", Length: 6}}, t.TempDir())
+	path, err := Episode(context.Background(), server.Client(), catalog.Episode{Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/mpeg", Length: 6}}, t.TempDir())
 	if err != nil {
 		t.Fatalf("Episode() rejected an advisory size mismatch: %v", err)
 	}

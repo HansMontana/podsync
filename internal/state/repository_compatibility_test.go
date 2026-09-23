@@ -9,8 +9,6 @@ import (
 	"testing/fstest"
 
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/episode"
-	"github.com/HansMontana/podsync/internal/feed"
 	"github.com/pressly/goose/v3"
 )
 
@@ -100,8 +98,8 @@ func TestSQLiteRepositoryRejectsNewerDatabaseBeforeWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := catalog.Catalog{
-		Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/feed.xml"}},
-		Episodes: []episode.Episode{{
+		Feeds: []catalog.Feed{{ID: 1, URL: "https://example.com/feed.xml"}},
+		Episodes: []catalog.Episode{{
 			FeedID: 1,
 			GUID:   "episode-1",
 			Author: "Original author",

@@ -9,14 +9,14 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
 
 // Resolver maps durable source-feed IDs to logical-feed IDs for device paths.
 type Resolver map[int64]string
 
 // RelativePathFor returns the logical-feed path for an episode.
-func (r Resolver) RelativePathFor(e episode.Episode) string {
+func (r Resolver) RelativePathFor(e catalog.Episode) string {
 	logicalID := r[e.FeedID]
 
 	hash := IdentityHash(e)
@@ -30,7 +30,7 @@ func (r Resolver) RelativePathFor(e episode.Episode) string {
 }
 
 // IdentityHash returns the short identity suffix used in managed filenames.
-func IdentityHash(e episode.Episode) string {
+func IdentityHash(e catalog.Episode) string {
 	sum := sha256.Sum256([]byte(e.IdentityKey()))
 	return hex.EncodeToString(sum[:])[:12]
 }
@@ -57,7 +57,7 @@ func sanitizeTitle(value string) string {
 	return clean
 }
 
-func extension(e episode.Episode) string {
+func extension(e catalog.Episode) string {
 	switch strings.ToLower(strings.TrimSpace(e.Enclosure.Type)) {
 	case "audio/mpeg", "audio/mp3":
 		return ".mp3"

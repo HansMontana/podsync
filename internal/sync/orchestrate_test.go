@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/media"
 )
 
@@ -34,8 +34,8 @@ func TestEpisodesStagesBeforeApplyingAndDeletesOnlyManagedFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	current := episode.Episode{FeedID: 1, GUID: "one", Title: "One", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}
-	if err := Episodes(context.Background(), server.Client(), filepath.Join(t.TempDir(), "staging"), root, []episode.Episode{current}, nil, []string{"Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3"}); err != nil {
+	current := catalog.Episode{FeedID: 1, GUID: "one", Title: "One", Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/mpeg"}}
+	if err := Episodes(context.Background(), server.Client(), filepath.Join(t.TempDir(), "staging"), root, []catalog.Episode{current}, nil, []string{"Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3"}); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3")); !os.IsNotExist(err) {
@@ -58,8 +58,8 @@ func TestEpisodesDoesNotChangeDeviceWhenDownloadFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	current := episode.Episode{FeedID: 1, GUID: "one", Enclosure: episode.Enclosure{URL: server.URL}}
-	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, []string{"Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3"}); err == nil {
+	current := catalog.Episode{FeedID: 1, GUID: "one", Enclosure: catalog.Enclosure{URL: server.URL}}
+	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, []string{"Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3"}); err == nil {
 		t.Fatal("Episodes() accepted a failed download")
 	}
 	if _, err := os.Stat(old); err != nil {
@@ -81,12 +81,12 @@ func TestEpisodesSkipsUnsupportedMediaAndRemovesItFromPlaylists(t *testing.T) {
 
 	root := t.TempDir()
 	resolver := media.Resolver{1: "podcast-1"}
-	video := episode.Episode{FeedID: 1, GUID: "video", Title: "Video", Enclosure: episode.Enclosure{URL: server.URL + "/video", Type: "audio/mpeg"}}
-	audio := episode.Episode{FeedID: 1, GUID: "audio", Title: "Audio", Enclosure: episode.Enclosure{URL: server.URL + "/audio", Type: "audio/mpeg"}}
+	video := catalog.Episode{FeedID: 1, GUID: "video", Title: "Video", Enclosure: catalog.Enclosure{URL: server.URL + "/video", Type: "audio/mpeg"}}
+	audio := catalog.Episode{FeedID: 1, GUID: "audio", Title: "Audio", Enclosure: catalog.Enclosure{URL: server.URL + "/audio", Type: "audio/mpeg"}}
 	videoPath := resolver.RelativePathFor(video)
 	audioPath := resolver.RelativePathFor(audio)
 	playlist := PlaylistFile{Relative: "Playlists/test.m3u8", Content: []byte("#EXTM3U\n#EXTINF:0,Video\n../" + videoPath + "\n#EXTINF:0,Audio\n../" + audioPath + "\n")}
-	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{video, audio}, []PlaylistFile{playlist}, nil); err != nil {
+	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{video, audio}, []PlaylistFile{playlist}, nil); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
 	content, err := os.ReadFile(filepath.Join(root, "Playlists/test.m3u8"))
@@ -113,7 +113,7 @@ func TestEpisodesReusesExistingMatchingFile(t *testing.T) {
 	defer server.Close()
 
 	root := t.TempDir()
-	current := episode.Episode{FeedID: 1, GUID: "one", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg", Length: 5}}
+	current := catalog.Episode{FeedID: 1, GUID: "one", Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/mpeg", Length: 5}}
 	relative := (media.Resolver{1: "podcast-1"}).RelativePathFor(current)
 	destination := filepath.Join(root, filepath.FromSlash(relative))
 	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
@@ -128,7 +128,7 @@ func TestEpisodesReusesExistingMatchingFile(t *testing.T) {
 		total     int
 		reused    bool
 	}
-	if err := EpisodesWithProgress(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, nil, nil, func(completed, total int, current episode.Episode, reused bool) {
+	if err := EpisodesWithProgress(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, nil, nil, func(completed, total int, current catalog.Episode, reused bool) {
 		progress.completed = completed
 		progress.total = total
 		progress.reused = reused
@@ -152,7 +152,7 @@ func TestEpisodesRetagsExistingMP3WithWrongKnownSize(t *testing.T) {
 	defer server.Close()
 
 	root := t.TempDir()
-	current := episode.Episode{FeedID: 1, GUID: "one", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg", Length: 5}}
+	current := catalog.Episode{FeedID: 1, GUID: "one", Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/mpeg", Length: 5}}
 	relative := (media.Resolver{1: "podcast-1"}).RelativePathFor(current)
 	destination := filepath.Join(root, filepath.FromSlash(relative))
 	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
@@ -162,7 +162,7 @@ func TestEpisodesRetagsExistingMP3WithWrongKnownSize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, nil, nil, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{VerifyMedia: true}, nil, nil, nil); err != nil {
+	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, nil, nil, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{VerifyMedia: true}, nil, nil, nil); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
 	if requests.Load() != 0 {
@@ -182,7 +182,7 @@ func TestEpisodesFastPathDoesNotInspectExistingMP3(t *testing.T) {
 	defer server.Close()
 
 	root := t.TempDir()
-	current := episode.Episode{FeedID: 1, GUID: "one", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}
+	current := catalog.Episode{FeedID: 1, GUID: "one", Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/mpeg"}}
 	relative := (media.Resolver{1: "podcast-1"}).RelativePathFor(current)
 	destination := filepath.Join(root, filepath.FromSlash(relative))
 	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
@@ -192,7 +192,7 @@ func TestEpisodesFastPathDoesNotInspectExistingMP3(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, nil); err != nil {
+	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if requests.Load() != 0 {
@@ -213,7 +213,7 @@ func TestEpisodesRedownloadsUnreadableExistingMP3(t *testing.T) {
 	defer server.Close()
 
 	root := t.TempDir()
-	current := episode.Episode{FeedID: 1, GUID: "one", Title: "One", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}
+	current := catalog.Episode{FeedID: 1, GUID: "one", Title: "One", Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/mpeg"}}
 	relative := (media.Resolver{1: "podcast-1"}).RelativePathFor(current)
 	destination := filepath.Join(root, filepath.FromSlash(relative))
 	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
@@ -223,7 +223,7 @@ func TestEpisodesRedownloadsUnreadableExistingMP3(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, nil, nil, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{VerifyMedia: true}, nil, nil, nil); err != nil {
+	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, nil, nil, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{VerifyMedia: true}, nil, nil, nil); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
 	_ = os.Chmod(destination, 0o644)
@@ -242,7 +242,7 @@ func TestEpisodesKeepsUnreadableExistingMP3WhenRedownloadFails(t *testing.T) {
 	defer server.Close()
 
 	root := t.TempDir()
-	current := episode.Episode{FeedID: 1, GUID: "one", Title: "One", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/mpeg"}}
+	current := catalog.Episode{FeedID: 1, GUID: "one", Title: "One", Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/mpeg"}}
 	relative := (media.Resolver{1: "podcast-1"}).RelativePathFor(current)
 	destination := filepath.Join(root, filepath.FromSlash(relative))
 	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
@@ -253,7 +253,7 @@ func TestEpisodesKeepsUnreadableExistingMP3WhenRedownloadFails(t *testing.T) {
 	}
 
 	warnings := 0
-	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), t.TempDir(), root, []episode.Episode{current}, nil, []string{relative}, nil, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{VerifyMedia: true}, nil, nil, func(string) {
+	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, []string{relative}, nil, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{VerifyMedia: true}, nil, nil, func(string) {
 		warnings++
 	}); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)

@@ -7,14 +7,12 @@ import (
 
 	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/episode"
-	"github.com/HansMontana/podsync/internal/feed"
 	"github.com/HansMontana/podsync/internal/playback"
 )
 
 func TestM3UProducesExtendedPlaylist(t *testing.T) {
 	got := string(M3U([]Track{{
-		Episode: episode.Episode{Title: "Morning news", Duration: 2*time.Minute + 3*time.Second},
+		Episode: catalog.Episode{Title: "Morning news", Duration: 2*time.Minute + 3*time.Second},
 		Path:    "Podcasts/news.mp3",
 	}}))
 	want := "#EXTM3U\n#EXTINF:123,Morning news\nPodcasts/news.mp3\n"
@@ -38,10 +36,10 @@ func TestLogicalFeedUsesStableDevicePathsAndConfiguredOrder(t *testing.T) {
 		Feeds:   []config.LogicalFeed{{ID: "world", Source: "news", Order: config.OldestFirst, Limit: 1}},
 	}
 	current := catalog.Catalog{
-		Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/news.xml"}},
-		Episodes: []episode.Episode{
-			{FeedID: 1, GUID: "new", Title: "New", PublishedAt: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC), Enclosure: episode.Enclosure{URL: "https://example.com/new.mp3", Type: "audio/mpeg"}},
-			{FeedID: 1, GUID: "old", Title: "Old", PublishedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Enclosure: episode.Enclosure{URL: "https://example.com/old.mp3", Type: "audio/mpeg"}},
+		Feeds: []catalog.Feed{{ID: 1, URL: "https://example.com/news.xml"}},
+		Episodes: []catalog.Episode{
+			{FeedID: 1, GUID: "new", Title: "New", PublishedAt: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC), Enclosure: catalog.Enclosure{URL: "https://example.com/new.mp3", Type: "audio/mpeg"}},
+			{FeedID: 1, GUID: "old", Title: "Old", PublishedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), Enclosure: catalog.Enclosure{URL: "https://example.com/old.mp3", Type: "audio/mpeg"}},
 		},
 	}
 	playlist, err := LogicalFeed(cfg, current, "world", map[string]playback.State{})

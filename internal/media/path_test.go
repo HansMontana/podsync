@@ -5,15 +5,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
 
 func TestRelativePathForKeepsIdentityHashWhenMetadataChanges(t *testing.T) {
-	first := episode.Episode{
+	first := catalog.Episode{
 		FeedID:    7,
 		GUID:      "episode-1",
 		Title:     "Original title",
-		Enclosure: episode.Enclosure{URL: "https://example.com/episode.mp3", Type: "audio/mpeg"},
+		Enclosure: catalog.Enclosure{URL: "https://example.com/episode.mp3", Type: "audio/mpeg"},
 	}
 	second := first
 	second.Title = "Corrected title"
@@ -28,26 +28,26 @@ func TestRelativePathForKeepsIdentityHashWhenMetadataChanges(t *testing.T) {
 }
 
 func TestRelativePathForDoesNotEscapeDeviceRoot(t *testing.T) {
-	path := (Resolver{1: "podcast"}).RelativePathFor(episode.Episode{FeedID: 1, GUID: "../../outside", Enclosure: episode.Enclosure{URL: "https://example.com/file.mp3", Type: "audio/mpeg"}})
+	path := (Resolver{1: "podcast"}).RelativePathFor(catalog.Episode{FeedID: 1, GUID: "../../outside", Enclosure: catalog.Enclosure{URL: "https://example.com/file.mp3", Type: "audio/mpeg"}})
 	if strings.HasPrefix(path, "../") || strings.Contains(path, "/../") {
 		t.Fatalf("path escaped device root: %q", path)
 	}
 }
 
 func TestRelativePathForUsesAudioExtension(t *testing.T) {
-	path := (Resolver{1: "podcast"}).RelativePathFor(episode.Episode{FeedID: 1, GUID: "episode", Enclosure: episode.Enclosure{Type: "audio/ogg"}})
+	path := (Resolver{1: "podcast"}).RelativePathFor(catalog.Episode{FeedID: 1, GUID: "episode", Enclosure: catalog.Enclosure{Type: "audio/ogg"}})
 	if !strings.HasSuffix(path, ".ogg") {
 		t.Fatalf("got path %q", path)
 	}
 }
 
 func TestRelativePathForUsesLogicalIDTitleDateAndHash(t *testing.T) {
-	episodeValue := episode.Episode{
+	episodeValue := catalog.Episode{
 		FeedID:      7,
 		GUID:        "episode-1",
 		Title:       "A/B: New Episode!",
 		PublishedAt: time.Date(2026, 9, 20, 23, 0, 0, 0, time.FixedZone("test", 2*60*60)),
-		Enclosure:   episode.Enclosure{Type: "audio/mpeg"},
+		Enclosure:   catalog.Enclosure{Type: "audio/mpeg"},
 	}
 	got := (Resolver{7: "welcome-to-night-vale"}).RelativePathFor(episodeValue)
 	if !strings.HasPrefix(got, "Podcasts/welcome-to-night-vale/A B New Episode! - 2026-09-20 -- ") || !strings.HasSuffix(got, ".mp3") {

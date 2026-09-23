@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
 
 func TestFetchRSSUsesConditionalHeaders(t *testing.T) {
@@ -20,7 +22,7 @@ func TestFetchRSSUsesConditionalHeaders(t *testing.T) {
 	}))
 	defer server.Close()
 
-	result, err := FetchRSS(context.Background(), server.Client(), Feed{
+	result, err := FetchRSS(context.Background(), server.Client(), catalog.Feed{
 		URL:          server.URL,
 		ETag:         `"feed-1"`,
 		LastModified: "Wed, 02 Sep 2026 14:39:34 +0200",
@@ -41,7 +43,7 @@ func TestFetchRSSReturnsBodyAndCacheHeaders(t *testing.T) {
 	}))
 	defer server.Close()
 
-	result, err := FetchRSS(context.Background(), server.Client(), Feed{URL: server.URL})
+	result, err := FetchRSS(context.Background(), server.Client(), catalog.Feed{URL: server.URL})
 	if err != nil {
 		t.Fatalf("FetchRSS() returned error: %v", err)
 	}
@@ -60,7 +62,7 @@ func TestFetchRSSAcceptsLargerRealWorldFeeds(t *testing.T) {
 	}))
 	defer server.Close()
 
-	result, err := FetchRSS(context.Background(), server.Client(), Feed{URL: server.URL})
+	result, err := FetchRSS(context.Background(), server.Client(), catalog.Feed{URL: server.URL})
 	if err != nil {
 		t.Fatalf("FetchRSS() rejected a feed larger than the old limit: %v", err)
 	}
@@ -75,7 +77,7 @@ func TestFetchRSSRejectsUnexpectedStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if _, err := FetchRSS(context.Background(), server.Client(), Feed{URL: server.URL}); err == nil {
+	if _, err := FetchRSS(context.Background(), server.Client(), catalog.Feed{URL: server.URL}); err == nil {
 		t.Fatal("FetchRSS() accepted a forbidden response")
 	}
 }

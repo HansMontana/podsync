@@ -5,7 +5,6 @@ import (
 
 	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/playback"
 	"github.com/HansMontana/podsync/internal/selection"
 )
@@ -13,7 +12,7 @@ import (
 type Plan struct {
 	ID       string
 	Title    string
-	Episodes []episode.Episode
+	Episodes []catalog.Episode
 }
 
 func Build(cfg config.Config, current catalog.Catalog, briefingID string, playbackStates map[string]playback.State) (Plan, error) {
@@ -45,7 +44,7 @@ func Build(cfg config.Config, current catalog.Catalog, briefingID string, playba
 	return plan, nil
 }
 
-func hasPlayedEpisode(episodes []episode.Episode, playbackStates map[string]playback.State) bool {
+func hasPlayedEpisode(episodes []catalog.Episode, playbackStates map[string]playback.State) bool {
 	for _, current := range episodes {
 		if playbackStates[current.IdentityKey()].Played() {
 			return true

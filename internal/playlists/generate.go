@@ -7,7 +7,6 @@ import (
 	"github.com/HansMontana/podsync/internal/briefing"
 	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/media"
 	"github.com/HansMontana/podsync/internal/playback"
 	"github.com/HansMontana/podsync/internal/selection"
@@ -45,11 +44,11 @@ func BriefingWithResolver(cfg config.Config, current catalog.Catalog, briefingID
 	return M3U(tracksWithResolver(plan.Episodes, resolver)), nil
 }
 
-func tracks(episodes []episode.Episode) []Track {
+func tracks(episodes []catalog.Episode) []Track {
 	return tracksWithResolver(episodes, nil)
 }
 
-func tracksWithResolver(episodes []episode.Episode, resolver media.Resolver) []Track {
+func tracksWithResolver(episodes []catalog.Episode, resolver media.Resolver) []Track {
 	result := make([]Track, len(episodes))
 	for i, current := range episodes {
 		result[i] = Track{Episode: current, Path: path.Join("..", resolver.RelativePathFor(current))}

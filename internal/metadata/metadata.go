@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/bogem/id3v2/v2"
 )
 
@@ -16,7 +16,7 @@ const genre = "Podcast"
 
 // NeedsNormalization reports whether an MP3 is missing any podcast metadata.
 // It only reads the ID3 header and tag, not the audio payload.
-func NeedsNormalization(path string, current episode.Episode) (bool, error) {
+func NeedsNormalization(path string, current catalog.Episode) (bool, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return false, fmt.Errorf("open MP3: %w", err)
@@ -41,7 +41,7 @@ func NeedsNormalization(path string, current episode.Episode) (bool, error) {
 
 // NormalizeMP3 fills missing podcast metadata fields on an MP3 file.
 // It returns whether the file was changed.
-func NormalizeMP3(path, feedName string, current episode.Episode) (bool, error) {
+func NormalizeMP3(path, feedName string, current catalog.Episode) (bool, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return false, fmt.Errorf("open MP3: %w", err)
@@ -84,7 +84,7 @@ func NormalizeMP3(path, feedName string, current episode.Episode) (bool, error) 
 	return true, nil
 }
 
-func setFields(tag *id3v2.Tag, feedName string, current episode.Episode) {
+func setFields(tag *id3v2.Tag, feedName string, current catalog.Episode) {
 	if strings.TrimSpace(tag.Title()) == "" {
 		tag.SetTitle(safeText(current.Title))
 	}
@@ -114,7 +114,7 @@ func safeText(value string) string {
 	return strings.ToValidUTF8(value, "\uFFFD")
 }
 
-func hasMissingFields(tag *id3v2.Tag, current episode.Episode) bool {
+func hasMissingFields(tag *id3v2.Tag, current catalog.Episode) bool {
 	return strings.TrimSpace(tag.Title()) == "" ||
 		strings.TrimSpace(tag.Album()) == "" ||
 		strings.TrimSpace(tag.Artist()) == "" ||

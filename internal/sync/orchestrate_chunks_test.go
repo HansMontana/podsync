@@ -11,14 +11,14 @@ import (
 	"testing"
 
 	"github.com/HansMontana/podsync/internal/device"
-	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/media"
 )
 
 func TestMissingEpisodeChunksUsesEpisodeFallbackLimit(t *testing.T) {
-	episodes := make([]episode.Episode, chunkEpisodeLimit+1)
+	episodes := make([]catalog.Episode, chunkEpisodeLimit+1)
 	for i := range episodes {
-		episodes[i] = episode.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i), Enclosure: episode.Enclosure{URL: "https://example.com/episode.mp3"}}
+		episodes[i] = catalog.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i), Enclosure: catalog.Enclosure{URL: "https://example.com/episode.mp3"}}
 	}
 
 	chunks, err := missingEpisodeChunks(t.TempDir(), episodes, media.Resolver{1: "podcast"})
@@ -39,10 +39,10 @@ func TestChunkedSyncResumesBeforeFinalization(t *testing.T) {
 	root := t.TempDir()
 	staging := t.TempDir()
 	resolver := media.Resolver{1: "podcast"}
-	episodes := make([]episode.Episode, chunkEpisodeLimit+1)
+	episodes := make([]catalog.Episode, chunkEpisodeLimit+1)
 	var manifest strings.Builder
 	for i := range episodes {
-		episodes[i] = episode.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i), Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/ogg"}}
+		episodes[i] = catalog.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i), Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/ogg"}}
 		manifest.WriteString(resolver.RelativePathFor(episodes[i]))
 		manifest.WriteByte('\n')
 	}
@@ -96,11 +96,11 @@ func TestSingleBatchInterruptionPreservesPendingOwnership(t *testing.T) {
 	root := t.TempDir()
 	staging := t.TempDir()
 	resolver := media.Resolver{1: "podcast"}
-	episodeValue := episode.Episode{FeedID: 1, GUID: "episode-1", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/ogg"}}
+	episodeValue := catalog.Episode{FeedID: 1, GUID: "episode-1", Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/ogg"}}
 	relative := resolver.RelativePathFor(episodeValue)
 	playlists := []PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: []byte(relative + "\n")}}
 	ctx, cancel := context.WithCancel(context.Background())
-	err := EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, server.Client(), staging, root, []episode.Episode{episodeValue}, playlists, nil, nil, resolver, EpisodeSyncOptions{}, nil, func(progress FileProgress) {
+	err := EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, server.Client(), staging, root, []catalog.Episode{episodeValue}, playlists, nil, nil, resolver, EpisodeSyncOptions{}, nil, func(progress FileProgress) {
 		if progress.Phase == "copy" {
 			cancel()
 		}
@@ -116,11 +116,11 @@ func TestSingleBatchInterruptionPreservesPendingOwnership(t *testing.T) {
 		t.Fatalf("got pending ownership %v, want %q", pending, relative)
 	}
 
-	secondEpisode := episode.Episode{FeedID: 1, GUID: "episode-2", Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/ogg"}}
+	secondEpisode := catalog.Episode{FeedID: 1, GUID: "episode-2", Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/ogg"}}
 	secondRelative := resolver.RelativePathFor(secondEpisode)
 	secondPlaylists := []PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: []byte(secondRelative + "\n")}}
 	secondContext, secondCancel := context.WithCancel(context.Background())
-	secondErr := EpisodesWithResolverAndProgressAndWarningsWithOptions(secondContext, server.Client(), staging, root, []episode.Episode{secondEpisode}, secondPlaylists, nil, nil, resolver, EpisodeSyncOptions{}, nil, func(progress FileProgress) {
+	secondErr := EpisodesWithResolverAndProgressAndWarningsWithOptions(secondContext, server.Client(), staging, root, []catalog.Episode{secondEpisode}, secondPlaylists, nil, nil, resolver, EpisodeSyncOptions{}, nil, func(progress FileProgress) {
 		if progress.Phase == "copy" {
 			secondCancel()
 		}
@@ -135,7 +135,7 @@ func TestSingleBatchInterruptionPreservesPendingOwnership(t *testing.T) {
 	if len(pending) != 2 || pending[0] != relative || pending[1] != secondRelative {
 		t.Fatalf("got pending ownership after second interruption %v, want both paths", pending)
 	}
-	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), staging, root, []episode.Episode{episodeValue}, playlists, pending, nil, resolver, EpisodeSyncOptions{}, nil, nil, nil); err != nil {
+	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), staging, root, []catalog.Episode{episodeValue}, playlists, pending, nil, resolver, EpisodeSyncOptions{}, nil, nil, nil); err != nil {
 		t.Fatalf("resume failed: %v", err)
 	}
 	pending, err = (device.Layout{Root: root}).LoadPendingManagedPaths()
@@ -180,10 +180,10 @@ func TestChunkedSyncRecoversAfterFinalizationInterruption(t *testing.T) {
 			root := t.TempDir()
 			staging := t.TempDir()
 			resolver := media.Resolver{1: "podcast"}
-			episodes := make([]episode.Episode, chunkEpisodeLimit+1)
+			episodes := make([]catalog.Episode, chunkEpisodeLimit+1)
 			var manifest strings.Builder
 			for i := range episodes {
-				episodes[i] = episode.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i), Enclosure: episode.Enclosure{URL: server.URL, Type: "audio/ogg"}}
+				episodes[i] = catalog.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i), Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/ogg"}}
 				manifest.WriteString(resolver.RelativePathFor(episodes[i]))
 				manifest.WriteByte('\n')
 			}

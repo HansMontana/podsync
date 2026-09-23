@@ -10,8 +10,6 @@ import (
 	"time"
 
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/episode"
-	"github.com/HansMontana/podsync/internal/feed"
 )
 
 func TestSQLiteRepositoryEnablesForeignKeysForEachConnection(t *testing.T) {
@@ -46,7 +44,7 @@ func TestSQLiteRepositoryRoundTrip(t *testing.T) {
 	}
 
 	want := catalog.Catalog{
-		Feeds: []feed.Feed{
+		Feeds: []catalog.Feed{
 			{
 				ID:           1,
 				Name:         "Example Feed",
@@ -60,13 +58,13 @@ func TestSQLiteRepositoryRoundTrip(t *testing.T) {
 				URL:  "https://example.org/feed.xml",
 			},
 		},
-		Episodes: []episode.Episode{
+		Episodes: []catalog.Episode{
 			{
 				FeedID:      1,
 				GUID:        "episode-1",
 				Title:       "First episode",
 				Description: "An episode description",
-				Enclosure: episode.Enclosure{
+				Enclosure: catalog.Enclosure{
 					URL:    "https://example.com/episode-1.mp3",
 					Type:   "audio/mpeg",
 					Length: 1234,
@@ -109,12 +107,12 @@ func TestSQLiteRepositoryRejectsInvalidStateWithoutChangingDatabase(t *testing.T
 	}
 	defer repository.Close()
 
-	want := catalog.Catalog{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/feed.xml"}}}
+	want := catalog.Catalog{Feeds: []catalog.Feed{{ID: 1, URL: "https://example.com/feed.xml"}}}
 	if err := repository.Save(want); err != nil {
 		t.Fatalf("initial Save() returned error: %v", err)
 	}
 
-	invalid := catalog.Catalog{Episodes: []episode.Episode{{FeedID: 999, GUID: "orphan"}}}
+	invalid := catalog.Catalog{Episodes: []catalog.Episode{{FeedID: 999, GUID: "orphan"}}}
 	if err := repository.Save(invalid); err == nil {
 		t.Fatal("Save() accepted an episode for an unknown feed")
 	}

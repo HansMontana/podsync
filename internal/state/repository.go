@@ -12,8 +12,6 @@ import (
 	"time"
 
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/episode"
-	"github.com/HansMontana/podsync/internal/feed"
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
 )
@@ -277,7 +275,7 @@ func (r *SQLiteRepository) Load() (catalog.Catalog, error) {
 	var state catalog.Catalog
 
 	for rows.Next() {
-		var f feed.Feed
+		var f catalog.Feed
 
 		if err := rows.Scan(&f.ID, &f.Name, &f.URL, &f.ETag, &f.LastModified); err != nil {
 			_ = rows.Close()
@@ -306,7 +304,7 @@ func (r *SQLiteRepository) Load() (catalog.Catalog, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var e episode.Episode
+		var e catalog.Episode
 		var publishedAt string
 		var audioURL, audioType string
 		var audioLength int64
@@ -327,7 +325,7 @@ func (r *SQLiteRepository) Load() (catalog.Catalog, error) {
 			_ = rows.Close()
 			return catalog.Catalog{}, fmt.Errorf("scan episode: %w", err)
 		}
-		e.Enclosure = episode.Enclosure{URL: audioURL, Type: audioType, Length: audioLength}
+		e.Enclosure = catalog.Enclosure{URL: audioURL, Type: audioType, Length: audioLength}
 		e.Author = author
 
 		e.PublishedAt, err = time.Parse(time.RFC3339Nano, publishedAt)

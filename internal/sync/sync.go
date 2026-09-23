@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
 	"github.com/HansMontana/podsync/internal/state"
 )
@@ -77,8 +76,8 @@ func RefreshFeedWithArchive(
 
 // RefreshResult describes one fetched and parsed source feed without persisting it.
 type RefreshResult struct {
-	Feed     feed.Feed
-	Episodes []episode.Episode
+	Feed     catalog.Feed
+	Episodes []catalog.Episode
 	Archive  bool
 }
 
@@ -140,8 +139,8 @@ func fetchRefreshResults(ctx context.Context, client *http.Client, current catal
 					if fetchErr != nil {
 						err = fmt.Errorf("refresh feed %d: %w", request.FeedID, fetchErr)
 					} else if !response.NotModified {
-						var episodes []episode.Episode
-						var refreshed feed.Feed
+						var episodes []catalog.Episode
+						var refreshed catalog.Feed
 						refreshed, episodes, err = feed.ParseRSS(bytes.NewReader(response.Body), known)
 						if err == nil {
 							refreshed.ETag = response.ETag
@@ -195,13 +194,13 @@ type RefreshRequest struct {
 	Archive bool
 }
 
-func findFeed(current catalog.Catalog, feedID int64) (feed.Feed, error) {
+func findFeed(current catalog.Catalog, feedID int64) (catalog.Feed, error) {
 	for _, known := range current.Feeds {
 		if known.ID == feedID {
 			return known, nil
 		}
 	}
-	return feed.Feed{}, fmt.Errorf("refresh feed %d: feed not found", feedID)
+	return catalog.Feed{}, fmt.Errorf("refresh feed %d: feed not found", feedID)
 }
 
 // ApplyRefresh replaces one source feed in memory while retaining archive history.
@@ -218,7 +217,7 @@ func ApplyRefresh(current catalog.Catalog, result RefreshResult) (catalog.Catalo
 	}
 
 	previousEpisodes := current.Episodes
-	retainedEpisodes := make([]episode.Episode, 0, len(previousEpisodes))
+	retainedEpisodes := make([]catalog.Episode, 0, len(previousEpisodes))
 	for _, existing := range previousEpisodes {
 		if existing.FeedID != result.Feed.ID {
 			retainedEpisodes = append(retainedEpisodes, existing)

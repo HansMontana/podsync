@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
 
 //go:embed testdata/tagesschau.xml
@@ -13,13 +15,13 @@ var tagesschauRSS string
 func TestParseRSSParsesCapturedAudioFeed(t *testing.T) {
 	gotFeed, gotEpisodes, err := ParseRSS(
 		strings.NewReader(tagesschauRSS),
-		Feed{ID: 7, URL: " HTTPS://EXAMPLE.COM/feed.xml "},
+		catalog.Feed{ID: 7, URL: " HTTPS://EXAMPLE.COM/feed.xml "},
 	)
 	if err != nil {
 		t.Fatalf("ParseRSS() returned error: %v", err)
 	}
 
-	wantFeed := Feed{
+	wantFeed := catalog.Feed{
 		ID:   7,
 		Name: "tagesschau in 100 Sekunden: Das aktuelle News-Update (Audio)",
 		URL:  "https://example.com/feed.xml",
@@ -53,7 +55,7 @@ func TestParseRSSParsesCapturedAudioFeed(t *testing.T) {
 func TestParseRSSSkipsNonAudioItems(t *testing.T) {
 	input := `<rss><channel><title>Example</title><item><enclosure url="https://example.com/video.mp4" type="video/mp4"/></item></channel></rss>`
 
-	_, episodes, err := ParseRSS(strings.NewReader(input), Feed{ID: 1, URL: "https://example.com/feed.xml"})
+	_, episodes, err := ParseRSS(strings.NewReader(input), catalog.Feed{ID: 1, URL: "https://example.com/feed.xml"})
 	if err != nil {
 		t.Fatalf("ParseRSS() returned error: %v", err)
 	}
@@ -84,7 +86,7 @@ func TestParseRSSSupportsDurationFormats(t *testing.T) {
 func TestParseRSSRejectsAtomFeed(t *testing.T) {
 	input := `<feed xmlns="http://www.w3.org/2005/Atom"><title>Example</title></feed>`
 
-	_, _, err := ParseRSS(strings.NewReader(input), Feed{ID: 1, URL: "https://example.com/feed.xml"})
+	_, _, err := ParseRSS(strings.NewReader(input), catalog.Feed{ID: 1, URL: "https://example.com/feed.xml"})
 	if err == nil {
 		t.Fatal("ParseRSS() accepted an Atom feed")
 	}
@@ -93,7 +95,7 @@ func TestParseRSSRejectsAtomFeed(t *testing.T) {
 func TestParseRSSSelectsAudioEnclosure(t *testing.T) {
 	input := `<rss><channel><title>Example</title><item><title>Episode</title><enclosure url="https://example.com/video.mp4" type="video/mp4"/><enclosure url="https://example.com/audio.mp3" type="audio/mpeg" length="123"/></item></channel></rss>`
 
-	_, episodes, err := ParseRSS(strings.NewReader(input), Feed{ID: 1, URL: "https://example.com/feed.xml"})
+	_, episodes, err := ParseRSS(strings.NewReader(input), catalog.Feed{ID: 1, URL: "https://example.com/feed.xml"})
 	if err != nil {
 		t.Fatalf("ParseRSS() returned error: %v", err)
 	}
@@ -105,7 +107,7 @@ func TestParseRSSSelectsAudioEnclosure(t *testing.T) {
 func TestParseRSSRejectsNonAbsoluteAudioURL(t *testing.T) {
 	input := `<rss><channel><title>Example</title><item><title>Episode</title><enclosure url="/audio.mp3" type="audio/mpeg"/></item></channel></rss>`
 
-	_, _, err := ParseRSS(strings.NewReader(input), Feed{ID: 1, URL: "https://example.com/feed.xml"})
+	_, _, err := ParseRSS(strings.NewReader(input), catalog.Feed{ID: 1, URL: "https://example.com/feed.xml"})
 	if err == nil {
 		t.Fatal("ParseRSS() accepted a relative audio URL")
 	}
@@ -114,7 +116,7 @@ func TestParseRSSRejectsNonAbsoluteAudioURL(t *testing.T) {
 func TestParseRSSUsesItemAndFeedAuthors(t *testing.T) {
 	input := `<rss xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"><channel><title>Example</title><itunes:author>Feed Author</itunes:author><item><title>Episode</title><itunes:author>Episode Author</itunes:author><enclosure url="https://example.com/audio.mp3" type="audio/mpeg"/></item><item><title>Fallback</title><enclosure url="https://example.com/fallback.mp3" type="audio/mpeg"/></item></channel></rss>`
 
-	_, episodes, err := ParseRSS(strings.NewReader(input), Feed{ID: 1, URL: "https://example.com/feed.xml"})
+	_, episodes, err := ParseRSS(strings.NewReader(input), catalog.Feed{ID: 1, URL: "https://example.com/feed.xml"})
 	if err != nil {
 		t.Fatalf("ParseRSS() returned error: %v", err)
 	}
@@ -126,7 +128,7 @@ func TestParseRSSUsesItemAndFeedAuthors(t *testing.T) {
 func TestParseRSSRejectsInvalidAudioItemDuration(t *testing.T) {
 	input := `<rss><channel><title>Example</title><item><itunes:duration>bad</itunes:duration><enclosure url="https://example.com/audio.mp3" type="audio/mpeg"/></item></channel></rss>`
 
-	_, _, err := ParseRSS(strings.NewReader(input), Feed{ID: 1, URL: "https://example.com/feed.xml"})
+	_, _, err := ParseRSS(strings.NewReader(input), catalog.Feed{ID: 1, URL: "https://example.com/feed.xml"})
 	if err == nil {
 		t.Fatal("ParseRSS() accepted an invalid audio duration")
 	}
@@ -135,7 +137,7 @@ func TestParseRSSRejectsInvalidAudioItemDuration(t *testing.T) {
 func TestParseRSSRejectsFeedWithoutTitle(t *testing.T) {
 	_, _, err := ParseRSS(
 		strings.NewReader(`<rss><channel><item/></channel></rss>`),
-		Feed{ID: 1, URL: "https://example.com/feed.xml"},
+		catalog.Feed{ID: 1, URL: "https://example.com/feed.xml"},
 	)
 	if err == nil {
 		t.Fatal("ParseRSS() accepted a feed without a title")

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
 
 const maxRSSSize = 64 << 20
@@ -18,8 +20,8 @@ type FetchResult struct {
 }
 
 // FetchRSS fetches a feed, using its cached HTTP metadata when available.
-func FetchRSS(ctx context.Context, client *http.Client, f Feed) (FetchResult, error) {
-	url, err := NormalizeURL(f.URL)
+func FetchRSS(ctx context.Context, client *http.Client, f catalog.Feed) (FetchResult, error) {
+	url, err := catalog.NormalizeURL(f.URL)
 	if err != nil {
 		return FetchResult{}, fmt.Errorf("normalize feed URL: %w", err)
 	}

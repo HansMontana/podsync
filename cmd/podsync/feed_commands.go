@@ -7,8 +7,6 @@ import (
 	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/episode"
-	"github.com/HansMontana/podsync/internal/feed"
 	syncer "github.com/HansMontana/podsync/internal/sync"
 )
 
@@ -140,13 +138,13 @@ func removeFeed(ctx context.Context, args []string) error {
 		return err
 	}
 	previous := catalog.Catalog{
-		Feeds:    append([]feed.Feed(nil), current.Feeds...),
-		Episodes: append([]episode.Episode(nil), current.Episodes...),
+		Feeds:    append([]catalog.Feed(nil), current.Feeds...),
+		Episodes: append([]catalog.Episode(nil), current.Episodes...),
 	}
 	remaining := current.Feeds[:0]
 	removedIDs := make(map[int64]struct{})
 	for _, known := range current.Feeds {
-		if known.SameIdentity(feed.Feed{URL: removedURL}) {
+		if known.SameIdentity(catalog.Feed{URL: removedURL}) {
 			removedIDs[known.ID] = struct{}{}
 			continue
 		}

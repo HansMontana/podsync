@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/media"
 )
 
@@ -111,7 +111,7 @@ func PreferRecords(primary, fallback []Record) []Record {
 // ForEpisodesWithResolver matches device records by current logical media
 // paths. Episodes without a trusted matching record remain unknown and
 // therefore unplayed.
-func ForEpisodesWithResolver(episodes []episode.Episode, records []Record, resolver media.Resolver) map[string]State {
+func ForEpisodesWithResolver(episodes []catalog.Episode, records []Record, resolver media.Resolver) map[string]State {
 	byPath := make(map[string]State, len(records))
 	byIdentityHash := make(map[string]hashedState, len(records))
 	for _, record := range records {

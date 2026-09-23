@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HansMontana/podsync/internal/episode"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
 
 type Track struct {
-	Episode episode.Episode
+	Episode catalog.Episode
 	Path    string
 }
 

@@ -7,8 +7,6 @@ import (
 	"testing"
 
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/episode"
-	"github.com/HansMontana/podsync/internal/feed"
 )
 
 func TestSaveAndLoadRoundTrip(t *testing.T) {
@@ -89,12 +87,12 @@ func TestEnsureSourcesAddsMissingFeedsAndPreservesExistingMetadata(t *testing.T)
 		{ID: "existing", URL: "https://example.com/existing.xml"},
 		{ID: "new", URL: "https://example.com/new.xml"},
 	}}
-	current := catalog.Catalog{Feeds: []feed.Feed{{ID: 4, Name: "Existing name", URL: "https://EXAMPLE.com:443/existing.xml", ETag: `"etag"`}}}
+	current := catalog.Catalog{Feeds: []catalog.Feed{{ID: 4, Name: "Existing name", URL: "https://EXAMPLE.com:443/existing.xml", ETag: `"etag"`}}}
 	got, err := cfg.EnsureSources(current)
 	if err != nil {
 		t.Fatalf("EnsureSources() returned error: %v", err)
 	}
-	want := catalog.Catalog{Feeds: []feed.Feed{
+	want := catalog.Catalog{Feeds: []catalog.Feed{
 		{ID: 4, Name: "Existing name", URL: "https://EXAMPLE.com:443/existing.xml", ETag: `"etag"`},
 		{ID: 5, Name: "new", URL: "https://example.com/new.xml"},
 	}}
@@ -105,10 +103,10 @@ func TestEnsureSourcesAddsMissingFeedsAndPreservesExistingMetadata(t *testing.T)
 
 func TestConfigFilterMatchesCaseInsensitively(t *testing.T) {
 	filter := Filter{TitleContains: "world", DescriptionContains: "Politics"}
-	if !filter.Matches(episode.Episode{Title: "WORLD today", Description: "Politics and context"}) {
+	if !filter.Matches(catalog.Episode{Title: "WORLD today", Description: "Politics and context"}) {
 		t.Fatal("filter did not match episode")
 	}
-	if filter.Matches(episode.Episode{Title: "Sports", Description: "Politics and context"}) {
+	if filter.Matches(catalog.Episode{Title: "Sports", Description: "Politics and context"}) {
 		t.Fatal("filter matched an unrelated title")
 	}
 }
