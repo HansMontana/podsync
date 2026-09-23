@@ -9,7 +9,7 @@ import (
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
 
-const maxRSSSize = 64 << 20
+const maxRSSSize = 32 << 20
 
 // FetchResult contains an RSS response and its HTTP cache metadata.
 type FetchResult struct {

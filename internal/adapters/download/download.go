@@ -15,6 +15,9 @@ import (
 )
 
 var ErrUnsupportedMedia = errors.New("unsupported media type")
+var ErrDownloadTooLarge = errors.New("download exceeds the maximum allowed size")
+
+const maxEpisodeDownloadSize int64 = 2 << 30
 
 type UnsupportedMediaError struct {
 	ContentType string
@@ -32,6 +35,10 @@ func (e *UnsupportedMediaError) Unwrap() error { return ErrUnsupportedMedia }
 
 // Episode downloads audio into host-side staging storage.
 func Episode(ctx context.Context, client *http.Client, e catalog.Episode, stagingDir string) (path string, err error) {
+	return episode(ctx, client, e, stagingDir, maxEpisodeDownloadSize)
+}
+
+func episode(ctx context.Context, client *http.Client, e catalog.Episode, stagingDir string, maxSize int64) (path string, err error) {
 	if e.Enclosure.URL == "" {
 		return "", fmt.Errorf("episode has no audio URL")
 	}
@@ -53,6 +60,9 @@ func Episode(ctx context.Context, client *http.Client, e catalog.Episode, stagin
 	defer response.Body.Close()
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return "", fmt.Errorf("download episode: unexpected HTTP status %s", response.Status)
+	}
+	if response.ContentLength > maxSize {
+		return "", fmt.Errorf("%w: %d bytes", ErrDownloadTooLarge, response.ContentLength)
 	}
 	contentType := response.Header.Get("Content-Type")
 	mediaType, _, _ := mime.ParseMediaType(contentType)
@@ -87,10 +97,15 @@ func Episode(ctx context.Context, client *http.Client, e catalog.Episode, stagin
 		}
 	}()
 
-	bytesWritten, err := io.Copy(file, io.MultiReader(bytes.NewReader(prefix[:n]), response.Body))
+	remaining := maxSize - int64(n)
+	bytesWritten, err := io.Copy(file, io.MultiReader(bytes.NewReader(prefix[:n]), io.LimitReader(response.Body, remaining+1)))
 	if err != nil {
 		_ = file.Close()
 		return "", fmt.Errorf("write staged episode: %w", err)
+	}
+	if bytesWritten > maxSize {
+		_ = file.Close()
+		return "", fmt.Errorf("%w: more than %d bytes", ErrDownloadTooLarge, maxSize)
 	}
 	if bytesWritten == 0 {
 		_ = file.Close()

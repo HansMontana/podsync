@@ -130,3 +130,39 @@ func TestEpisodeAllowsAdvisoryEnclosureSizeMismatch(t *testing.T) {
 		t.Fatalf("got %q", data)
 	}
 }
+
+func TestEpisodeRejectsResponseAboveMaximumSize(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "audio/mpeg")
+		w.Header().Set("Content-Length", "2147483649")
+		_, _ = w.Write([]byte("audio"))
+	}))
+	defer server.Close()
+
+	_, err := Episode(context.Background(), server.Client(), catalog.Episode{Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/mpeg"}}, t.TempDir())
+	if !errors.Is(err, ErrDownloadTooLarge) {
+		t.Fatalf("Episode() error = %v, want size error", err)
+	}
+}
+
+func TestEpisodeRejectsChunkedResponseAboveMaximumSize(t *testing.T) {
+	const testLimit int64 = 2 << 20
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "audio/mpeg")
+		for written := int64(0); written <= testLimit; written += 1 << 20 {
+			chunk := make([]byte, 1<<20)
+			if remaining := testLimit + 1 - written; remaining < int64(len(chunk)) {
+				chunk = chunk[:remaining]
+			}
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	}))
+	defer server.Close()
+
+	_, err := episode(context.Background(), server.Client(), catalog.Episode{Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/mpeg"}}, t.TempDir(), testLimit)
+	if !errors.Is(err, ErrDownloadTooLarge) {
+		t.Fatalf("Episode() error = %v, want size error", err)
+	}
+}

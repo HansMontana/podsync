@@ -98,7 +98,7 @@ func RefreshFeeds(ctx context.Context, repository Repository, reader FeedReader,
 	return RefreshReport{Refreshed: len(requests) - len(failures), Failures: failures}, nil
 }
 
-const refreshWorkers = 10
+const refreshWorkers = 4
 
 func fetchRefreshResults(ctx context.Context, reader FeedReader, current domaincatalog.Catalog, requests []RefreshRequest) ([]domaincatalog.RefreshResult, []RefreshFailure, error) {
 	if len(requests) == 0 {
