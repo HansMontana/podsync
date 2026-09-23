@@ -468,10 +468,10 @@ func reusableFile(deviceRoot, relative string, current catalog.Episode, signatur
 	if !fileInfo.Mode().IsRegular() || fileInfo.Size() == 0 {
 		return false, nil
 	}
-	if current.Enclosure.Length > 0 && fileInfo.Size() != current.Enclosure.Length {
-		return false, nil
+	if signature, exists := signatures[relative]; exists {
+		return signature == mediaSignature(current), nil
 	}
-	if signature, exists := signatures[relative]; exists && signature != mediaSignature(current) {
+	if !isMP3(current, relative) && current.Enclosure.Length > 0 && fileInfo.Size() != current.Enclosure.Length {
 		return false, nil
 	}
 	return true, nil

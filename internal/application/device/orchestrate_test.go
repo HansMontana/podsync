@@ -210,7 +210,7 @@ func TestEpisodesReplacesExistingFileWhenEnclosureChanges(t *testing.T) {
 	}
 }
 
-func TestEpisodesReplacesExistingMP3WithWrongKnownSize(t *testing.T) {
+func TestEpisodesReusesExistingMP3WithWrongKnownSize(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
@@ -229,14 +229,14 @@ func TestEpisodesReplacesExistingMP3WithWrongKnownSize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, nil, nil, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{VerifyMedia: true, MediaOps: realMediaOperations(), Files: realDeviceFiles()}, nil, nil, nil); err != nil {
+	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, nil, nil, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{MediaOps: realMediaOperations(), Files: realDeviceFiles()}, nil, nil, nil); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
-	if requests.Load() != 1 {
-		t.Fatalf("downloaded replacement %d times", requests.Load())
+	if requests.Load() != 0 {
+		t.Fatalf("downloaded advisory-size MP3 %d times", requests.Load())
 	}
-	if info, err := os.Stat(destination); err != nil || info.Size() <= int64(len("old")) {
-		t.Fatalf("replacement was not installed, info %v, error %v", info, err)
+	if data, err := os.ReadFile(destination); err != nil || string(data) != "old" {
+		t.Fatalf("existing MP3 changed to %q, error %v", data, err)
 	}
 }
 
