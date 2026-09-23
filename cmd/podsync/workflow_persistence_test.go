@@ -218,6 +218,53 @@ func TestUpdateStopsWhenRefreshFails(t *testing.T) {
 	}
 }
 
+func TestUpdateSyncsPartialRefreshAndReturnsFailure(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/broken.xml" {
+			http.Error(w, "temporary failure", http.StatusServiceUnavailable)
+			return
+		}
+		if r.URL.Path == "/episode.mp3" {
+			w.Header().Set("Content-Type", "audio/mpeg")
+			_, _ = w.Write([]byte("audio"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/rss+xml")
+		_, _ = fmt.Fprintf(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>News</title><item><title>Episode one</title><guid>one</guid><enclosure url="%s/episode.mp3" type="audio/mpeg" length="5"/></item></channel></rss>`, server.URL)
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	hostConfig := filepath.Join(t.TempDir(), "config.toml")
+	cfg := curation.Config{
+		Sources: []curation.SourceFeed{
+			{ID: "news", URL: server.URL + "/news.xml"},
+			{ID: "broken", URL: server.URL + "/broken.xml"},
+		},
+		Feeds: []curation.LogicalFeed{{ID: "news", Title: "News", Source: "news", Order: curation.NewestFirst}},
+	}
+	if err := tomlconfig.Save(hostConfig, cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	err := run([]string{"update", "-device-root", root, "-config", hostConfig})
+	if err == nil {
+		t.Fatal("partial update returned success")
+	}
+	if !strings.Contains(err.Error(), "refresh feed") {
+		t.Fatalf("partial update returned unrelated error: %v", err)
+	}
+	files, err := filepath.Glob(filepath.Join(root, "Podcasts", "news", "*"))
+	if err != nil || len(files) != 1 {
+		t.Fatalf("partial update did not sync successful feed: %v, error %v", files, err)
+	}
+	playlists, err := filepath.Glob(filepath.Join(root, "Playlists", "*.m3u8"))
+	if err != nil || len(playlists) != 1 {
+		t.Fatalf("partial update did not write playlist: %v, error %v", playlists, err)
+	}
+}
+
 func TestFeedCommandsManageDeviceConfiguration(t *testing.T) {
 	root := t.TempDir()
 	hostConfig := filepath.Join(t.TempDir(), "config.toml")

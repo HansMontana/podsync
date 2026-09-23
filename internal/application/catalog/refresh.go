@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -72,44 +73,46 @@ func RefreshFeedWithArchive(ctx context.Context, repository Repository, reader F
 }
 
 // RefreshFeeds fetches and persists multiple feeds with one state load and save.
-func RefreshFeeds(ctx context.Context, repository Repository, reader FeedReader, requests []RefreshRequest) error {
+// Feed-level failures are returned in the report after successful results are
+// persisted. Fatal application errors are returned separately.
+func RefreshFeeds(ctx context.Context, repository Repository, reader FeedReader, requests []RefreshRequest) (RefreshReport, error) {
 	current, err := repository.Load()
 	if err != nil {
-		return fmt.Errorf("load state for feed refresh: %w", err)
+		return RefreshReport{}, fmt.Errorf("load state for feed refresh: %w", err)
 	}
-	results, err := fetchRefreshResults(ctx, reader, current, requests)
+	results, failures, err := fetchRefreshResults(ctx, reader, current, requests)
 	if err != nil {
-		return err
+		return RefreshReport{}, err
 	}
 	for _, result := range results {
 		current, err = domaincatalog.ApplyRefresh(current, result)
 		if err != nil {
-			return err
+			return RefreshReport{}, err
 		}
 	}
 	if len(results) > 0 {
 		if err := repository.Save(current); err != nil {
-			return fmt.Errorf("save refreshed feeds: %w", err)
+			return RefreshReport{}, fmt.Errorf("save refreshed feeds: %w", err)
 		}
 	}
-	return nil
+	return RefreshReport{Refreshed: len(requests) - len(failures), Failures: failures}, nil
 }
 
 const refreshWorkers = 10
 
-func fetchRefreshResults(ctx context.Context, reader FeedReader, current domaincatalog.Catalog, requests []RefreshRequest) ([]domaincatalog.RefreshResult, error) {
+func fetchRefreshResults(ctx context.Context, reader FeedReader, current domaincatalog.Catalog, requests []RefreshRequest) ([]domaincatalog.RefreshResult, []RefreshFailure, error) {
 	if len(requests) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	parentCtx := ctx
 	workerCtx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 	results := make([]domaincatalog.RefreshResult, len(requests))
 	valid := make([]bool, len(requests))
+	completed := make([]bool, len(requests))
+	failures := make([]RefreshFailure, len(requests))
 	jobs := make(chan int)
 	var workers sync.WaitGroup
-	var firstErr error
-	var errMu sync.Mutex
 	workerCount := refreshWorkers
 	if len(requests) < workerCount {
 		workerCount = len(requests)
@@ -127,7 +130,7 @@ func fetchRefreshResults(ctx context.Context, reader FeedReader, current domainc
 				if err == nil {
 					response, fetchErr := reader.Fetch(workerCtx, known)
 					if fetchErr != nil {
-						err = fmt.Errorf("refresh feed %d: %w", request.FeedID, fetchErr)
+						err = fetchErr
 					} else if !response.NotModified {
 						var episodes []domaincatalog.Episode
 						var refreshed domaincatalog.Feed
@@ -139,15 +142,15 @@ func fetchRefreshResults(ctx context.Context, reader FeedReader, current domainc
 							// Each job owns a distinct result slot; application remains ordered below.
 							valid[index] = true
 						}
+					} else {
+						completed[index] = true
 					}
 				}
 				if err != nil {
-					errMu.Lock()
-					if firstErr == nil {
-						firstErr = err
-						cancel()
+					if parentCtx.Err() == nil {
+						failures[index] = RefreshFailure{FeedID: request.FeedID, Err: err}
+						completed[index] = true
 					}
-					errMu.Unlock()
 				}
 			}
 		}()
@@ -165,18 +168,48 @@ func fetchRefreshResults(ctx context.Context, reader FeedReader, current domainc
 	close(jobs)
 	workers.Wait()
 	if err := parentCtx.Err(); err != nil {
-		return nil, err
-	}
-	if firstErr != nil {
-		return nil, firstErr
+		return nil, nil, err
 	}
 	ordered := make([]domaincatalog.RefreshResult, 0, len(requests))
+	orderedFailures := make([]RefreshFailure, 0)
 	for index := range results {
 		if valid[index] {
 			ordered = append(ordered, results[index])
 		}
+		if completed[index] && failures[index].Err != nil {
+			orderedFailures = append(orderedFailures, failures[index])
+		}
 	}
-	return ordered, nil
+	return ordered, orderedFailures, nil
+}
+
+type RefreshReport struct {
+	Refreshed int
+	Failures  []RefreshFailure
+}
+
+func (r RefreshReport) FailureError() error {
+	if len(r.Failures) == 0 {
+		return nil
+	}
+	errs := make([]error, len(r.Failures))
+	for i, failure := range r.Failures {
+		errs[i] = failure
+	}
+	return fmt.Errorf("refresh incomplete: %w", errors.Join(errs...))
+}
+
+type RefreshFailure struct {
+	FeedID int64
+	Err    error
+}
+
+func (f RefreshFailure) Error() string {
+	return fmt.Sprintf("refresh feed %d: %v", f.FeedID, f.Err)
+}
+
+func (f RefreshFailure) Unwrap() error {
+	return f.Err
 }
 
 type RefreshRequest struct {

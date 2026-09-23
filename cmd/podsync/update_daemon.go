@@ -71,10 +71,18 @@ func runUpdate(ctx context.Context, options updateOptions) error {
 	if options.lock == nil {
 		defer lock.Close()
 	}
-	if err := reconcileDeviceWithLockContext(ctx, resolvedRoot, options.configPath, true, lock); err != nil {
+	refreshReport, err := reconcileDeviceWithLockContext(ctx, resolvedRoot, options.configPath, true, lock)
+	if err != nil {
 		return fmt.Errorf("update refresh: %w", err)
 	}
-	logger.Info("Refresh complete")
+	refreshErr := refreshReport.FailureError()
+	if refreshErr != nil && refreshReport.Refreshed == 0 {
+		return fmt.Errorf("update refresh: %w", refreshErr)
+	}
+	logger.Info(fmt.Sprintf("Refresh complete: %d succeeded, %d failed", refreshReport.Refreshed, len(refreshReport.Failures)))
+	if refreshErr != nil {
+		logger.Warn("Refresh had failures; continuing with available feed data")
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -97,6 +105,9 @@ func runUpdate(ctx context.Context, options updateOptions) error {
 	}
 	logger.Info(fmt.Sprintf("Device verification complete: %d managed files", verified))
 	logger.Info(fmt.Sprintf("Update complete in %s", time.Since(started).Round(time.Millisecond)))
+	if refreshErr != nil {
+		return fmt.Errorf("update completed with refresh failures: %w", refreshErr)
+	}
 	return nil
 }
 

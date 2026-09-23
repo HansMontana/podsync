@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/HansMontana/podsync/internal/adapters/rss"
@@ -196,8 +197,12 @@ func TestRefreshFeedsPersistsMultipleFeedsOnce(t *testing.T) {
 	if err := repository.Save(catalog.Catalog{Feeds: []catalog.Feed{{ID: 1, URL: servers.URL + "/one"}, {ID: 2, URL: servers.URL + "/two"}}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := applicationcatalog.RefreshFeeds(context.Background(), repository, rss.NewReader(servers.Client()), []applicationcatalog.RefreshRequest{{FeedID: 1}, {FeedID: 2}}); err != nil {
+	report, err := applicationcatalog.RefreshFeeds(context.Background(), repository, rss.NewReader(servers.Client()), []applicationcatalog.RefreshRequest{{FeedID: 1}, {FeedID: 2}})
+	if err != nil {
 		t.Fatal(err)
+	}
+	if report.Refreshed != 2 || len(report.Failures) != 0 {
+		t.Fatalf("got refresh report %+v", report)
 	}
 	got, err := repository.Load()
 	if err != nil {
@@ -208,7 +213,7 @@ func TestRefreshFeedsPersistsMultipleFeedsOnce(t *testing.T) {
 	}
 }
 
-func TestRefreshFeedsCancellationDoesNotPersistPartialResults(t *testing.T) {
+func TestRefreshFeedsPersistsSuccessfulResultsAndReportsFailures(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/fail" {
 			http.Error(w, "failed", http.StatusInternalServerError)
@@ -226,15 +231,22 @@ func TestRefreshFeedsCancellationDoesNotPersistPartialResults(t *testing.T) {
 	if err := repository.Save(want); err != nil {
 		t.Fatal(err)
 	}
-	if err := applicationcatalog.RefreshFeeds(context.Background(), repository, rss.NewReader(server.Client()), []applicationcatalog.RefreshRequest{{FeedID: 1}, {FeedID: 2}}); err == nil {
-		t.Fatal("RefreshFeeds accepted a failed worker")
+	report, err := applicationcatalog.RefreshFeeds(context.Background(), repository, rss.NewReader(server.Client()), []applicationcatalog.RefreshRequest{{FeedID: 1}, {FeedID: 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Refreshed != 1 || len(report.Failures) != 1 || report.Failures[0].FeedID != 2 {
+		t.Fatalf("got refresh report %+v", report)
+	}
+	if failureErr := report.FailureError(); failureErr == nil || !strings.Contains(failureErr.Error(), "refresh feed 2") {
+		t.Fatalf("got failure error %v", failureErr)
 	}
 	got, err := repository.Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Episodes) != 1 || got.Episodes[0].GUID != "old" {
-		t.Fatalf("failed batch changed state: %+v", got)
+	if len(got.Episodes) != 1 || got.Episodes[0].GUID != "new" {
+		t.Fatalf("successful partial refresh was not persisted: %+v", got)
 	}
 }
 
@@ -248,12 +260,20 @@ func TestRefreshFeedsReturnsParentCancellation(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer repository.Close()
-	if err := repository.Save(catalog.Catalog{Feeds: []catalog.Feed{{ID: 1, URL: server.URL}}}); err != nil {
+	want := catalog.Catalog{Feeds: []catalog.Feed{{ID: 1, URL: server.URL}}, Episodes: []catalog.Episode{{FeedID: 1, GUID: "old"}}}
+	if err := repository.Save(want); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := applicationcatalog.RefreshFeeds(ctx, repository, rss.NewReader(server.Client()), []applicationcatalog.RefreshRequest{{FeedID: 1}}); err == nil {
+	if _, err := applicationcatalog.RefreshFeeds(ctx, repository, rss.NewReader(server.Client()), []applicationcatalog.RefreshRequest{{FeedID: 1}}); err == nil {
 		t.Fatal("canceled RefreshFeeds returned nil")
+	}
+	got, err := repository.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Episodes) != 1 || got.Episodes[0].GUID != "old" {
+		t.Fatalf("canceled refresh changed state: %+v", got)
 	}
 }

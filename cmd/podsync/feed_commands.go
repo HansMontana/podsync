@@ -227,7 +227,11 @@ func reconcile(ctx context.Context, args []string, refresh bool) error {
 	} else if help {
 		return nil
 	}
-	return reconcileDeviceWithLockContext(ctx, *deviceRoot, *configPath, refresh, nil)
+	report, err := reconcileDeviceWithLockContext(ctx, *deviceRoot, *configPath, refresh, nil)
+	if err != nil {
+		return err
+	}
+	return report.FailureError()
 }
 
 func reconcileDevice(deviceRoot, configPath string, refresh bool) error {
@@ -235,37 +239,54 @@ func reconcileDevice(deviceRoot, configPath string, refresh bool) error {
 }
 
 func reconcileDeviceWithLock(deviceRoot, configPath string, refresh bool, lock *devicefs.Lock) error {
-	return reconcileDeviceWithLockContext(context.Background(), deviceRoot, configPath, refresh, lock)
+	report, err := reconcileDeviceWithLockContext(context.Background(), deviceRoot, configPath, refresh, lock)
+	if err != nil {
+		return err
+	}
+	return report.FailureError()
 }
 
-func reconcileDeviceWithLockContext(ctx context.Context, deviceRoot, configPath string, refresh bool, lock *devicefs.Lock) error {
+func reconcileDeviceWithLockContext(ctx context.Context, deviceRoot, configPath string, refresh bool, lock *devicefs.Lock) (applicationcatalog.RefreshReport, error) {
 	logger := commandLogger("feed")
 	layout, repository, cfg, err := openDeviceWithLock(deviceRoot, configPath, false, true, lock)
 	if err != nil {
-		return err
+		return applicationcatalog.RefreshReport{}, err
 	}
 	defer repository.Close()
 	if err := reconcileState(repository, cfg); err != nil {
-		return err
+		return applicationcatalog.RefreshReport{}, err
 	}
 	if !refresh {
 		logger.Info(fmt.Sprintf("Reconciled %d source feeds", len(cfg.Sources)))
-		return nil
+		return applicationcatalog.RefreshReport{}, nil
 	}
 	current, err := repository.Load()
 	if err != nil {
-		return err
+		return applicationcatalog.RefreshReport{}, err
 	}
 	requests, err := refreshRequests(current, cfg)
 	if err != nil {
-		return err
+		return applicationcatalog.RefreshReport{}, err
 	}
-	if err := applicationcatalog.RefreshFeeds(ctx, repository, rss.NewReader(httpClient), requests); err != nil {
-		return fmt.Errorf("refresh feeds: %w", err)
+	report, err := applicationcatalog.RefreshFeeds(ctx, repository, rss.NewReader(httpClient), requests)
+	if err != nil {
+		return applicationcatalog.RefreshReport{}, fmt.Errorf("refresh feeds: %w", err)
 	}
-	for _, source := range cfg.Sources {
+	for _, failure := range report.Failures {
+		logger.Warn(failure.Error())
+	}
+	failedFeedIDs := make(map[int64]struct{}, len(report.Failures))
+	for _, failure := range report.Failures {
+		failedFeedIDs[failure.FeedID] = struct{}{}
+	}
+	for index, source := range cfg.Sources {
+		if index < len(requests) {
+			if _, failed := failedFeedIDs[requests[index].FeedID]; failed {
+				continue
+			}
+		}
 		logger.Info(fmt.Sprintf("Refreshed source %s", source.ID))
 	}
 	_ = layout
-	return nil
+	return report, nil
 }
