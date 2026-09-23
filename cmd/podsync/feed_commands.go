@@ -72,7 +72,7 @@ func addFeed(ctx context.Context, args []string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false, true)
+	layout, repository, cfg, verify, err := openMutatingDevice(*deviceRoot, *configPath, true, nil)
 	if err != nil {
 		return err
 	}
@@ -82,8 +82,18 @@ func addFeed(ctx context.Context, args []string) error {
 		return err
 	}
 	if err := saveConfigThenState(
-		func() error { return tomlconfig.Save(layout.ConfigPath(), cfg) },
-		func() error { return reconcileState(repository, cfg) },
+		func() error {
+			if err := verify(); err != nil {
+				return err
+			}
+			return tomlconfig.Save(layout.ConfigPath(), cfg)
+		},
+		func() error {
+			if err := verify(); err != nil {
+				return err
+			}
+			return reconcileState(repository, cfg)
+		},
 	); err != nil {
 		return err
 	}
@@ -107,7 +117,7 @@ func removeFeed(ctx context.Context, args []string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false, true)
+	layout, repository, cfg, verify, err := openMutatingDevice(*deviceRoot, *configPath, true, nil)
 	if err != nil {
 		return err
 	}
@@ -156,14 +166,23 @@ func removeFeed(ctx context.Context, args []string) error {
 		}
 	}
 	current.Episodes = episodes
+	if err := verify(); err != nil {
+		return fmt.Errorf("verify device before removing feed: %w", err)
+	}
 	if err := layout.SavePendingFeedRemoval(removedURL); err != nil {
 		return fmt.Errorf("record pending feed removal: %w", err)
 	}
 	if err := tomlconfig.Save(layout.ConfigPath(), cfg); err != nil {
 		return fmt.Errorf("save device config: %w", err)
 	}
+	if err := verify(); err != nil {
+		return fmt.Errorf("verify device before saving removed feed state: %w", err)
+	}
 	if err := repository.Save(current); err != nil {
 		return fmt.Errorf("save state after config removal: %w", err)
+	}
+	if err := verify(); err != nil {
+		return fmt.Errorf("verify device before clearing feed removal: %w", err)
 	}
 	if err := layout.ClearPendingFeedRemoval(); err != nil {
 		return fmt.Errorf("clear pending feed removal: %w", err)
@@ -249,11 +268,14 @@ func reconcileDeviceWithLock(deviceRoot, configPath string, refresh bool, lock *
 
 func reconcileDeviceWithLockContext(ctx context.Context, deviceRoot, configPath string, refresh bool, lock *devicefs.Lock) (applicationcatalog.RefreshReport, error) {
 	logger := commandLogger("feed")
-	layout, repository, cfg, err := openDeviceWithLock(deviceRoot, configPath, false, true, lock)
+	layout, repository, cfg, verify, err := openMutatingDevice(deviceRoot, configPath, true, lock)
 	if err != nil {
 		return applicationcatalog.RefreshReport{}, err
 	}
 	defer repository.Close()
+	if err := verify(); err != nil {
+		return applicationcatalog.RefreshReport{}, err
+	}
 	if err := reconcileState(repository, cfg); err != nil {
 		return applicationcatalog.RefreshReport{}, err
 	}

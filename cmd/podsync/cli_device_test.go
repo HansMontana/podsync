@@ -17,9 +17,16 @@ func TestValidateStagingDirectoryRejectsDevicePaths(t *testing.T) {
 	if err := validateStagingDirectory(root, t.TempDir()); err != nil {
 		t.Fatalf("validateStagingDirectory() rejected a host path: %v", err)
 	}
+	link := filepath.Join(t.TempDir(), "staging-link")
+	if err := os.Symlink(root, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateStagingDirectory(root, link); err == nil {
+		t.Fatal("validateStagingDirectory() accepted a symlink into the device")
+	}
 }
 
-func TestPrepareStagingDirectoryCleansOwnedFilesAndUsesRunDirectory(t *testing.T) {
+func TestPrepareStagingDirectoryPreservesParentFilesAndUsesRunDirectory(t *testing.T) {
 	parent := t.TempDir()
 	stale := filepath.Join(parent, "podsync-download-stale")
 	if err := os.WriteFile(stale, []byte("partial"), 0o600); err != nil {
@@ -32,8 +39,8 @@ func TestPrepareStagingDirectoryCleansOwnedFilesAndUsesRunDirectory(t *testing.T
 	if filepath.Dir(runDir) != parent {
 		t.Fatalf("run directory %q is not under %q", runDir, parent)
 	}
-	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Fatalf("stale staging file remains, error: %v", err)
+	if _, err := os.Stat(stale); err != nil {
+		t.Fatalf("stale staging file was removed, error: %v", err)
 	}
 	if err := os.RemoveAll(runDir); err != nil {
 		t.Fatal(err)

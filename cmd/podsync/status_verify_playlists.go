@@ -105,7 +105,7 @@ func generatePlaylist(ctx context.Context, args []string, briefingMode bool) err
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	layout, repository, cfg, err := openDevice(*deviceRoot, *configPath, false, true)
+	layout, repository, cfg, verify, err := openMutatingDevice(*deviceRoot, *configPath, true, nil)
 	if err != nil {
 		return err
 	}
@@ -161,6 +161,9 @@ func generatePlaylist(ctx context.Context, args []string, briefingMode bool) err
 		return err
 	}
 	pending = appendUnique(pending, relative)
+	if err := verify(); err != nil {
+		return fmt.Errorf("verify device before saving playlist ownership: %w", err)
+	}
 	if err := layout.SavePendingManagedPaths(pending); err != nil {
 		return fmt.Errorf("save pending playlist ownership: %w", err)
 	}
@@ -168,6 +171,9 @@ func generatePlaylist(ctx context.Context, args []string, briefingMode bool) err
 	manifest := devicefs.PlaylistFile{Relative: layout.ManifestRelativePath(), Content: manifestContent(managed)}
 	if err := devicefs.ApplyFilePlan(ctx, layout.Root, devicefs.FilePlan{Playlists: []devicefs.PlaylistFile{{Relative: relative, Content: content}, manifest}}); err != nil {
 		return err
+	}
+	if err := verify(); err != nil {
+		return fmt.Errorf("verify device before clearing playlist ownership: %w", err)
 	}
 	pending = removePath(pending, relative)
 	if len(pending) == 0 {

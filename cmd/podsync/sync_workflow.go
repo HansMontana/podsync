@@ -6,9 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
-	"path/filepath"
 	"sort"
-	"strings"
 
 	devicefs "github.com/HansMontana/podsync/internal/adapters/devicefs"
 	"github.com/HansMontana/podsync/internal/adapters/logging"
@@ -237,17 +235,6 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 func prepareStagingDirectory(parent string) (string, error) {
 	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return "", fmt.Errorf("create staging parent: %w", err)
-	}
-	entries, err := os.ReadDir(parent)
-	if err != nil {
-		return "", fmt.Errorf("read staging parent: %w", err)
-	}
-	for _, entry := range entries {
-		if strings.HasPrefix(entry.Name(), "podsync-download-") {
-			if err := os.Remove(filepath.Join(parent, entry.Name())); err != nil && !os.IsNotExist(err) {
-				return "", fmt.Errorf("remove stale staging file %q: %w", entry.Name(), err)
-			}
-		}
 	}
 	runDir, err := os.MkdirTemp(parent, "podsync-run-")
 	if err != nil {

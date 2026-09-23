@@ -20,6 +20,8 @@ type lockedRepository struct {
 	owned bool
 }
 
+type deviceVerifier func() error
+
 func (r *lockedRepository) Close() error {
 	repositoryErr := r.Repository.Close()
 	var lockErr error
@@ -37,6 +39,15 @@ func openDevice(root, configPath string, readOnly, persistConfig bool) (devicefs
 }
 
 func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, lock *devicefs.Lock) (devicefs.Layout, applicationcatalog.Repository, curation.Config, error) {
+	var verify deviceVerifier
+	if !readOnly {
+		resolvedRoot, identity, err := devicefs.ResolveRootIdentity(root)
+		if err != nil {
+			return devicefs.Layout{}, nil, curation.Config{}, err
+		}
+		root = resolvedRoot
+		verify = func() error { return devicefs.VerifyRootIdentity(root, identity) }
+	}
 	layout, repository, err := openRepositoryModeWithLock(root, readOnly, lock)
 	if err != nil {
 		return layout, nil, curation.Config{}, err
@@ -56,12 +67,16 @@ func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, l
 		return layout, nil, curation.Config{}, err
 	}
 	if !readOnly {
-		if err := recoverPendingFeedRemoval(layout, repository, cfg); err != nil {
+		if err := recoverPendingFeedRemoval(layout, repository, cfg, verify); err != nil {
 			_ = repository.Close()
 			return layout, nil, curation.Config{}, err
 		}
 	}
 	if !readOnly && persistConfig && configPath != layout.ConfigPath() {
+		if err := verify(); err != nil {
+			_ = repository.Close()
+			return layout, nil, curation.Config{}, fmt.Errorf("verify device before saving config: %w", err)
+		}
 		if err := tomlconfig.Save(layout.ConfigPath(), cfg); err != nil {
 			_ = repository.Close()
 			return layout, nil, curation.Config{}, fmt.Errorf("save device config: %w", err)
@@ -70,7 +85,24 @@ func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, l
 	return layout, repository, cfg, nil
 }
 
-func recoverPendingFeedRemoval(layout devicefs.Layout, repository applicationcatalog.Repository, cfg curation.Config) error {
+func openMutatingDevice(root, configPath string, persistConfig bool, lock *devicefs.Lock) (devicefs.Layout, applicationcatalog.Repository, curation.Config, deviceVerifier, error) {
+	resolvedRoot, identity, err := devicefs.ResolveRootIdentity(root)
+	if err != nil {
+		return devicefs.Layout{}, nil, curation.Config{}, nil, err
+	}
+	layout, repository, cfg, err := openDeviceWithLock(resolvedRoot, configPath, false, persistConfig, lock)
+	if err != nil {
+		return layout, nil, curation.Config{}, nil, err
+	}
+	verify := func() error { return devicefs.VerifyRootIdentity(resolvedRoot, identity) }
+	if err := verify(); err != nil {
+		_ = repository.Close()
+		return layout, nil, curation.Config{}, nil, fmt.Errorf("verify device after opening: %w", err)
+	}
+	return layout, repository, cfg, verify, nil
+}
+
+func recoverPendingFeedRemoval(layout devicefs.Layout, repository applicationcatalog.Repository, cfg curation.Config, verify deviceVerifier) error {
 	pending, err := layout.LoadPendingFeedRemoval()
 	if err != nil {
 		return err
@@ -110,6 +142,9 @@ func recoverPendingFeedRemoval(layout devicefs.Layout, repository applicationcat
 		}
 		current.Feeds = remainingFeeds
 		current.Episodes = remainingEpisodes
+		if err := verify(); err != nil {
+			return fmt.Errorf("verify device before completing feed removal: %w", err)
+		}
 		if err := repository.Save(current); err != nil {
 			return fmt.Errorf("complete pending feed removal: %w", err)
 		}
@@ -118,11 +153,11 @@ func recoverPendingFeedRemoval(layout devicefs.Layout, repository applicationcat
 }
 
 func validateStagingDirectory(deviceRoot, stagingDir string) error {
-	deviceRoot, err := filepath.Abs(deviceRoot)
+	deviceRoot, err := filepath.EvalSymlinks(deviceRoot)
 	if err != nil {
 		return fmt.Errorf("resolve device root: %w", err)
 	}
-	stagingDir, err = filepath.Abs(stagingDir)
+	stagingDir, err = resolveExistingPath(stagingDir)
 	if err != nil {
 		return fmt.Errorf("resolve staging directory: %w", err)
 	}
@@ -134,6 +169,35 @@ func validateStagingDirectory(deviceRoot, stagingDir string) error {
 		return fmt.Errorf("staging directory must be outside the device root")
 	}
 	return nil
+}
+
+func resolveExistingPath(path string) (string, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	current := absolute
+	var suffix []string
+	for {
+		if _, err := os.Lstat(current); err == nil {
+			resolved, err := filepath.EvalSymlinks(current)
+			if err != nil {
+				return "", err
+			}
+			for i := len(suffix) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, suffix[i])
+			}
+			return resolved, nil
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", fmt.Errorf("no existing parent for %q", path)
+		}
+		suffix = append(suffix, filepath.Base(current))
+		current = parent
+	}
 }
 
 func openRepositoryMode(root string, readOnly bool) (devicefs.Layout, applicationcatalog.Repository, error) {
