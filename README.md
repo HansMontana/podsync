@@ -23,6 +23,7 @@ Implemented:
 - Logical-feed and briefing playlist generation with stable episode paths
 - Host-side bounded downloads and safe filesystem sync planning/application
 - Chunked syncs for large transfers with resumable intermediate batches
+- Global preparation progress across chunked transfers
 - Rockbox playback-log and TagCache parsing with stable media-path matching, with unknown records treated as unplayed
 - Existing-media reuse with default MP3 metadata verification and an opt-out
 - Linux daemon mode for one update per mounted-device session

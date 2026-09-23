@@ -633,6 +633,12 @@ Avoid changing device files before enough work has succeeded to know what the de
 
 When destructive deletion behavior is introduced, tests should cover it carefully.
 
+RSS enclosure lengths are advisory for existing MP3 files. A persisted delivery
+signature determines whether a previously signed MP3 changed; an unsigned
+existing MP3 may be reused without rejecting it because its file size differs
+from the publisher's reported length. Preparation progress must count each
+selected episode once across chunked preparation and finalization.
+
 ## Dependency and Go-version discipline
 
 Dependencies are welcome when they reduce complexity.
