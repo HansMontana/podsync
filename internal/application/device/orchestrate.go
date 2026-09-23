@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/HansMontana/podsync/internal/adapters/devicefs"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
 
@@ -22,6 +21,7 @@ type EpisodeSyncOptions struct {
 	VerifyMedia  bool
 	VerifyDevice func() error
 	MediaOps     MediaOperations
+	Files        DeviceFiles
 }
 
 const existingReadAttempts = 3
@@ -34,41 +34,43 @@ const (
 // Episodes downloads selected episodes to host staging, then applies the
 // complete device file plan. Device deletions happen only after all downloads
 // and device writes succeed.
-func Episodes(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []devicefs.PlaylistFile, managed []string, resolver PathResolver, options EpisodeSyncOptions) error {
+func Episodes(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []PlaylistFile, managed []string, resolver PathResolver, options EpisodeSyncOptions) error {
 	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, nil, resolver, options, nil, nil, nil)
 }
 
-func EpisodesWithProgress(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []devicefs.PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, options EpisodeSyncOptions, progress ProgressFunc, fileProgress devicefs.FileProgressFunc) error {
+func EpisodesWithProgress(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, options EpisodeSyncOptions, progress ProgressFunc, fileProgress FileProgressFunc) error {
 	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, progress, fileProgress, nil)
 }
 
 // EpisodesWithProgressAndWarnings continues past unreadable existing device
 // files, warning the caller when it must retain or replace one.
-func EpisodesWithProgressAndWarnings(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []devicefs.PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, options EpisodeSyncOptions, progress ProgressFunc, fileProgress devicefs.FileProgressFunc, warning WarningFunc) error {
+func EpisodesWithProgressAndWarnings(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, options EpisodeSyncOptions, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
 	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, progress, fileProgress, warning)
 }
 
-func EpisodesWithResolverAndProgressAndWarnings(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []devicefs.PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, options EpisodeSyncOptions, progress ProgressFunc, fileProgress devicefs.FileProgressFunc, warning WarningFunc) error {
+func EpisodesWithResolverAndProgressAndWarnings(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, options EpisodeSyncOptions, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
 	return EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, progress, fileProgress, warning)
 }
 
-func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []devicefs.PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, options EpisodeSyncOptions, progress ProgressFunc, fileProgress devicefs.FileProgressFunc, warning WarningFunc) error {
+func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, options EpisodeSyncOptions, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
 	if options.MediaOps == nil {
 		return fmt.Errorf("media operations are required")
 	}
-	chunks, err := missingEpisodeChunks(deviceRoot, episodes, resolver)
+	if options.Files == nil {
+		return fmt.Errorf("device files are required")
+	}
+	chunks, err := missingEpisodeChunks(deviceRoot, episodes, resolver, options.Files)
 	if err != nil {
 		return fmt.Errorf("plan episode chunks: %w", err)
 	}
-	layout := devicefs.Layout{Root: deviceRoot}
-	pending, err := layout.LoadPendingManagedPaths()
+	pending, err := options.Files.LoadPendingManagedPaths(deviceRoot)
 	if err != nil {
 		return fmt.Errorf("load pending episode ownership: %w", err)
 	}
 	pendingActive := len(pending) > 0
 	pendingPaths := appendUniquePaths(pending, pendingManagedPaths(episodes, playlists, resolver))
 	if len(pendingPaths) > 0 {
-		if err := layout.SavePendingManagedPaths(pendingPaths); err != nil {
+		if err := options.Files.SavePendingManagedPaths(deviceRoot, pendingPaths); err != nil {
 			return fmt.Errorf("save pending episode ownership: %w", err)
 		}
 		pendingActive = true
@@ -80,7 +82,7 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 			return err
 		}
 		if pendingActive {
-			if err := layout.ClearPendingManagedPaths(); err != nil {
+			if err := options.Files.ClearPendingManagedPaths(deviceRoot); err != nil {
 				return fmt.Errorf("clear pending episode ownership: %w", err)
 			}
 		}
@@ -102,13 +104,13 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 	if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, remaining, filterSkippedPlaylists(playlists, skipped), managed, feedNames, resolver, options, skipped, progress, fileProgress, warning); err != nil {
 		return err
 	}
-	if err := layout.ClearPendingManagedPaths(); err != nil {
+	if err := options.Files.ClearPendingManagedPaths(deviceRoot); err != nil {
 		return fmt.Errorf("clear pending episode ownership: %w", err)
 	}
 	return nil
 }
 
-func pendingManagedPaths(episodes []catalog.Episode, playlists []devicefs.PlaylistFile, resolver PathResolver) []string {
+func pendingManagedPaths(episodes []catalog.Episode, playlists []PlaylistFile, resolver PathResolver) []string {
 	paths := make([]string, 0, len(episodes)+len(playlists))
 	for _, current := range episodes {
 		paths = append(paths, resolver.RelativePathFor(current))
@@ -137,11 +139,11 @@ func appendUniquePaths(paths, additions []string) []string {
 	return result
 }
 
-func filterSkippedPlaylists(playlists []devicefs.PlaylistFile, skipped map[string]struct{}) []devicefs.PlaylistFile {
+func filterSkippedPlaylists(playlists []PlaylistFile, skipped map[string]struct{}) []PlaylistFile {
 	if len(skipped) == 0 {
 		return playlists
 	}
-	filtered := make([]devicefs.PlaylistFile, len(playlists))
+	filtered := make([]PlaylistFile, len(playlists))
 	copy(filtered, playlists)
 	for i := range filtered {
 		lines := strings.Split(string(filtered[i].Content), "\n")
@@ -162,7 +164,7 @@ func filterSkippedPlaylists(playlists []devicefs.PlaylistFile, skipped map[strin
 	return filtered
 }
 
-func missingEpisodeChunks(deviceRoot string, episodes []catalog.Episode, resolver PathResolver) ([][]catalog.Episode, error) {
+func missingEpisodeChunks(deviceRoot string, episodes []catalog.Episode, resolver PathResolver, files DeviceFiles) ([][]catalog.Episode, error) {
 	var chunks [][]catalog.Episode
 	var chunk []catalog.Episode
 	var chunkBytes int64
@@ -176,7 +178,7 @@ func missingEpisodeChunks(deviceRoot string, episodes []catalog.Episode, resolve
 	}
 	for _, current := range episodes {
 		relative := resolver.RelativePathFor(current)
-		exists, err := reusableFile(deviceRoot, relative, current.Enclosure.Length)
+		exists, err := reusableFile(deviceRoot, relative, current.Enclosure.Length, files)
 		if err != nil {
 			return nil, fmt.Errorf("inspect existing episode %q: %w", current.Title, err)
 		}
@@ -197,8 +199,8 @@ func missingEpisodeChunks(deviceRoot string, episodes []catalog.Episode, resolve
 	return chunks, nil
 }
 
-func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []devicefs.PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, options EpisodeSyncOptions, skipped map[string]struct{}, progress ProgressFunc, fileProgress devicefs.FileProgressFunc, warning WarningFunc) error {
-	var copies []devicefs.FileCopy
+func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, options EpisodeSyncOptions, skipped map[string]struct{}, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
+	var copies []FileCopy
 	var keep []string
 	var staged []string
 	defer func() {
@@ -214,7 +216,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 		default:
 		}
 		relative := resolver.RelativePathFor(current)
-		exists, err := reusableFile(deviceRoot, relative, current.Enclosure.Length)
+		exists, err := reusableFile(deviceRoot, relative, current.Enclosure.Length, options.Files)
 		if err != nil {
 			return fmt.Errorf("inspect existing episode %q: %w", current.Title, err)
 		}
@@ -259,7 +261,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 				if readErr == nil {
 					stageErr := retryExistingRead(ctx, func() error {
 						var err error
-						stagedPath, err = stageExisting(deviceRoot, relative, stagingDir)
+						stagedPath, err = stageExisting(deviceRoot, relative, stagingDir, options.Files)
 						return err
 					})
 					if stageErr != nil {
@@ -287,7 +289,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 							return fmt.Errorf("normalize metadata for %q: %w", current.Title, metadataErr)
 						}
 					}
-					copies = append(copies, devicefs.FileCopy{Source: stagedPath, Relative: relative})
+					copies = append(copies, FileCopy{Source: stagedPath, Relative: relative})
 					if progress != nil {
 						progress(len(keep)+len(copies), len(episodes), current, false)
 					}
@@ -300,7 +302,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 					return fmt.Errorf("normalize metadata for %q: %w", current.Title, metadataErr)
 				}
 				if changed {
-					copies = append(copies, devicefs.FileCopy{Source: stagedPath, Relative: relative})
+					copies = append(copies, FileCopy{Source: stagedPath, Relative: relative})
 				} else {
 					keep = append(keep, relative)
 				}
@@ -328,13 +330,13 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 				return fmt.Errorf("normalize metadata for %q: %w", current.Title, metadataErr)
 			}
 		}
-		copies = append(copies, devicefs.FileCopy{Source: stagedPath, Relative: relative})
+		copies = append(copies, FileCopy{Source: stagedPath, Relative: relative})
 		if progress != nil {
 			progress(len(keep)+len(copies), len(episodes), current, false)
 		}
 	}
 
-	plan, err := devicefs.BuildFilePlan(managed, copies, filterSkippedPlaylists(playlists, skipped), keep)
+	plan, err := options.Files.BuildFilePlan(managed, copies, filterSkippedPlaylists(playlists, skipped), keep)
 	if err != nil {
 		return fmt.Errorf("build episode sync plan: %w", err)
 	}
@@ -344,7 +346,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 		}
 		plan.VerifyDevice = options.VerifyDevice
 	}
-	if err := devicefs.ApplyFilePlanWithProgress(ctx, deviceRoot, plan, fileProgress); err != nil {
+	if err := options.Files.ApplyFilePlan(ctx, deviceRoot, plan, fileProgress); err != nil {
 		return fmt.Errorf("apply episode sync plan: %w", err)
 	}
 	return nil
@@ -375,8 +377,8 @@ func isMP3(current catalog.Episode, relative string) bool {
 	return strings.EqualFold(strings.TrimSpace(current.Enclosure.Type), "audio/mpeg") || strings.EqualFold(filepath.Ext(relative), ".mp3")
 }
 
-func stageExisting(deviceRoot, relative, stagingDir string) (string, error) {
-	sourcePath, err := devicefs.SafeDevicePath(deviceRoot, relative, false)
+func stageExisting(deviceRoot, relative, stagingDir string, files DeviceFiles) (string, error) {
+	sourcePath, err := files.SafeDevicePath(deviceRoot, relative, false)
 	if err != nil {
 		return "", err
 	}
@@ -435,8 +437,8 @@ func warn(warning WarningFunc, message string) {
 	}
 }
 
-func reusableFile(deviceRoot, relative string, expectedLength int64) (bool, error) {
-	path, err := devicefs.SafeDevicePath(deviceRoot, relative, false)
+func reusableFile(deviceRoot, relative string, expectedLength int64, files DeviceFiles) (bool, error) {
+	path, err := files.SafeDevicePath(deviceRoot, relative, false)
 	if err != nil {
 		return false, err
 	}

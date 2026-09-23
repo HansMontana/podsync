@@ -21,7 +21,7 @@ func TestMissingEpisodeChunksUsesEpisodeFallbackLimit(t *testing.T) {
 		episodes[i] = catalog.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i), Enclosure: catalog.Enclosure{URL: "https://example.com/episode.mp3"}}
 	}
 
-	chunks, err := missingEpisodeChunks(t.TempDir(), episodes, media.Resolver{1: "podcast"})
+	chunks, err := missingEpisodeChunks(t.TempDir(), episodes, media.Resolver{1: "podcast"}, realDeviceFiles())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,11 +46,11 @@ func TestChunkedSyncResumesBeforeFinalization(t *testing.T) {
 		manifest.WriteString(resolver.RelativePathFor(episodes[i]))
 		manifest.WriteByte('\n')
 	}
-	playlists := []devicefs.PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: []byte(manifest.String())}}
+	playlists := []PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: []byte(manifest.String())}}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var copied int
-	err := EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, server.Client(), staging, root, episodes, playlists, nil, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations()}, nil, func(progress devicefs.FileProgress) {
+	err := EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, server.Client(), staging, root, episodes, playlists, nil, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations(), Files: realDeviceFiles()}, nil, func(progress FileProgress) {
 		if progress.Phase == "copy" {
 			copied++
 			if copied == chunkEpisodeLimit {
@@ -67,12 +67,12 @@ func TestChunkedSyncResumesBeforeFinalization(t *testing.T) {
 
 	resumedEpisodes := episodes[:1]
 	resumedManifest := resolver.RelativePathFor(resumedEpisodes[0]) + "\n"
-	resumedPlaylists := []devicefs.PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: []byte(resumedManifest)}}
+	resumedPlaylists := []PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: []byte(resumedManifest)}}
 	managed, err := (devicefs.Layout{Root: root}).LoadManagedPaths()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), staging, root, resumedEpisodes, resumedPlaylists, managed, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations()}, nil, nil, nil); err != nil {
+	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), staging, root, resumedEpisodes, resumedPlaylists, managed, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations(), Files: realDeviceFiles()}, nil, nil, nil); err != nil {
 		t.Fatalf("resume failed: %v", err)
 	}
 	data, err := os.ReadFile(filepath.Join(root, "Podsync/managed-files.txt"))
@@ -98,9 +98,9 @@ func TestSingleBatchInterruptionPreservesPendingOwnership(t *testing.T) {
 	resolver := media.Resolver{1: "podcast"}
 	episodeValue := catalog.Episode{FeedID: 1, GUID: "episode-1", Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/ogg"}}
 	relative := resolver.RelativePathFor(episodeValue)
-	playlists := []devicefs.PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: []byte(relative + "\n")}}
+	playlists := []PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: []byte(relative + "\n")}}
 	ctx, cancel := context.WithCancel(context.Background())
-	err := EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, server.Client(), staging, root, []catalog.Episode{episodeValue}, playlists, nil, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations()}, nil, func(progress devicefs.FileProgress) {
+	err := EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, server.Client(), staging, root, []catalog.Episode{episodeValue}, playlists, nil, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations(), Files: realDeviceFiles()}, nil, func(progress FileProgress) {
 		if progress.Phase == "copy" {
 			cancel()
 		}
@@ -118,9 +118,9 @@ func TestSingleBatchInterruptionPreservesPendingOwnership(t *testing.T) {
 
 	secondEpisode := catalog.Episode{FeedID: 1, GUID: "episode-2", Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/ogg"}}
 	secondRelative := resolver.RelativePathFor(secondEpisode)
-	secondPlaylists := []devicefs.PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: []byte(secondRelative + "\n")}}
+	secondPlaylists := []PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: []byte(secondRelative + "\n")}}
 	secondContext, secondCancel := context.WithCancel(context.Background())
-	secondErr := EpisodesWithResolverAndProgressAndWarningsWithOptions(secondContext, server.Client(), staging, root, []catalog.Episode{secondEpisode}, secondPlaylists, nil, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations()}, nil, func(progress devicefs.FileProgress) {
+	secondErr := EpisodesWithResolverAndProgressAndWarningsWithOptions(secondContext, server.Client(), staging, root, []catalog.Episode{secondEpisode}, secondPlaylists, nil, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations(), Files: realDeviceFiles()}, nil, func(progress FileProgress) {
 		if progress.Phase == "copy" {
 			secondCancel()
 		}
@@ -135,7 +135,7 @@ func TestSingleBatchInterruptionPreservesPendingOwnership(t *testing.T) {
 	if len(pending) != 2 || pending[0] != relative || pending[1] != secondRelative {
 		t.Fatalf("got pending ownership after second interruption %v, want both paths", pending)
 	}
-	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), staging, root, []catalog.Episode{episodeValue}, playlists, pending, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations()}, nil, nil, nil); err != nil {
+	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), staging, root, []catalog.Episode{episodeValue}, playlists, pending, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations(), Files: realDeviceFiles()}, nil, nil, nil); err != nil {
 		t.Fatalf("resume failed: %v", err)
 	}
 	pending, err = (devicefs.Layout{Root: root}).LoadPendingManagedPaths()
@@ -151,13 +151,13 @@ func TestChunkedSyncRecoversAfterFinalizationInterruption(t *testing.T) {
 	tests := []struct {
 		name        string
 		phase       string
-		playlists   []devicefs.PlaylistFile
+		playlists   []PlaylistFile
 		initialFile string
 	}{
 		{
 			name:  "playlist",
 			phase: "playlist",
-			playlists: []devicefs.PlaylistFile{
+			playlists: []PlaylistFile{
 				{Relative: "Playlists/briefing.m3u8", Content: []byte("podcast episode\n")},
 				{Relative: "Podsync/managed-files.txt", Content: nil},
 			},
@@ -166,7 +166,7 @@ func TestChunkedSyncRecoversAfterFinalizationInterruption(t *testing.T) {
 			name:        "deletion",
 			phase:       "delete",
 			initialFile: "Podcasts/stale/old.mp3\n",
-			playlists:   []devicefs.PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: nil}},
+			playlists:   []PlaylistFile{{Relative: "Podsync/managed-files.txt", Content: nil}},
 		},
 	}
 
@@ -187,7 +187,7 @@ func TestChunkedSyncRecoversAfterFinalizationInterruption(t *testing.T) {
 				manifest.WriteString(resolver.RelativePathFor(episodes[i]))
 				manifest.WriteByte('\n')
 			}
-			playlists := append([]devicefs.PlaylistFile(nil), test.playlists...)
+			playlists := append([]PlaylistFile(nil), test.playlists...)
 			playlists[len(playlists)-1].Content = []byte(manifest.String())
 
 			if test.initialFile != "" {
@@ -211,7 +211,7 @@ func TestChunkedSyncRecoversAfterFinalizationInterruption(t *testing.T) {
 			}
 
 			ctx, cancel := context.WithCancel(context.Background())
-			err := EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, server.Client(), staging, root, episodes, playlists, initialManaged, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations()}, nil, func(progress devicefs.FileProgress) {
+			err := EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, server.Client(), staging, root, episodes, playlists, initialManaged, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations(), Files: realDeviceFiles()}, nil, func(progress FileProgress) {
 				if progress.Phase == test.phase {
 					cancel()
 				}
@@ -231,7 +231,7 @@ func TestChunkedSyncRecoversAfterFinalizationInterruption(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), staging, root, episodes, playlists, managed, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations()}, nil, nil, nil); err != nil {
+			if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), staging, root, episodes, playlists, managed, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations(), Files: realDeviceFiles()}, nil, nil, nil); err != nil {
 				t.Fatalf("resume failed: %v", err)
 			}
 			pending, err = (devicefs.Layout{Root: root}).LoadPendingManagedPaths()

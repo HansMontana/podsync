@@ -91,7 +91,7 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		return err
 	}
 	selected := make(map[string]catalog.Episode)
-	var playlistFiles []devicefs.PlaylistFile
+	var playlistFiles []applicationdevice.PlaylistFile
 	var managed []string
 	feedNames := make(map[int64]string, len(current.Feeds))
 	for _, known := range current.Feeds {
@@ -109,7 +109,7 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		if generateErr != nil {
 			return generateErr
 		}
-		playlistFiles = append(playlistFiles, devicefs.PlaylistFile{Relative: path.Join("Playlists", playlists.Filename(logical.Title, logical.ID)+".m3u8"), Content: content})
+		playlistFiles = append(playlistFiles, applicationdevice.PlaylistFile{Relative: path.Join("Playlists", playlists.Filename(logical.Title, logical.ID)+".m3u8"), Content: content})
 	}
 	for _, configured := range cfg.Briefings {
 		plan, generateErr := curation.Build(cfg, current, configured.ID, states)
@@ -123,7 +123,7 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		for i, currentEpisode := range plan.Episodes {
 			tracks[i] = playlists.Track{Episode: currentEpisode, Path: path.Join("..", resolver.RelativePathFor(currentEpisode))}
 		}
-		playlistFiles = append(playlistFiles, devicefs.PlaylistFile{Relative: path.Join("Playlists", playlists.Filename(configured.Title, configured.ID)+".m3u8"), Content: playlists.M3U(tracks)})
+		playlistFiles = append(playlistFiles, applicationdevice.PlaylistFile{Relative: path.Join("Playlists", playlists.Filename(configured.Title, configured.ID)+".m3u8"), Content: playlists.M3U(tracks)})
 	}
 	artistOverrides := make(map[int64]string)
 	for _, logical := range cfg.Feeds {
@@ -176,27 +176,27 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 	for _, playlist := range playlistFiles {
 		newManaged = append(newManaged, playlist.Relative)
 	}
-	manifest := devicefs.PlaylistFile{Relative: layout.ManifestRelativePath(), Content: manifestContent(newManaged)}
+	manifest := applicationdevice.PlaylistFile{Relative: layout.ManifestRelativePath(), Content: manifestContent(newManaged)}
 	playlistFiles = append(playlistFiles, manifest)
 	if dryRun {
-		copies := make([]devicefs.FileCopy, 0, len(episodes))
+		copies := make([]applicationdevice.FileCopy, 0, len(episodes))
 		for _, currentEpisode := range episodes {
-			copies = append(copies, devicefs.FileCopy{Relative: resolver.RelativePathFor(currentEpisode)})
+			copies = append(copies, applicationdevice.FileCopy{Relative: resolver.RelativePathFor(currentEpisode)})
 		}
-		plan, err := devicefs.BuildFilePlan(managed, copies, playlistFiles, nil)
+		plan, err := devicefs.New().BuildFilePlan(managed, copies, playlistFiles, nil)
 		if err != nil {
 			return err
 		}
 		logger.Info(fmt.Sprintf("Dry run selected %d episodes, writes %d playlists, and deletes %d managed files", len(episodes), len(playlistFiles)-1, len(plan.Deletes)))
 		return nil
 	}
-	if err := applicationdevice.EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, httpClient, stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, applicationdevice.EpisodeSyncOptions{VerifyMedia: verifyMedia, MediaOps: mediaops.New(), VerifyDevice: func() error {
+	if err := applicationdevice.EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, httpClient, stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, applicationdevice.EpisodeSyncOptions{VerifyMedia: verifyMedia, MediaOps: mediaops.New(), Files: devicefs.New(), VerifyDevice: func() error {
 		return devicefs.VerifyRootIdentity(layout.Root, identity)
 	}}, func(completed, total int, current catalog.Episode, reused bool) {
 		if logProgress(completed, total) {
 			logger.Info(fmt.Sprintf("Prepared episodes: %d/%d", completed, total))
 		}
-	}, func(progress devicefs.FileProgress) {
+	}, func(progress applicationdevice.FileProgress) {
 		switch progress.Phase {
 		case "copy":
 			if logProgress(progress.Completed, progress.Total) {
