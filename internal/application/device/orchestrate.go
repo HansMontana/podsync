@@ -12,9 +12,7 @@ import (
 	"time"
 
 	"github.com/HansMontana/podsync/internal/adapters/devicefs"
-	"github.com/HansMontana/podsync/internal/adapters/download"
 	"github.com/HansMontana/podsync/internal/adapters/media"
-	"github.com/HansMontana/podsync/internal/adapters/metadata"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
 
@@ -24,6 +22,7 @@ type WarningFunc func(message string)
 type EpisodeSyncOptions struct {
 	VerifyMedia  bool
 	VerifyDevice func() error
+	MediaOps     MediaOperations
 }
 
 const existingReadAttempts = 3
@@ -36,18 +35,18 @@ const (
 // Episodes downloads selected episodes to host staging, then applies the
 // complete device file plan. Device deletions happen only after all downloads
 // and device writes succeed.
-func Episodes(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []devicefs.PlaylistFile, managed []string) error {
-	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, nil, resolverForEpisodes(episodes), nil, nil, nil)
+func Episodes(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []devicefs.PlaylistFile, managed []string, options EpisodeSyncOptions) error {
+	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, nil, resolverForEpisodes(episodes), options, nil, nil, nil)
 }
 
-func EpisodesWithProgress(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []devicefs.PlaylistFile, managed []string, feedNames map[int64]string, progress ProgressFunc, fileProgress devicefs.FileProgressFunc) error {
-	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolverForEpisodes(episodes), progress, fileProgress, nil)
+func EpisodesWithProgress(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []devicefs.PlaylistFile, managed []string, feedNames map[int64]string, options EpisodeSyncOptions, progress ProgressFunc, fileProgress devicefs.FileProgressFunc) error {
+	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolverForEpisodes(episodes), options, progress, fileProgress, nil)
 }
 
 // EpisodesWithProgressAndWarnings continues past unreadable existing device
 // files, warning the caller when it must retain or replace one.
-func EpisodesWithProgressAndWarnings(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []devicefs.PlaylistFile, managed []string, feedNames map[int64]string, progress ProgressFunc, fileProgress devicefs.FileProgressFunc, warning WarningFunc) error {
-	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolverForEpisodes(episodes), progress, fileProgress, warning)
+func EpisodesWithProgressAndWarnings(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []devicefs.PlaylistFile, managed []string, feedNames map[int64]string, options EpisodeSyncOptions, progress ProgressFunc, fileProgress devicefs.FileProgressFunc, warning WarningFunc) error {
+	return EpisodesWithResolverAndProgressAndWarnings(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolverForEpisodes(episodes), options, progress, fileProgress, warning)
 }
 
 func resolverForEpisodes(episodes []catalog.Episode) media.Resolver {
@@ -60,11 +59,14 @@ func resolverForEpisodes(episodes []catalog.Episode) media.Resolver {
 	return resolver
 }
 
-func EpisodesWithResolverAndProgressAndWarnings(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []devicefs.PlaylistFile, managed []string, feedNames map[int64]string, resolver media.Resolver, progress ProgressFunc, fileProgress devicefs.FileProgressFunc, warning WarningFunc) error {
-	return EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, EpisodeSyncOptions{}, progress, fileProgress, warning)
+func EpisodesWithResolverAndProgressAndWarnings(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []devicefs.PlaylistFile, managed []string, feedNames map[int64]string, resolver media.Resolver, options EpisodeSyncOptions, progress ProgressFunc, fileProgress devicefs.FileProgressFunc, warning WarningFunc) error {
+	return EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, progress, fileProgress, warning)
 }
 
 func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []devicefs.PlaylistFile, managed []string, feedNames map[int64]string, resolver media.Resolver, options EpisodeSyncOptions, progress ProgressFunc, fileProgress devicefs.FileProgressFunc, warning WarningFunc) error {
+	if options.MediaOps == nil {
+		return fmt.Errorf("media operations are required")
+	}
 	chunks, err := missingEpisodeChunks(deviceRoot, episodes, resolver)
 	if err != nil {
 		return fmt.Errorf("plan episode chunks: %w", err)
@@ -248,7 +250,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 				var readErr *existingReadError
 				if err := retryExistingRead(ctx, func() error {
 					var err error
-					needsNormalization, err = metadata.NeedsNormalization(filepath.Join(deviceRoot, filepath.FromSlash(relative)), current)
+					needsNormalization, err = options.MediaOps.NeedsNormalization(filepath.Join(deviceRoot, filepath.FromSlash(relative)), current)
 					return err
 				}); err != nil {
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -284,7 +286,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 				}
 				if readErr != nil {
 					warn(warning, fmt.Sprintf("unreadable existing episode %q: %v; redownloading", current.Title, readErr))
-					stagedPath, err = download.Episode(ctx, client, current, stagingDir)
+					stagedPath, _, err = options.MediaOps.DownloadEpisode(ctx, client, current, stagingDir)
 					if err != nil {
 						keep = append(keep, relative)
 						warn(warning, fmt.Sprintf("could not redownload %q: %v; keeping existing file", current.Title, err))
@@ -292,7 +294,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 					}
 					staged = append(staged, stagedPath)
 					if isMP3(current, relative) {
-						if _, metadataErr := metadata.NormalizeMP3(stagedPath, feedNames[current.FeedID], current); metadataErr != nil {
+						if _, metadataErr := options.MediaOps.NormalizeMP3(stagedPath, feedNames[current.FeedID], current); metadataErr != nil {
 							return fmt.Errorf("normalize metadata for %q: %w", current.Title, metadataErr)
 						}
 					}
@@ -304,7 +306,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 				}
 				staged = append(staged, stagedPath)
 				var metadataErr error
-				changed, metadataErr = metadata.NormalizeMP3(stagedPath, feedNames[current.FeedID], current)
+				changed, metadataErr = options.MediaOps.NormalizeMP3(stagedPath, feedNames[current.FeedID], current)
 				if metadataErr != nil {
 					return fmt.Errorf("normalize metadata for %q: %w", current.Title, metadataErr)
 				}
@@ -322,9 +324,9 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 			continue
 		}
 
-		stagedPath, err := download.Episode(ctx, client, current, stagingDir)
+		stagedPath, unsupported, err := options.MediaOps.DownloadEpisode(ctx, client, current, stagingDir)
 		if err != nil {
-			if errors.Is(err, download.ErrUnsupportedMedia) {
+			if unsupported {
 				skipped[relative] = struct{}{}
 				warn(warning, fmt.Sprintf("skipping %q: %v", current.Title, err))
 				continue
@@ -333,7 +335,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 		}
 		staged = append(staged, stagedPath)
 		if isMP3(current, relative) {
-			if _, metadataErr := metadata.NormalizeMP3(stagedPath, feedNames[current.FeedID], current); metadataErr != nil {
+			if _, metadataErr := options.MediaOps.NormalizeMP3(stagedPath, feedNames[current.FeedID], current); metadataErr != nil {
 				return fmt.Errorf("normalize metadata for %q: %w", current.Title, metadataErr)
 			}
 		}

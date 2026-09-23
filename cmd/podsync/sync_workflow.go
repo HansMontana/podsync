@@ -13,6 +13,7 @@ import (
 	devicefs "github.com/HansMontana/podsync/internal/adapters/devicefs"
 	"github.com/HansMontana/podsync/internal/adapters/logging"
 	"github.com/HansMontana/podsync/internal/adapters/media"
+	"github.com/HansMontana/podsync/internal/adapters/mediaops"
 	"github.com/HansMontana/podsync/internal/adapters/playlists"
 	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
 	applicationdevice "github.com/HansMontana/podsync/internal/application/device"
@@ -189,7 +190,7 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		logger.Info(fmt.Sprintf("Dry run selected %d episodes, writes %d playlists, and deletes %d managed files", len(episodes), len(playlistFiles)-1, len(plan.Deletes)))
 		return nil
 	}
-	if err := applicationdevice.EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, httpClient, stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, applicationdevice.EpisodeSyncOptions{VerifyMedia: verifyMedia, VerifyDevice: func() error {
+	if err := applicationdevice.EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, httpClient, stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, applicationdevice.EpisodeSyncOptions{VerifyMedia: verifyMedia, MediaOps: mediaops.New(), VerifyDevice: func() error {
 		return devicefs.VerifyRootIdentity(layout.Root, identity)
 	}}, func(completed, total int, current catalog.Episode, reused bool) {
 		if logProgress(completed, total) {
