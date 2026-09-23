@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
 	"github.com/HansMontana/podsync/internal/state"
@@ -107,7 +108,7 @@ func RefreshFeeds(ctx context.Context, repository state.Repository, client *http
 
 const refreshWorkers = 10
 
-func fetchRefreshResults(ctx context.Context, client *http.Client, current state.State, requests []RefreshRequest) ([]RefreshResult, error) {
+func fetchRefreshResults(ctx context.Context, client *http.Client, current catalog.Catalog, requests []RefreshRequest) ([]RefreshResult, error) {
 	if len(requests) == 0 {
 		return nil, nil
 	}
@@ -194,7 +195,7 @@ type RefreshRequest struct {
 	Archive bool
 }
 
-func findFeed(current state.State, feedID int64) (feed.Feed, error) {
+func findFeed(current catalog.Catalog, feedID int64) (feed.Feed, error) {
 	for _, known := range current.Feeds {
 		if known.ID == feedID {
 			return known, nil
@@ -204,7 +205,7 @@ func findFeed(current state.State, feedID int64) (feed.Feed, error) {
 }
 
 // ApplyRefresh replaces one source feed in memory while retaining archive history.
-func ApplyRefresh(current state.State, result RefreshResult) (state.State, error) {
+func ApplyRefresh(current catalog.Catalog, result RefreshResult) (catalog.Catalog, error) {
 	feedIndex := -1
 	for i, known := range current.Feeds {
 		if known.ID == result.Feed.ID {
@@ -213,7 +214,7 @@ func ApplyRefresh(current state.State, result RefreshResult) (state.State, error
 		}
 	}
 	if feedIndex == -1 {
-		return state.State{}, fmt.Errorf("refresh feed %d: feed not found", result.Feed.ID)
+		return catalog.Catalog{}, fmt.Errorf("refresh feed %d: feed not found", result.Feed.ID)
 	}
 
 	previousEpisodes := current.Episodes
@@ -226,7 +227,7 @@ func ApplyRefresh(current state.State, result RefreshResult) (state.State, error
 	if len(result.Episodes) == 0 {
 		for _, existing := range previousEpisodes {
 			if existing.FeedID == result.Feed.ID {
-				return state.State{}, fmt.Errorf("refresh feed %d: refusing to replace existing episodes with an empty feed", result.Feed.ID)
+				return catalog.Catalog{}, fmt.Errorf("refresh feed %d: refusing to replace existing episodes with an empty feed", result.Feed.ID)
 			}
 		}
 	}
@@ -246,7 +247,7 @@ func ApplyRefresh(current state.State, result RefreshResult) (state.State, error
 	current.Feeds[feedIndex] = result.Feed
 	current.Episodes = append(retainedEpisodes, result.Episodes...)
 	if err := current.Validate(); err != nil {
-		return state.State{}, fmt.Errorf("validate refreshed state: %w", err)
+		return catalog.Catalog{}, fmt.Errorf("validate refreshed state: %w", err)
 	}
 	return current, nil
 }

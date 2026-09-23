@@ -6,14 +6,14 @@ import (
 
 	"github.com/HansMontana/podsync/internal/briefing"
 	"github.com/HansMontana/podsync/internal/config"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/media"
 	"github.com/HansMontana/podsync/internal/playback"
 	"github.com/HansMontana/podsync/internal/selection"
-	"github.com/HansMontana/podsync/internal/state"
 )
 
-func LogicalFeed(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State) ([]byte, error) {
+func LogicalFeed(cfg config.Config, current catalog.Catalog, feedID string, playbackStates map[string]playback.State) ([]byte, error) {
 	logicalIDs, err := cfg.LogicalFeedIDs(current)
 	if err != nil {
 		return nil, err
@@ -21,7 +21,7 @@ func LogicalFeed(cfg config.Config, current state.State, feedID string, playback
 	return LogicalFeedWithResolver(cfg, current, feedID, playbackStates, media.Resolver(logicalIDs))
 }
 
-func LogicalFeedWithResolver(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, resolver media.Resolver) ([]byte, error) {
+func LogicalFeedWithResolver(cfg config.Config, current catalog.Catalog, feedID string, playbackStates map[string]playback.State, resolver media.Resolver) ([]byte, error) {
 	episodes, err := selection.FeedForPlaylist(cfg, current, feedID, playbackStates)
 	if err != nil {
 		return nil, fmt.Errorf("select logical feed %q: %w", feedID, err)
@@ -29,7 +29,7 @@ func LogicalFeedWithResolver(cfg config.Config, current state.State, feedID stri
 	return M3U(tracksWithResolver(episodes, resolver)), nil
 }
 
-func Briefing(cfg config.Config, current state.State, briefingID string, playbackStates map[string]playback.State) ([]byte, error) {
+func Briefing(cfg config.Config, current catalog.Catalog, briefingID string, playbackStates map[string]playback.State) ([]byte, error) {
 	logicalIDs, err := cfg.LogicalFeedIDs(current)
 	if err != nil {
 		return nil, err
@@ -37,7 +37,7 @@ func Briefing(cfg config.Config, current state.State, briefingID string, playbac
 	return BriefingWithResolver(cfg, current, briefingID, playbackStates, media.Resolver(logicalIDs))
 }
 
-func BriefingWithResolver(cfg config.Config, current state.State, briefingID string, playbackStates map[string]playback.State, resolver media.Resolver) ([]byte, error) {
+func BriefingWithResolver(cfg config.Config, current catalog.Catalog, briefingID string, playbackStates map[string]playback.State, resolver media.Resolver) ([]byte, error) {
 	plan, err := briefing.Build(cfg, current, briefingID, playbackStates)
 	if err != nil {
 		return nil, fmt.Errorf("build briefing %q: %w", briefingID, err)

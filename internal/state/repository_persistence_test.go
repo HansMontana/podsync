@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
 )
@@ -44,7 +45,7 @@ func TestSQLiteRepositoryRoundTrip(t *testing.T) {
 		t.Fatalf("NewSQLiteRepository() returned error: %v", err)
 	}
 
-	want := State{
+	want := catalog.Catalog{
 		Feeds: []feed.Feed{
 			{
 				ID:           1,
@@ -108,12 +109,12 @@ func TestSQLiteRepositoryRejectsInvalidStateWithoutChangingDatabase(t *testing.T
 	}
 	defer repository.Close()
 
-	want := State{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/feed.xml"}}}
+	want := catalog.Catalog{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/feed.xml"}}}
 	if err := repository.Save(want); err != nil {
 		t.Fatalf("initial Save() returned error: %v", err)
 	}
 
-	invalid := State{Episodes: []episode.Episode{{FeedID: 999, GUID: "orphan"}}}
+	invalid := catalog.Catalog{Episodes: []episode.Episode{{FeedID: 999, GUID: "orphan"}}}
 	if err := repository.Save(invalid); err == nil {
 		t.Fatal("Save() accepted an episode for an unknown feed")
 	}

@@ -6,9 +6,9 @@ import (
 
 	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/device"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
-	"github.com/HansMontana/podsync/internal/state"
 	syncer "github.com/HansMontana/podsync/internal/sync"
 )
 
@@ -139,7 +139,7 @@ func removeFeed(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	previous := state.State{
+	previous := catalog.Catalog{
 		Feeds:    append([]feed.Feed(nil), current.Feeds...),
 		Episodes: append([]episode.Episode(nil), current.Episodes...),
 	}

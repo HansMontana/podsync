@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/HansMontana/podsync/internal/config"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
 	"github.com/HansMontana/podsync/internal/playback"
-	"github.com/HansMontana/podsync/internal/state"
 )
 
 func TestFeedSelectsNewestUnplayedEpisodesAndFilters(t *testing.T) {
@@ -21,7 +21,7 @@ func TestFeedSelectsNewestUnplayedEpisodesAndFilters(t *testing.T) {
 	oldest := episode.Episode{FeedID: 1, GUID: "old", Title: "World earlier", PublishedAt: time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)}
 	other := episode.Episode{FeedID: 1, GUID: "other", Title: "Sports latest", PublishedAt: time.Date(2026, 9, 4, 0, 0, 0, 0, time.UTC)}
 
-	got, err := Feed(cfg, state.State{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/news.xml"}}, Episodes: []episode.Episode{oldest, newest, other}}, "world", map[string]playback.State{
+	got, err := Feed(cfg, catalog.Catalog{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/news.xml"}}, Episodes: []episode.Episode{oldest, newest, other}}, "world", map[string]playback.State{
 		newest.IdentityKey(): {Known: true, PlayCount: 1},
 	}, true)
 	if err != nil {
@@ -38,7 +38,7 @@ func TestFeedTreatsUnknownPlaybackAsUnplayed(t *testing.T) {
 		Feeds:   []config.LogicalFeed{{ID: "news", Source: "news", Order: config.OldestFirst}},
 	}
 	episodeValue := episode.Episode{FeedID: 1, GUID: "episode-1", PublishedAt: time.Now()}
-	got, err := Feed(cfg, state.State{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/news.xml"}}, Episodes: []episode.Episode{episodeValue}}, "news", nil, true)
+	got, err := Feed(cfg, catalog.Catalog{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/news.xml"}}, Episodes: []episode.Episode{episodeValue}}, "news", nil, true)
 	if err != nil {
 		t.Fatalf("Feed() returned error: %v", err)
 	}
@@ -54,7 +54,7 @@ func TestFeedSupportsOldestFirst(t *testing.T) {
 	}
 	earlier := episode.Episode{FeedID: 1, GUID: "earlier", PublishedAt: time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)}
 	later := episode.Episode{FeedID: 1, GUID: "later", PublishedAt: time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)}
-	got, err := Feed(cfg, state.State{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/news.xml"}}, Episodes: []episode.Episode{later, earlier}}, "news", nil, false)
+	got, err := Feed(cfg, catalog.Catalog{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/news.xml"}}, Episodes: []episode.Episode{later, earlier}}, "news", nil, false)
 	if err != nil {
 		t.Fatalf("Feed() returned error: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestFeedForSyncSelectsNewestEpisodesRegardlessOfPlaylistOrder(t *testing.T)
 		{FeedID: 1, GUID: "middle", PublishedAt: time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)},
 		{FeedID: 1, GUID: "newest", PublishedAt: time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)},
 	}
-	got, err := FeedForSync(cfg, state.State{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/news.xml"}}, Episodes: episodes}, "news", nil, false)
+	got, err := FeedForSync(cfg, catalog.Catalog{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/news.xml"}}, Episodes: episodes}, "news", nil, false)
 	if err != nil {
 		t.Fatalf("FeedForSync() returned error: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestArchiveFeedIgnoresLimitAndPlaybackFilters(t *testing.T) {
 		{FeedID: 1, GUID: "old", PublishedAt: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)},
 		{FeedID: 1, GUID: "new", PublishedAt: time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)},
 	}
-	got, err := FeedForSync(cfg, state.State{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/archive.xml"}}, Episodes: episodes}, "archive", map[string]playback.State{
+	got, err := FeedForSync(cfg, catalog.Catalog{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/archive.xml"}}, Episodes: episodes}, "archive", map[string]playback.State{
 		"guid:1:new": {Known: true, PlayCount: 1},
 	}, false)
 	if err != nil {
@@ -116,7 +116,7 @@ func TestFeedUnplayedLimitBackfillsOlderEpisodes(t *testing.T) {
 			playbackStates[current.IdentityKey()] = playback.State{Known: true, PlayCount: 1}
 		}
 	}
-	got, err := Feed(cfg, state.State{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/news.xml"}}, Episodes: episodes}, "news", playbackStates, false)
+	got, err := Feed(cfg, catalog.Catalog{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/news.xml"}}, Episodes: episodes}, "news", playbackStates, false)
 	if err != nil {
 		t.Fatalf("Feed() returned error: %v", err)
 	}

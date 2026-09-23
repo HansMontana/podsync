@@ -1,4 +1,4 @@
-package state
+package catalog
 
 import (
 	"fmt"
@@ -8,8 +8,8 @@ import (
 	"github.com/HansMontana/podsync/internal/feed"
 )
 
-func TestStateValidateAcceptsValidState(t *testing.T) {
-	state := State{
+func TestCatalogValidateAcceptsValidCatalog(t *testing.T) {
+	catalog := Catalog{
 		Feeds: []feed.Feed{
 			{
 				ID:  1,
@@ -24,39 +24,39 @@ func TestStateValidateAcceptsValidState(t *testing.T) {
 		},
 	}
 
-	if err := state.Validate(); err != nil {
-		t.Fatalf("valid state returned error: %v", err)
+	if err := catalog.Validate(); err != nil {
+		t.Fatalf("valid catalog returned error: %v", err)
 	}
 }
 
-func TestStateValidateRejectsDuplicateFeedIDs(t *testing.T) {
-	state := State{
+func TestCatalogValidateRejectsDuplicateFeedIDs(t *testing.T) {
+	catalog := Catalog{
 		Feeds: []feed.Feed{
 			{ID: 1, URL: "https://example.com/one.xml"},
 			{ID: 1, URL: "https://example.com/two.xml"},
 		},
 	}
 
-	if err := state.Validate(); err == nil {
+	if err := catalog.Validate(); err == nil {
 		t.Fatal("expected duplicate feed IDs to be rejected")
 	}
 }
 
-func TestStateValidateRejectsDuplicateFeedURLs(t *testing.T) {
-	state := State{
+func TestCatalogValidateRejectsDuplicateFeedURLs(t *testing.T) {
+	catalog := Catalog{
 		Feeds: []feed.Feed{
 			{ID: 1, URL: "https://example.com/feed.xml"},
 			{ID: 2, URL: "https://EXAMPLE.com:443/feed.xml"},
 		},
 	}
 
-	if err := state.Validate(); err == nil {
+	if err := catalog.Validate(); err == nil {
 		t.Fatal("expected duplicate feed URLs to be rejected")
 	}
 }
 
-func TestStateValidateRejectsEpisodeWithUnknownFeed(t *testing.T) {
-	state := State{
+func TestCatalogValidateRejectsEpisodeWithUnknownFeed(t *testing.T) {
+	catalog := Catalog{
 		Feeds: []feed.Feed{
 			{ID: 1, URL: "https://example.com/feed.xml"},
 		},
@@ -68,13 +68,13 @@ func TestStateValidateRejectsEpisodeWithUnknownFeed(t *testing.T) {
 		},
 	}
 
-	if err := state.Validate(); err == nil {
+	if err := catalog.Validate(); err == nil {
 		t.Fatal("expected episode with unknown feed to be rejected")
 	}
 }
 
-func TestStateValidateRejectsDuplicateEpisodeIdentity(t *testing.T) {
-	state := State{
+func TestCatalogValidateRejectsDuplicateEpisodeIdentity(t *testing.T) {
+	catalog := Catalog{
 		Feeds: []feed.Feed{
 			{ID: 1, URL: "https://example.com/feed.xml"},
 		},
@@ -92,19 +92,19 @@ func TestStateValidateRejectsDuplicateEpisodeIdentity(t *testing.T) {
 		},
 	}
 
-	if err := state.Validate(); err == nil {
+	if err := catalog.Validate(); err == nil {
 		t.Fatal("expected duplicate episode identities to be rejected")
 	}
 }
 
-func BenchmarkStateValidateEpisodes(b *testing.B) {
-	state := State{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/feed.xml"}}}
+func BenchmarkCatalogValidateEpisodes(b *testing.B) {
+	catalog := Catalog{Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/feed.xml"}}}
 	for i := 0; i < 20000; i++ {
-		state.Episodes = append(state.Episodes, episode.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i)})
+		catalog.Episodes = append(catalog.Episodes, episode.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i)})
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := state.Validate(); err != nil {
+		if err := catalog.Validate(); err != nil {
 			b.Fatal(err)
 		}
 	}

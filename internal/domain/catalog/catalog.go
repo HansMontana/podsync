@@ -1,4 +1,4 @@
-package state
+package catalog
 
 import (
 	"fmt"
@@ -7,19 +7,19 @@ import (
 	"github.com/HansMontana/podsync/internal/feed"
 )
 
-// State represents the persistent podsync state associated with a device.
-type State struct {
+// Catalog represents the persistent podsync state associated with a device.
+type Catalog struct {
 	Feeds    []feed.Feed
 	Episodes []episode.Episode
 }
 
-// Validate checks the invariants of the persistent state.
-func (s State) Validate() error {
+// Validate checks the invariants of the persistent catalog.
+func (c Catalog) Validate() error {
 	feedIDs := make(map[int64]struct{})
 	feedURLs := make(map[string]struct{})
-	episodeIDs := make(map[string]struct{}, len(s.Episodes))
+	episodeIDs := make(map[string]struct{}, len(c.Episodes))
 
-	for _, f := range s.Feeds {
+	for _, f := range c.Feeds {
 		if f.ID <= 0 {
 			return fmt.Errorf("feed ID must be positive: %d", f.ID)
 		}
@@ -41,7 +41,7 @@ func (s State) Validate() error {
 		feedURLs[normalizedURL] = struct{}{}
 	}
 
-	for _, e := range s.Episodes {
+	for _, e := range c.Episodes {
 		if _, exists := feedIDs[e.FeedID]; !exists {
 			return fmt.Errorf(
 				"episode references unknown feed ID: %d",

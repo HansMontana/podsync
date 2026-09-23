@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/HansMontana/podsync/internal/config"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
 	"github.com/HansMontana/podsync/internal/playback"
-	"github.com/HansMontana/podsync/internal/state"
 )
 
 func TestM3UProducesExtendedPlaylist(t *testing.T) {
@@ -37,7 +37,7 @@ func TestLogicalFeedUsesStableDevicePathsAndConfiguredOrder(t *testing.T) {
 		Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
 		Feeds:   []config.LogicalFeed{{ID: "world", Source: "news", Order: config.OldestFirst, Limit: 1}},
 	}
-	current := state.State{
+	current := catalog.Catalog{
 		Feeds: []feed.Feed{{ID: 1, URL: "https://example.com/news.xml"}},
 		Episodes: []episode.Episode{
 			{FeedID: 1, GUID: "new", Title: "New", PublishedAt: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC), Enclosure: episode.Enclosure{URL: "https://example.com/new.mp3", Type: "audio/mpeg"}},

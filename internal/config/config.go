@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
-	"github.com/HansMontana/podsync/internal/state"
 )
 
 type Order string
@@ -223,9 +223,9 @@ func (f Filter) Matches(e episode.Episode) bool {
 
 // EnsureSources adds configured source feeds that are missing from durable
 // state while preserving existing IDs, names, and HTTP cache metadata.
-func (c Config) EnsureSources(current state.State) (state.State, error) {
+func (c Config) EnsureSources(current catalog.Catalog) (catalog.Catalog, error) {
 	if err := c.Validate(); err != nil {
-		return state.State{}, fmt.Errorf("validate config: %w", err)
+		return catalog.Catalog{}, fmt.Errorf("validate config: %w", err)
 	}
 	result := current
 	byURL := make(map[string]feed.Feed, len(result.Feeds))
@@ -233,7 +233,7 @@ func (c Config) EnsureSources(current state.State) (state.State, error) {
 	for _, known := range result.Feeds {
 		normalized, err := feed.NormalizeURL(known.URL)
 		if err != nil {
-			return state.State{}, fmt.Errorf("normalize existing feed %d: %w", known.ID, err)
+			return catalog.Catalog{}, fmt.Errorf("normalize existing feed %d: %w", known.ID, err)
 		}
 		byURL[normalized] = known
 		if known.ID > maxID {
@@ -243,7 +243,7 @@ func (c Config) EnsureSources(current state.State) (state.State, error) {
 	for _, source := range c.Sources {
 		normalized, err := feed.NormalizeURL(source.URL)
 		if err != nil {
-			return state.State{}, fmt.Errorf("normalize source %q: %w", source.ID, err)
+			return catalog.Catalog{}, fmt.Errorf("normalize source %q: %w", source.ID, err)
 		}
 		if _, exists := byURL[normalized]; exists {
 			continue
@@ -254,7 +254,7 @@ func (c Config) EnsureSources(current state.State) (state.State, error) {
 		byURL[normalized] = known
 	}
 	if err := result.Validate(); err != nil {
-		return state.State{}, fmt.Errorf("validate reconciled state: %w", err)
+		return catalog.Catalog{}, fmt.Errorf("validate reconciled state: %w", err)
 	}
 	return result, nil
 }
@@ -262,7 +262,7 @@ func (c Config) EnsureSources(current state.State) (state.State, error) {
 // LogicalFeedIDs returns the first configured logical feed ID for each durable
 // source feed. A source may have multiple logical partitions; the first one
 // owns the physical media path.
-func (c Config) LogicalFeedIDs(current state.State) (map[int64]string, error) {
+func (c Config) LogicalFeedIDs(current catalog.Catalog) (map[int64]string, error) {
 	if err := c.Validate(); err != nil {
 		return nil, fmt.Errorf("validate config: %w", err)
 	}

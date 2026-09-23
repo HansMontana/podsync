@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
 	"github.com/pressly/goose/v3"
@@ -21,8 +22,8 @@ import (
 var migrationFS embed.FS
 
 type Repository interface {
-	Load() (State, error)
-	Save(State) error
+	Load() (catalog.Catalog, error)
+	Save(catalog.Catalog) error
 	Close() error
 }
 
@@ -259,10 +260,10 @@ func sqliteURL(path string, readOnly bool) string {
 	return (&url.URL{Scheme: "file", Path: path, RawQuery: query.Encode()}).String()
 }
 
-func (r *SQLiteRepository) Load() (State, error) {
+func (r *SQLiteRepository) Load() (catalog.Catalog, error) {
 	tx, err := r.db.BeginTx(context.Background(), nil)
 	if err != nil {
-		return State{}, fmt.Errorf("begin state read transaction: %w", err)
+		return catalog.Catalog{}, fmt.Errorf("begin state read transaction: %w", err)
 	}
 	defer tx.Rollback()
 	rows, err := tx.Query(`
@@ -271,16 +272,16 @@ func (r *SQLiteRepository) Load() (State, error) {
 		ORDER BY id
 	`)
 	if err != nil {
-		return State{}, fmt.Errorf("load feeds: %w", err)
+		return catalog.Catalog{}, fmt.Errorf("load feeds: %w", err)
 	}
-	var state State
+	var state catalog.Catalog
 
 	for rows.Next() {
 		var f feed.Feed
 
 		if err := rows.Scan(&f.ID, &f.Name, &f.URL, &f.ETag, &f.LastModified); err != nil {
 			_ = rows.Close()
-			return State{}, fmt.Errorf("scan feed: %w", err)
+			return catalog.Catalog{}, fmt.Errorf("scan feed: %w", err)
 		}
 
 		state.Feeds = append(state.Feeds, f)
@@ -288,10 +289,10 @@ func (r *SQLiteRepository) Load() (State, error) {
 
 	if err := rows.Err(); err != nil {
 		_ = rows.Close()
-		return State{}, fmt.Errorf("iterate feeds: %w", err)
+		return catalog.Catalog{}, fmt.Errorf("iterate feeds: %w", err)
 	}
 	if err := rows.Close(); err != nil {
-		return State{}, fmt.Errorf("close feed rows: %w", err)
+		return catalog.Catalog{}, fmt.Errorf("close feed rows: %w", err)
 	}
 
 	rows, err = tx.Query(`
@@ -300,7 +301,7 @@ func (r *SQLiteRepository) Load() (State, error) {
 		ORDER BY feed_id, guid, audio_url, title, published_at, duration
 	`)
 	if err != nil {
-		return State{}, fmt.Errorf("load episodes: %w", err)
+		return catalog.Catalog{}, fmt.Errorf("load episodes: %w", err)
 	}
 	defer rows.Close()
 
@@ -324,36 +325,36 @@ func (r *SQLiteRepository) Load() (State, error) {
 			&author,
 		); err != nil {
 			_ = rows.Close()
-			return State{}, fmt.Errorf("scan episode: %w", err)
+			return catalog.Catalog{}, fmt.Errorf("scan episode: %w", err)
 		}
 		e.Enclosure = episode.Enclosure{URL: audioURL, Type: audioType, Length: audioLength}
 		e.Author = author
 
 		e.PublishedAt, err = time.Parse(time.RFC3339Nano, publishedAt)
 		if err != nil {
-			return State{}, fmt.Errorf("parse episode published time %q: %w", publishedAt, err)
+			return catalog.Catalog{}, fmt.Errorf("parse episode published time %q: %w", publishedAt, err)
 		}
 
 		state.Episodes = append(state.Episodes, e)
 	}
 
 	if err := rows.Err(); err != nil {
-		return State{}, fmt.Errorf("iterate episodes: %w", err)
+		return catalog.Catalog{}, fmt.Errorf("iterate episodes: %w", err)
 	}
 	if err := rows.Close(); err != nil {
-		return State{}, fmt.Errorf("close episode rows: %w", err)
+		return catalog.Catalog{}, fmt.Errorf("close episode rows: %w", err)
 	}
 
 	if err := state.Validate(); err != nil {
-		return State{}, fmt.Errorf("validate loaded state: %w", err)
+		return catalog.Catalog{}, fmt.Errorf("validate loaded state: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return State{}, fmt.Errorf("commit state read transaction: %w", err)
+		return catalog.Catalog{}, fmt.Errorf("commit state read transaction: %w", err)
 	}
 	return state, nil
 }
 
-func (r *SQLiteRepository) Save(state State) error {
+func (r *SQLiteRepository) Save(state catalog.Catalog) error {
 	if err := state.Validate(); err != nil {
 		return fmt.Errorf("validate state: %w", err)
 	}

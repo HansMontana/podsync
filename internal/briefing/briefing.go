@@ -4,10 +4,10 @@ import (
 	"fmt"
 
 	"github.com/HansMontana/podsync/internal/config"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/playback"
 	"github.com/HansMontana/podsync/internal/selection"
-	"github.com/HansMontana/podsync/internal/state"
 )
 
 type Plan struct {
@@ -16,7 +16,7 @@ type Plan struct {
 	Episodes []episode.Episode
 }
 
-func Build(cfg config.Config, current state.State, briefingID string, playbackStates map[string]playback.State) (Plan, error) {
+func Build(cfg config.Config, current catalog.Catalog, briefingID string, playbackStates map[string]playback.State) (Plan, error) {
 	var briefingConfig *config.Briefing
 	for i := range cfg.Briefings {
 		if cfg.Briefings[i].ID == briefingID {

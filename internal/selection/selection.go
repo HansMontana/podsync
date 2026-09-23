@@ -5,14 +5,14 @@ import (
 	"sort"
 
 	"github.com/HansMontana/podsync/internal/config"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/episode"
 	"github.com/HansMontana/podsync/internal/feed"
 	"github.com/HansMontana/podsync/internal/playback"
-	"github.com/HansMontana/podsync/internal/state"
 )
 
 // Feed returns episodes selected by one configured logical feed.
-func Feed(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, unplayedOnly bool) ([]episode.Episode, error) {
+func Feed(cfg config.Config, current catalog.Catalog, feedID string, playbackStates map[string]playback.State, unplayedOnly bool) ([]episode.Episode, error) {
 	for _, logical := range cfg.Feeds {
 		if logical.ID == feedID {
 			if logical.Archive {
@@ -26,7 +26,7 @@ func Feed(cfg config.Config, current state.State, feedID string, playbackStates 
 
 // FeedForSync selects the newest eligible episodes for device storage. Playlist
 // order is applied separately when playlist content is generated.
-func FeedForSync(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, unplayedOnly bool) ([]episode.Episode, error) {
+func FeedForSync(cfg config.Config, current catalog.Catalog, feedID string, playbackStates map[string]playback.State, unplayedOnly bool) ([]episode.Episode, error) {
 	for _, logical := range cfg.Feeds {
 		if logical.ID == feedID {
 			if logical.Archive {
@@ -40,7 +40,7 @@ func FeedForSync(cfg config.Config, current state.State, feedID string, playback
 
 // FeedForPlaylist returns the same storage window as FeedForSync, reordered
 // for presentation in the logical-feed playlist.
-func FeedForPlaylist(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State) ([]episode.Episode, error) {
+func FeedForPlaylist(cfg config.Config, current catalog.Catalog, feedID string, playbackStates map[string]playback.State) ([]episode.Episode, error) {
 	selected, err := FeedForSync(cfg, current, feedID, playbackStates, false)
 	if err != nil {
 		return nil, err
@@ -54,11 +54,11 @@ func FeedForPlaylist(cfg config.Config, current state.State, feedID string, play
 	return nil, fmt.Errorf("logical feed %q not found", feedID)
 }
 
-func FeedOrdered(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, unplayedOnly bool, order config.Order) ([]episode.Episode, error) {
+func FeedOrdered(cfg config.Config, current catalog.Catalog, feedID string, playbackStates map[string]playback.State, unplayedOnly bool, order config.Order) ([]episode.Episode, error) {
 	return FeedOrderedLimit(cfg, current, feedID, playbackStates, unplayedOnly, order, 0)
 }
 
-func FeedOrderedLimit(cfg config.Config, current state.State, feedID string, playbackStates map[string]playback.State, unplayedOnly bool, order config.Order, limit int) ([]episode.Episode, error) {
+func FeedOrderedLimit(cfg config.Config, current catalog.Catalog, feedID string, playbackStates map[string]playback.State, unplayedOnly bool, order config.Order, limit int) ([]episode.Episode, error) {
 	var logical *config.LogicalFeed
 	for i := range cfg.Feeds {
 		if cfg.Feeds[i].ID == feedID {

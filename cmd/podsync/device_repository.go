@@ -8,6 +8,7 @@ import (
 
 	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/device"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/feed"
 	"github.com/HansMontana/podsync/internal/state"
 	syncer "github.com/HansMontana/podsync/internal/sync"
@@ -161,7 +162,7 @@ func reconcileState(repository state.Repository, cfg config.Config) error {
 	return nil
 }
 
-func refreshRequests(current state.State, cfg config.Config) ([]syncer.RefreshRequest, error) {
+func refreshRequests(current catalog.Catalog, cfg config.Config) ([]syncer.RefreshRequest, error) {
 	byURL := make(map[string]int64, len(current.Feeds))
 	for _, known := range current.Feeds {
 		normalized, err := feed.NormalizeURL(known.URL)
