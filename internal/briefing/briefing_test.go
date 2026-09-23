@@ -6,7 +6,7 @@ import (
 
 	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/playback"
+	"github.com/HansMontana/podsync/internal/domain/playback"
 )
 
 func TestBuildOrdersBriefingSectionsAndLimitsEpisodes(t *testing.T) {

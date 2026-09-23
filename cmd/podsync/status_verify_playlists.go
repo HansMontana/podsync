@@ -116,11 +116,10 @@ func generatePlaylist(ctx context.Context, args []string, briefingMode bool) err
 		return err
 	}
 	resolver := media.Resolver(logicalIDs)
-	records, err := loadPlaybackRecords(layout)
+	_, playbackStates, err := loadPlaybackRecordsAndStates(layout, current.Episodes, resolver)
 	if err != nil {
 		return err
 	}
-	playbackStates := playback.ForEpisodesWithResolver(current.Episodes, records, resolver)
 	var content []byte
 	if briefingMode {
 		content, err = playlists.BriefingWithResolver(cfg, current, *id, playbackStates, resolver)

@@ -8,7 +8,10 @@ import (
 	"sort"
 
 	"github.com/HansMontana/podsync/internal/device"
-	"github.com/HansMontana/podsync/internal/playback"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
+	"github.com/HansMontana/podsync/internal/domain/playback"
+	"github.com/HansMontana/podsync/internal/media"
+	rockboxplayback "github.com/HansMontana/podsync/internal/playback"
 )
 
 func appendUnique(paths []string, value string) []string {
@@ -39,19 +42,19 @@ func manifestContent(paths []string) []byte {
 	return content.Bytes()
 }
 
-func loadPlaybackRecords(layout device.Layout) ([]playback.Record, error) {
+func loadPlaybackRecords(layout device.Layout) ([]rockboxplayback.Record, error) {
 	paths, err := layout.PlaybackLogPaths()
 	if err != nil {
 		return nil, err
 	}
 	sort.Strings(paths)
-	var records []playback.Record
+	var records []rockboxplayback.Record
 	for _, path := range paths {
 		file, err := os.Open(path)
 		if err != nil {
 			return nil, fmt.Errorf("open playback log %q: %w", path, err)
 		}
-		parsed, parseErr := playback.ParseLog(file)
+		parsed, parseErr := rockboxplayback.ParseLog(file)
 		closeErr := file.Close()
 		if parseErr != nil {
 			return nil, fmt.Errorf("parse playback log %q: %w", path, parseErr)
@@ -75,13 +78,21 @@ func loadPlaybackRecords(layout device.Layout) ([]playback.Record, error) {
 		return nil, fmt.Errorf("incomplete TagCache: master=%t filename-index=%t", masterExists, filenameExists)
 	}
 	if masterExists {
-		parsed, err := playback.ParseTagCache(layout.TagCacheDirectory())
+		parsed, err := rockboxplayback.ParseTagCache(layout.TagCacheDirectory())
 		if err != nil {
 			return nil, fmt.Errorf("parse TagCache: %w", err)
 		}
-		return playback.PreferRecords(parsed, playback.MergeRecords(records)), nil
+		return rockboxplayback.PreferRecords(parsed, rockboxplayback.MergeRecords(records)), nil
 	}
-	return playback.MergeRecords(records), nil
+	return rockboxplayback.MergeRecords(records), nil
+}
+
+func loadPlaybackRecordsAndStates(layout device.Layout, episodes []catalog.Episode, resolver media.Resolver) ([]rockboxplayback.Record, map[string]playback.State, error) {
+	records, err := loadPlaybackRecords(layout)
+	if err != nil {
+		return nil, nil, err
+	}
+	return records, rockboxplayback.ForEpisodesWithResolver(episodes, records, resolver), nil
 }
 
 func fileExists(path string) (bool, error) {

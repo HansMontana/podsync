@@ -7,7 +7,7 @@ import (
 
 	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/playback"
+	"github.com/HansMontana/podsync/internal/domain/playback"
 )
 
 func TestM3UProducesExtendedPlaylist(t *testing.T) {

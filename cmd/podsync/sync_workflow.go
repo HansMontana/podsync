@@ -16,7 +16,6 @@ import (
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/logging"
 	"github.com/HansMontana/podsync/internal/media"
-	"github.com/HansMontana/podsync/internal/playback"
 	"github.com/HansMontana/podsync/internal/playlists"
 	"github.com/HansMontana/podsync/internal/selection"
 	syncer "github.com/HansMontana/podsync/internal/sync"
@@ -87,11 +86,10 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		return err
 	}
 	resolver := media.Resolver(logicalIDs)
-	records, err := loadPlaybackRecords(layout)
+	_, states, err := loadPlaybackRecordsAndStates(layout, current.Episodes, resolver)
 	if err != nil {
 		return err
 	}
-	states := playback.ForEpisodesWithResolver(current.Episodes, records, resolver)
 	selected := make(map[string]catalog.Episode)
 	var playlistFiles []syncer.PlaylistFile
 	var managed []string

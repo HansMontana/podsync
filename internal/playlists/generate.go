@@ -7,8 +7,8 @@ import (
 	"github.com/HansMontana/podsync/internal/briefing"
 	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
+	"github.com/HansMontana/podsync/internal/domain/playback"
 	"github.com/HansMontana/podsync/internal/media"
-	"github.com/HansMontana/podsync/internal/playback"
 	"github.com/HansMontana/podsync/internal/selection"
 )
 

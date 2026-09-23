@@ -8,20 +8,9 @@ import (
 	"time"
 
 	"github.com/HansMontana/podsync/internal/domain/catalog"
+	domainplayback "github.com/HansMontana/podsync/internal/domain/playback"
 	"github.com/HansMontana/podsync/internal/media"
 )
-
-// State contains playback information imported from a device.
-// Unknown state is intentionally treated as unplayed.
-type State struct {
-	Known      bool
-	PlayCount  int
-	LastPlayed time.Time
-}
-
-func (s State) Played() bool {
-	return s.Known && s.PlayCount > 0
-}
 
 type Record struct {
 	Path       string
@@ -31,7 +20,7 @@ type Record struct {
 }
 
 type hashedState struct {
-	State
+	domainplayback.State
 	Directory string
 }
 
@@ -111,8 +100,8 @@ func PreferRecords(primary, fallback []Record) []Record {
 // ForEpisodesWithResolver matches device records by current logical media
 // paths. Episodes without a trusted matching record remain unknown and
 // therefore unplayed.
-func ForEpisodesWithResolver(episodes []catalog.Episode, records []Record, resolver media.Resolver) map[string]State {
-	byPath := make(map[string]State, len(records))
+func ForEpisodesWithResolver(episodes []catalog.Episode, records []Record, resolver media.Resolver) map[string]domainplayback.State {
+	byPath := make(map[string]domainplayback.State, len(records))
 	byIdentityHash := make(map[string]hashedState, len(records))
 	for _, record := range records {
 		if !record.Known {
@@ -124,20 +113,20 @@ func ForEpisodesWithResolver(episodes []catalog.Episode, records []Record, resol
 		}
 		current := byPath[key]
 		if !current.Known || record.PlayCount > current.PlayCount || record.LastPlayed.After(current.LastPlayed) {
-			byPath[key] = State{Known: true, PlayCount: record.PlayCount, LastPlayed: record.LastPlayed}
+			byPath[key] = domainplayback.State{Known: true, PlayCount: record.PlayCount, LastPlayed: record.LastPlayed}
 		}
 		if hash := identityHashFromPath(key); hash != "" {
 			current := byIdentityHash[hash]
 			if !current.Known || record.PlayCount > current.PlayCount || record.LastPlayed.After(current.LastPlayed) {
 				byIdentityHash[hash] = hashedState{
-					State:     State{Known: true, PlayCount: record.PlayCount, LastPlayed: record.LastPlayed},
+					State:     domainplayback.State{Known: true, PlayCount: record.PlayCount, LastPlayed: record.LastPlayed},
 					Directory: path.Dir(key),
 				}
 			}
 		}
 	}
 
-	result := make(map[string]State, len(episodes))
+	result := make(map[string]domainplayback.State, len(episodes))
 	for _, current := range episodes {
 		relative := normalizePath(resolver.RelativePathFor(current))
 		state, exists := byPath[relative]
@@ -149,7 +138,7 @@ func ForEpisodesWithResolver(episodes []catalog.Episode, records []Record, resol
 		if exists {
 			result[current.IdentityKey()] = state
 		} else {
-			result[current.IdentityKey()] = State{}
+			result[current.IdentityKey()] = domainplayback.State{}
 		}
 	}
 	return result
