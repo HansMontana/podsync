@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	devicefs "github.com/HansMontana/podsync/internal/adapters/devicefs"
 	"github.com/HansMontana/podsync/internal/adapters/rss"
 	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
 	applicationcatalog "github.com/HansMontana/podsync/internal/application/catalog"
-	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/domain/curation"
 )
@@ -234,11 +234,11 @@ func reconcileDevice(deviceRoot, configPath string, refresh bool) error {
 	return reconcileDeviceWithLock(deviceRoot, configPath, refresh, nil)
 }
 
-func reconcileDeviceWithLock(deviceRoot, configPath string, refresh bool, lock *device.Lock) error {
+func reconcileDeviceWithLock(deviceRoot, configPath string, refresh bool, lock *devicefs.Lock) error {
 	return reconcileDeviceWithLockContext(context.Background(), deviceRoot, configPath, refresh, lock)
 }
 
-func reconcileDeviceWithLockContext(ctx context.Context, deviceRoot, configPath string, refresh bool, lock *device.Lock) error {
+func reconcileDeviceWithLockContext(ctx context.Context, deviceRoot, configPath string, refresh bool, lock *devicefs.Lock) error {
 	logger := commandLogger("feed")
 	layout, repository, cfg, err := openDeviceWithLock(deviceRoot, configPath, false, true, lock)
 	if err != nil {

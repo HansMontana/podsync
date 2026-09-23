@@ -1,4 +1,4 @@
-package sync
+package devicefs
 
 import (
 	"bytes"
@@ -46,7 +46,7 @@ func VerifyManagedFiles(deviceRoot string, managed []string) error {
 		return fmt.Errorf("validate managed paths: %w", err)
 	}
 	for _, relative := range managed {
-		path, err := safeDevicePath(deviceRoot, relative, false)
+		path, err := SafeDevicePath(deviceRoot, relative, false)
 		if err != nil {
 			return fmt.Errorf("resolve managed path %q: %w", relative, err)
 		}
@@ -156,7 +156,7 @@ func ApplyFilePlanWithProgress(ctx context.Context, deviceRoot string, plan File
 				return fmt.Errorf("verify device before deleting %q: %w", relative, err)
 			}
 		}
-		destination, err := safeDevicePath(deviceRoot, relative, false)
+		destination, err := SafeDevicePath(deviceRoot, relative, false)
 		if err != nil {
 			return fmt.Errorf("delete %q: %w", relative, err)
 		}
@@ -189,7 +189,7 @@ func writeFile(ctx context.Context, root, relative string, content []byte, verif
 }
 
 func writeFromReader(ctx context.Context, root, relative string, reader io.Reader, verifyDevice func() error) error {
-	destination, err := safeDevicePath(root, relative, true)
+	destination, err := SafeDevicePath(root, relative, true)
 	if err != nil {
 		return fmt.Errorf("resolve destination: %w", err)
 	}
@@ -314,9 +314,9 @@ func validPlaylistPath(path string) bool {
 	return true
 }
 
-// safeDevicePath rejects symlinks in every existing path component. This is a
+// SafeDevicePath rejects symlinks in every existing path component. This is a
 // portable best-effort guard for device filesystems that normally lack links.
-func safeDevicePath(root, relative string, createParents bool) (string, error) {
+func SafeDevicePath(root, relative string, createParents bool) (string, error) {
 	if err := validateManagedPath(relative); err != nil {
 		return "", err
 	}

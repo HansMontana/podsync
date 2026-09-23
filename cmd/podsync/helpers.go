@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 
+	devicefs "github.com/HansMontana/podsync/internal/adapters/devicefs"
 	"github.com/HansMontana/podsync/internal/adapters/media"
-	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/domain/playback"
 	rockboxplayback "github.com/HansMontana/podsync/internal/playback"
@@ -42,7 +42,7 @@ func manifestContent(paths []string) []byte {
 	return content.Bytes()
 }
 
-func loadPlaybackRecords(layout device.Layout) ([]rockboxplayback.Record, error) {
+func loadPlaybackRecords(layout devicefs.Layout) ([]rockboxplayback.Record, error) {
 	paths, err := layout.PlaybackLogPaths()
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func loadPlaybackRecords(layout device.Layout) ([]rockboxplayback.Record, error)
 	return rockboxplayback.MergeRecords(records), nil
 }
 
-func loadPlaybackRecordsAndStates(layout device.Layout, episodes []catalog.Episode, resolver media.Resolver) ([]rockboxplayback.Record, map[string]playback.State, error) {
+func loadPlaybackRecordsAndStates(layout devicefs.Layout, episodes []catalog.Episode, resolver media.Resolver) ([]rockboxplayback.Record, map[string]playback.State, error) {
 	records, err := loadPlaybackRecords(layout)
 	if err != nil {
 		return nil, nil, err

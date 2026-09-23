@@ -10,10 +10,10 @@ import (
 	"sort"
 	"strings"
 
+	devicefs "github.com/HansMontana/podsync/internal/adapters/devicefs"
 	"github.com/HansMontana/podsync/internal/adapters/media"
 	"github.com/HansMontana/podsync/internal/adapters/playlists"
 	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
-	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/domain/curation"
 	"github.com/HansMontana/podsync/internal/logging"
@@ -26,7 +26,7 @@ type syncOptions struct {
 	stagingDir      string
 	dryRun          bool
 	skipVerifyMedia bool
-	lock            *device.Lock
+	lock            *devicefs.Lock
 	identity        fs.FileInfo
 }
 
@@ -52,7 +52,7 @@ func syncDevice(options syncOptions) error {
 func syncDeviceContext(ctx context.Context, options syncOptions) error {
 	identity := options.identity
 	if identity == nil {
-		resolvedRoot, captured, err := device.ResolveRootIdentity(options.deviceRoot)
+		resolvedRoot, captured, err := devicefs.ResolveRootIdentity(options.deviceRoot)
 		if err != nil {
 			return err
 		}
@@ -90,7 +90,7 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		return err
 	}
 	selected := make(map[string]catalog.Episode)
-	var playlistFiles []syncer.PlaylistFile
+	var playlistFiles []devicefs.PlaylistFile
 	var managed []string
 	feedNames := make(map[int64]string, len(current.Feeds))
 	for _, known := range current.Feeds {
@@ -108,7 +108,7 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		if generateErr != nil {
 			return generateErr
 		}
-		playlistFiles = append(playlistFiles, syncer.PlaylistFile{Relative: path.Join("Playlists", playlists.Filename(logical.Title, logical.ID)+".m3u8"), Content: content})
+		playlistFiles = append(playlistFiles, devicefs.PlaylistFile{Relative: path.Join("Playlists", playlists.Filename(logical.Title, logical.ID)+".m3u8"), Content: content})
 	}
 	for _, configured := range cfg.Briefings {
 		plan, generateErr := curation.Build(cfg, current, configured.ID, states)
@@ -122,7 +122,7 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		for i, currentEpisode := range plan.Episodes {
 			tracks[i] = playlists.Track{Episode: currentEpisode, Path: path.Join("..", resolver.RelativePathFor(currentEpisode))}
 		}
-		playlistFiles = append(playlistFiles, syncer.PlaylistFile{Relative: path.Join("Playlists", playlists.Filename(configured.Title, configured.ID)+".m3u8"), Content: playlists.M3U(tracks)})
+		playlistFiles = append(playlistFiles, devicefs.PlaylistFile{Relative: path.Join("Playlists", playlists.Filename(configured.Title, configured.ID)+".m3u8"), Content: playlists.M3U(tracks)})
 	}
 	artistOverrides := make(map[int64]string)
 	for _, logical := range cfg.Feeds {
@@ -175,14 +175,14 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 	for _, playlist := range playlistFiles {
 		newManaged = append(newManaged, playlist.Relative)
 	}
-	manifest := syncer.PlaylistFile{Relative: layout.ManifestRelativePath(), Content: manifestContent(newManaged)}
+	manifest := devicefs.PlaylistFile{Relative: layout.ManifestRelativePath(), Content: manifestContent(newManaged)}
 	playlistFiles = append(playlistFiles, manifest)
 	if dryRun {
-		copies := make([]syncer.FileCopy, 0, len(episodes))
+		copies := make([]devicefs.FileCopy, 0, len(episodes))
 		for _, currentEpisode := range episodes {
-			copies = append(copies, syncer.FileCopy{Relative: resolver.RelativePathFor(currentEpisode)})
+			copies = append(copies, devicefs.FileCopy{Relative: resolver.RelativePathFor(currentEpisode)})
 		}
-		plan, err := syncer.BuildFilePlan(managed, copies, playlistFiles, nil)
+		plan, err := devicefs.BuildFilePlan(managed, copies, playlistFiles, nil)
 		if err != nil {
 			return err
 		}
@@ -190,12 +190,12 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		return nil
 	}
 	if err := syncer.EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, httpClient, stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, syncer.EpisodeSyncOptions{VerifyMedia: verifyMedia, VerifyDevice: func() error {
-		return device.VerifyRootIdentity(layout.Root, identity)
+		return devicefs.VerifyRootIdentity(layout.Root, identity)
 	}}, func(completed, total int, current catalog.Episode, reused bool) {
 		if logProgress(completed, total) {
 			logger.Info(fmt.Sprintf("Prepared episodes: %d/%d", completed, total))
 		}
-	}, func(progress syncer.FileProgress) {
+	}, func(progress devicefs.FileProgress) {
 		switch progress.Phase {
 		case "copy":
 			if logProgress(progress.Completed, progress.Total) {
@@ -215,7 +215,7 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 	}); err != nil {
 		return err
 	}
-	if err := device.VerifyRootIdentity(layout.Root, identity); err != nil {
+	if err := devicefs.VerifyRootIdentity(layout.Root, identity); err != nil {
 		return fmt.Errorf("before persisting sync state: %w", err)
 	}
 	if configProvided {

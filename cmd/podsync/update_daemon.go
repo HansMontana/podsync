@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/HansMontana/podsync/internal/device"
+	devicefs "github.com/HansMontana/podsync/internal/adapters/devicefs"
 	"github.com/HansMontana/podsync/internal/logging"
 )
 
@@ -40,7 +40,7 @@ type updateOptions struct {
 	configPath      string
 	stagingDir      string
 	skipVerifyMedia bool
-	lock            *device.Lock
+	lock            *devicefs.Lock
 	identity        fs.FileInfo
 }
 
@@ -48,12 +48,12 @@ func runUpdate(ctx context.Context, options updateOptions) error {
 	logger := logging.New(os.Stderr).WithComponent("update")
 	started := time.Now()
 	logger.Info("Starting update")
-	resolvedRoot, identity, err := device.ResolveRootIdentity(options.deviceRoot)
+	resolvedRoot, identity, err := devicefs.ResolveRootIdentity(options.deviceRoot)
 	if err != nil {
 		return err
 	}
 	if options.identity != nil {
-		if err := device.VerifyRootIdentity(resolvedRoot, options.identity); err != nil {
+		if err := devicefs.VerifyRootIdentity(resolvedRoot, options.identity); err != nil {
 			return fmt.Errorf("verify detected device: %w", err)
 		}
 		identity = options.identity
@@ -63,7 +63,7 @@ func runUpdate(ctx context.Context, options updateOptions) error {
 	}
 	lock := options.lock
 	if lock == nil {
-		lock, err = device.AcquireLock(resolvedRoot)
+		lock, err = devicefs.AcquireLock(resolvedRoot)
 	}
 	if err != nil {
 		return err
@@ -78,7 +78,7 @@ func runUpdate(ctx context.Context, options updateOptions) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := device.VerifyRootIdentity(resolvedRoot, identity); err != nil {
+	if err := devicefs.VerifyRootIdentity(resolvedRoot, identity); err != nil {
 		return fmt.Errorf("before update sync: %w", err)
 	}
 	if err := syncDeviceContext(ctx, syncOptions{deviceRoot: resolvedRoot, configPath: options.configPath, stagingDir: options.stagingDir, skipVerifyMedia: options.skipVerifyMedia, lock: lock, identity: identity}); err != nil {
@@ -88,7 +88,7 @@ func runUpdate(ctx context.Context, options updateOptions) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := device.VerifyRootIdentity(resolvedRoot, identity); err != nil {
+	if err := devicefs.VerifyRootIdentity(resolvedRoot, identity); err != nil {
 		return fmt.Errorf("before update verification: %w", err)
 	}
 	verified, err := verifyDevice(resolvedRoot)
@@ -209,18 +209,18 @@ func detectDaemonDevice(explicitRoot string) (daemonDevice, bool, error) {
 	root := explicitRoot
 	if root == "" {
 		var err error
-		root, err = device.ResolveRoot("")
+		root, err = devicefs.ResolveRoot("")
 		if err != nil {
-			if errors.Is(err, device.ErrNoDevice) {
+			if errors.Is(err, devicefs.ErrNoDevice) {
 				return daemonDevice{}, false, nil
 			}
 			return daemonDevice{}, false, err
 		}
 	}
-	if !device.LooksLikeDeviceRoot(root) {
+	if !devicefs.LooksLikeDeviceRoot(root) {
 		return daemonDevice{}, false, nil
 	}
-	resolvedRoot, identity, err := device.ResolveRootIdentity(root)
+	resolvedRoot, identity, err := devicefs.ResolveRootIdentity(root)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return daemonDevice{}, false, nil

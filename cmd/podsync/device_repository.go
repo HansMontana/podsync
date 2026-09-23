@@ -6,17 +6,17 @@ import (
 	"path/filepath"
 	"strings"
 
+	devicefs "github.com/HansMontana/podsync/internal/adapters/devicefs"
 	"github.com/HansMontana/podsync/internal/adapters/sqlitecatalog"
 	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
 	applicationcatalog "github.com/HansMontana/podsync/internal/application/catalog"
-	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/domain/curation"
 )
 
 type lockedRepository struct {
 	applicationcatalog.Repository
-	lock  *device.Lock
+	lock  *devicefs.Lock
 	owned bool
 }
 
@@ -32,11 +32,11 @@ func (r *lockedRepository) Close() error {
 	return lockErr
 }
 
-func openDevice(root, configPath string, readOnly, persistConfig bool) (device.Layout, applicationcatalog.Repository, curation.Config, error) {
+func openDevice(root, configPath string, readOnly, persistConfig bool) (devicefs.Layout, applicationcatalog.Repository, curation.Config, error) {
 	return openDeviceWithLock(root, configPath, readOnly, persistConfig, nil)
 }
 
-func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, lock *device.Lock) (device.Layout, applicationcatalog.Repository, curation.Config, error) {
+func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, lock *devicefs.Lock) (devicefs.Layout, applicationcatalog.Repository, curation.Config, error) {
 	layout, repository, err := openRepositoryModeWithLock(root, readOnly, lock)
 	if err != nil {
 		return layout, nil, curation.Config{}, err
@@ -45,7 +45,7 @@ func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, l
 		configPath = layout.ConfigPath()
 	}
 	if configPath == layout.ConfigPath() {
-		if err := device.RejectSymlink(configPath); err != nil {
+		if err := devicefs.RejectSymlink(configPath); err != nil {
 			_ = repository.Close()
 			return layout, nil, curation.Config{}, err
 		}
@@ -83,23 +83,23 @@ func validateStagingDirectory(deviceRoot, stagingDir string) error {
 	return nil
 }
 
-func openRepositoryMode(root string, readOnly bool) (device.Layout, applicationcatalog.Repository, error) {
+func openRepositoryMode(root string, readOnly bool) (devicefs.Layout, applicationcatalog.Repository, error) {
 	return openRepositoryModeWithLock(root, readOnly, nil)
 }
 
-func openRepositoryModeWithLock(root string, readOnly bool, heldLock *device.Lock) (device.Layout, applicationcatalog.Repository, error) {
+func openRepositoryModeWithLock(root string, readOnly bool, heldLock *devicefs.Lock) (devicefs.Layout, applicationcatalog.Repository, error) {
 	if root == "" {
 		var err error
-		root, err = device.ResolveRoot("")
+		root, err = devicefs.ResolveRoot("")
 		if err != nil {
-			return device.Layout{}, nil, err
+			return devicefs.Layout{}, nil, err
 		}
 	}
 	root, err := filepath.Abs(root)
 	if err != nil {
-		return device.Layout{}, nil, fmt.Errorf("resolve device root: %w", err)
+		return devicefs.Layout{}, nil, fmt.Errorf("resolve device root: %w", err)
 	}
-	layout := device.Layout{Root: root}
+	layout := devicefs.Layout{Root: root}
 	info, err := os.Lstat(root)
 	if err != nil {
 		return layout, nil, fmt.Errorf("inspect device root: %w", err)
@@ -112,7 +112,7 @@ func openRepositoryModeWithLock(root string, readOnly bool, heldLock *device.Loc
 	} else if stateErr != nil && !os.IsNotExist(stateErr) {
 		return layout, nil, fmt.Errorf("inspect device state directory: %w", stateErr)
 	}
-	if err := device.RejectSymlink(layout.DatabasePath()); err != nil {
+	if err := devicefs.RejectSymlink(layout.DatabasePath()); err != nil {
 		return layout, nil, err
 	}
 	if !readOnly {
@@ -120,9 +120,9 @@ func openRepositoryModeWithLock(root string, readOnly bool, heldLock *device.Loc
 			return layout, nil, fmt.Errorf("create device state directory: %w", err)
 		}
 	}
-	var lock *device.Lock
+	var lock *devicefs.Lock
 	if !readOnly && heldLock == nil {
-		lock, err = device.AcquireLock(root)
+		lock, err = devicefs.AcquireLock(root)
 		if err != nil {
 			return layout, nil, err
 		}

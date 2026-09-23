@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"path"
 
+	devicefs "github.com/HansMontana/podsync/internal/adapters/devicefs"
 	"github.com/HansMontana/podsync/internal/adapters/media"
 	"github.com/HansMontana/podsync/internal/adapters/playlists"
 	"github.com/HansMontana/podsync/internal/playback"
-	syncer "github.com/HansMontana/podsync/internal/sync"
 )
 
 func status(args []string) error {
@@ -76,7 +76,7 @@ func verifyDevice(deviceRoot string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if err := syncer.VerifyManagedFiles(layout.Root, managed); err != nil {
+	if err := devicefs.VerifyManagedFiles(layout.Root, managed); err != nil {
 		return 0, err
 	}
 	return len(managed), nil
@@ -159,8 +159,8 @@ func generatePlaylist(ctx context.Context, args []string, briefingMode bool) err
 		return fmt.Errorf("save pending playlist ownership: %w", err)
 	}
 	managed = appendUnique(managed, relative)
-	manifest := syncer.PlaylistFile{Relative: layout.ManifestRelativePath(), Content: manifestContent(managed)}
-	if err := syncer.ApplyFilePlan(ctx, layout.Root, syncer.FilePlan{Playlists: []syncer.PlaylistFile{{Relative: relative, Content: content}, manifest}}); err != nil {
+	manifest := devicefs.PlaylistFile{Relative: layout.ManifestRelativePath(), Content: manifestContent(managed)}
+	if err := devicefs.ApplyFilePlan(ctx, layout.Root, devicefs.FilePlan{Playlists: []devicefs.PlaylistFile{{Relative: relative, Content: content}, manifest}}); err != nil {
 		return err
 	}
 	pending = removePath(pending, relative)

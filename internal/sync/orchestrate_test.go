@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/HansMontana/podsync/internal/adapters/devicefs"
 	"github.com/HansMontana/podsync/internal/adapters/media"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
@@ -85,8 +86,8 @@ func TestEpisodesSkipsUnsupportedMediaAndRemovesItFromPlaylists(t *testing.T) {
 	audio := catalog.Episode{FeedID: 1, GUID: "audio", Title: "Audio", Enclosure: catalog.Enclosure{URL: server.URL + "/audio", Type: "audio/mpeg"}}
 	videoPath := resolver.RelativePathFor(video)
 	audioPath := resolver.RelativePathFor(audio)
-	playlist := PlaylistFile{Relative: "Playlists/test.m3u8", Content: []byte("#EXTM3U\n#EXTINF:0,Video\n../" + videoPath + "\n#EXTINF:0,Audio\n../" + audioPath + "\n")}
-	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{video, audio}, []PlaylistFile{playlist}, nil); err != nil {
+	playlist := devicefs.PlaylistFile{Relative: "Playlists/test.m3u8", Content: []byte("#EXTM3U\n#EXTINF:0,Video\n../" + videoPath + "\n#EXTINF:0,Audio\n../" + audioPath + "\n")}
+	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{video, audio}, []devicefs.PlaylistFile{playlist}, nil); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
 	content, err := os.ReadFile(filepath.Join(root, "Playlists/test.m3u8"))

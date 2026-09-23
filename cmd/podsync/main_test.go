@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
+	devicefs "github.com/HansMontana/podsync/internal/adapters/devicefs"
 	"github.com/HansMontana/podsync/internal/adapters/sqlitecatalog"
 	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
-	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/curation"
 )
 
@@ -325,7 +325,7 @@ func TestStandalonePlaylistDoesNotPromoteUnrelatedPendingOwnership(t *testing.T)
 	if err := run([]string{"reconcile", "-device-root", root, "-config", hostConfig}); err != nil {
 		t.Fatalf("reconcile command failed: %v", err)
 	}
-	layout := device.Layout{Root: root}
+	layout := devicefs.Layout{Root: root}
 	if err := layout.SavePendingManagedPaths([]string{"Podcasts/old/episode.mp3"}); err != nil {
 		t.Fatal(err)
 	}
@@ -440,7 +440,7 @@ func TestLoadPlaybackRecordsAllowsMissingTagCache(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, ".rockbox"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	records, err := loadPlaybackRecords(device.Layout{Root: root})
+	records, err := loadPlaybackRecords(devicefs.Layout{Root: root})
 	if err != nil {
 		t.Fatalf("loadPlaybackRecords() returned error: %v", err)
 	}
