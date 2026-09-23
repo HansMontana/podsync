@@ -1,4 +1,4 @@
-package state
+package sqlitecatalog
 
 import (
 	"context"
@@ -18,12 +18,6 @@ import (
 
 //go:embed migrations/*.sql
 var migrationFS embed.FS
-
-type Repository interface {
-	Load() (catalog.Catalog, error)
-	Save(catalog.Catalog) error
-	Close() error
-}
 
 type SQLiteRepository struct {
 	db *sql.DB

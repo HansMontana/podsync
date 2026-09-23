@@ -6,9 +6,9 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/HansMontana/podsync/internal/adapters/sqlitecatalog"
 	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
 	"github.com/HansMontana/podsync/internal/domain/curation"
-	"github.com/HansMontana/podsync/internal/state"
 )
 
 func TestRealFeedCLIWorkflow(t *testing.T) {
@@ -38,7 +38,7 @@ func TestRealFeedCLIWorkflow(t *testing.T) {
 		t.Fatalf("refresh command failed: %v", err)
 	}
 
-	repository, err := state.NewReadOnlySQLiteRepository(filepath.Join(root, "Podsync", "podsync.db"))
+	repository, err := sqlitecatalog.NewReadOnlySQLiteRepository(filepath.Join(root, "Podsync", "podsync.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

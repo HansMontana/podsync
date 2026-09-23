@@ -8,14 +8,14 @@ import (
 	"sync"
 
 	"github.com/HansMontana/podsync/internal/adapters/rss"
+	applicationcatalog "github.com/HansMontana/podsync/internal/application/catalog"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/state"
 )
 
 // RefreshFeed fetches and persists the current episodes for one feed.
 func RefreshFeed(
 	ctx context.Context,
-	repository state.Repository,
+	repository applicationcatalog.Repository,
 	client *http.Client,
 	feedID int64,
 ) error {
@@ -26,7 +26,7 @@ func RefreshFeed(
 // feed when the source RSS only exposes a recent window.
 func RefreshFeedWithArchive(
 	ctx context.Context,
-	repository state.Repository,
+	repository applicationcatalog.Repository,
 	client *http.Client,
 	feedID int64,
 	archive bool,
@@ -82,7 +82,7 @@ type RefreshResult struct {
 }
 
 // RefreshFeeds fetches and persists multiple feeds with one state load and save.
-func RefreshFeeds(ctx context.Context, repository state.Repository, client *http.Client, requests []RefreshRequest) error {
+func RefreshFeeds(ctx context.Context, repository applicationcatalog.Repository, client *http.Client, requests []RefreshRequest) error {
 	current, err := repository.Load()
 	if err != nil {
 		return fmt.Errorf("load state for feed refresh: %w", err)

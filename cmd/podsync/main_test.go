@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/HansMontana/podsync/internal/adapters/sqlitecatalog"
 	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/curation"
-	"github.com/HansMontana/podsync/internal/state"
 )
 
 func TestDaemonRunsOncePerDeviceSession(t *testing.T) {
@@ -390,7 +390,7 @@ func TestSyncFailureDoesNotPersistSuppliedConfiguration(t *testing.T) {
 	if !bytes.Equal(before, after) {
 		t.Fatal("failed sync persisted the supplied configuration")
 	}
-	repository, err := state.NewReadOnlySQLiteRepository(filepath.Join(root, "Podsync", "podsync.db"))
+	repository, err := sqlitecatalog.NewReadOnlySQLiteRepository(filepath.Join(root, "Podsync", "podsync.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/HansMontana/podsync/internal/adapters/sqlitecatalog"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/state"
 )
 
 func TestRefreshFeedReplacesOnlyTargetFeedAndPersistsMetadata(t *testing.T) {
@@ -21,7 +21,7 @@ func TestRefreshFeedReplacesOnlyTargetFeedAndPersistsMetadata(t *testing.T) {
 	}))
 	defer server.Close()
 
-	repository, err := state.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
+	repository, err := sqlitecatalog.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteRepository() returned error: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestRefreshFeedWithArchiveRetainsEpisodesOutsideRSSWindow(t *testing.T) {
 		_, _ = w.Write([]byte(`<rss><channel><title>Archive</title><item><guid>new</guid><title>New</title><enclosure url="https://example.com/new.mp3" type="audio/mpeg"/></item></channel></rss>`))
 	}))
 	defer server.Close()
-	repository, err := state.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
+	repository, err := sqlitecatalog.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestRefreshFeed304LeavesStateUnchanged(t *testing.T) {
 	}))
 	defer server.Close()
 
-	repository, err := state.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
+	repository, err := sqlitecatalog.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteRepository() returned error: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestRefreshFeedMalformedRSSLeavesStateUnchanged(t *testing.T) {
 	}))
 	defer server.Close()
 
-	repository, err := state.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
+	repository, err := sqlitecatalog.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {
 		t.Fatalf("NewSQLiteRepository() returned error: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestRefreshFeedsPersistsMultipleFeedsOnce(t *testing.T) {
 	}))
 	defer servers.Close()
 
-	repository, err := state.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
+	repository, err := sqlitecatalog.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestRefreshFeedsCancellationDoesNotPersistPartialResults(t *testing.T) {
 		_, _ = fmt.Fprint(w, `<rss><channel><title>Updated</title><item><guid>new</guid><title>Episode</title><enclosure url="https://example.com/new.mp3" type="audio/mpeg"/></item></channel></rss>`)
 	}))
 	defer server.Close()
-	repository, err := state.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
+	repository, err := sqlitecatalog.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,7 +241,7 @@ func TestRefreshFeedsReturnsParentCancellation(t *testing.T) {
 		t.Fatal("canceled refresh made an HTTP request")
 	}))
 	defer server.Close()
-	repository, err := state.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
+	repository, err := sqlitecatalog.NewSQLiteRepository(filepath.Join(t.TempDir(), "state.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

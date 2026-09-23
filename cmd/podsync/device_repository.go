@@ -6,16 +6,17 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/HansMontana/podsync/internal/adapters/sqlitecatalog"
 	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
+	applicationcatalog "github.com/HansMontana/podsync/internal/application/catalog"
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/domain/curation"
-	"github.com/HansMontana/podsync/internal/state"
 	syncer "github.com/HansMontana/podsync/internal/sync"
 )
 
 type lockedRepository struct {
-	state.Repository
+	applicationcatalog.Repository
 	lock  *device.Lock
 	owned bool
 }
@@ -32,11 +33,11 @@ func (r *lockedRepository) Close() error {
 	return lockErr
 }
 
-func openDevice(root, configPath string, readOnly, persistConfig bool) (device.Layout, state.Repository, curation.Config, error) {
+func openDevice(root, configPath string, readOnly, persistConfig bool) (device.Layout, applicationcatalog.Repository, curation.Config, error) {
 	return openDeviceWithLock(root, configPath, readOnly, persistConfig, nil)
 }
 
-func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, lock *device.Lock) (device.Layout, state.Repository, curation.Config, error) {
+func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, lock *device.Lock) (device.Layout, applicationcatalog.Repository, curation.Config, error) {
 	layout, repository, err := openRepositoryModeWithLock(root, readOnly, lock)
 	if err != nil {
 		return layout, nil, curation.Config{}, err
@@ -83,11 +84,11 @@ func validateStagingDirectory(deviceRoot, stagingDir string) error {
 	return nil
 }
 
-func openRepositoryMode(root string, readOnly bool) (device.Layout, state.Repository, error) {
+func openRepositoryMode(root string, readOnly bool) (device.Layout, applicationcatalog.Repository, error) {
 	return openRepositoryModeWithLock(root, readOnly, nil)
 }
 
-func openRepositoryModeWithLock(root string, readOnly bool, heldLock *device.Lock) (device.Layout, state.Repository, error) {
+func openRepositoryModeWithLock(root string, readOnly bool, heldLock *device.Lock) (device.Layout, applicationcatalog.Repository, error) {
 	if root == "" {
 		var err error
 		root, err = device.ResolveRoot("")
@@ -127,11 +128,11 @@ func openRepositoryModeWithLock(root string, readOnly bool, heldLock *device.Loc
 			return layout, nil, err
 		}
 	}
-	var repository state.Repository
+	var repository applicationcatalog.Repository
 	if readOnly {
-		repository, err = state.NewReadOnlySQLiteRepository(layout.DatabasePath())
+		repository, err = sqlitecatalog.NewReadOnlySQLiteRepository(layout.DatabasePath())
 	} else {
-		repository, err = state.NewSQLiteRepository(layout.DatabasePath())
+		repository, err = sqlitecatalog.NewSQLiteRepository(layout.DatabasePath())
 	}
 	if err != nil {
 		if lock != nil {
@@ -147,7 +148,7 @@ func openRepositoryModeWithLock(root string, readOnly bool, heldLock *device.Loc
 	return layout, repository, nil
 }
 
-func reconcileState(repository state.Repository, cfg curation.Config) error {
+func reconcileState(repository applicationcatalog.Repository, cfg curation.Config) error {
 	current, err := repository.Load()
 	if err != nil {
 		return err
