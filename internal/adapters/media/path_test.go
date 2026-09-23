@@ -41,6 +41,13 @@ func TestRelativePathForUsesAudioExtension(t *testing.T) {
 	}
 }
 
+func TestRelativePathForUsesFallbackForUnsafeURLExtension(t *testing.T) {
+	path := (Resolver{1: "podcast"}).RelativePathFor(catalog.Episode{FeedID: 1, GUID: "episode", Enclosure: catalog.Enclosure{URL: "https://example.com/file.mp3:bad"}})
+	if !strings.HasSuffix(path, ".audio") {
+		t.Fatalf("got path %q", path)
+	}
+}
+
 func TestRelativePathForUsesLogicalIDTitleDateAndHash(t *testing.T) {
 	episodeValue := catalog.Episode{
 		FeedID:      7,

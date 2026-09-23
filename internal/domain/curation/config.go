@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
@@ -79,6 +80,7 @@ func (c Config) Validate() error {
 	}
 
 	logicalFeeds := make(map[string]struct{}, len(c.Feeds))
+	playlistNames := make(map[string]string, len(c.Feeds)+len(c.Briefings))
 	for _, logical := range c.Feeds {
 		if !validID(logical.ID) {
 			return fmt.Errorf("logical feed ID %q is invalid", logical.ID)
@@ -94,6 +96,9 @@ func (c Config) Validate() error {
 		}
 		if logical.Limit < 0 {
 			return fmt.Errorf("logical feed %q limit cannot be negative", logical.ID)
+		}
+		if err := registerPlaylistName(playlistNames, logical.ID, logical.Title); err != nil {
+			return fmt.Errorf("logical feed %q: %w", logical.ID, err)
 		}
 		logicalFeeds[logical.ID] = struct{}{}
 	}
@@ -123,9 +128,43 @@ func (c Config) Validate() error {
 		if _, exists := logicalFeeds[briefing.ID]; exists {
 			return fmt.Errorf("briefing ID %q conflicts with logical feed ID", briefing.ID)
 		}
+		if err := registerPlaylistName(playlistNames, briefing.ID, briefing.Title); err != nil {
+			return fmt.Errorf("briefing %q: %w", briefing.ID, err)
+		}
 		briefings[briefing.ID] = struct{}{}
 	}
 
+	return nil
+}
+
+func PlaylistFilename(title, fallback string) string {
+	if strings.TrimSpace(title) == "" {
+		title = fallback
+	}
+
+	var result strings.Builder
+	for _, character := range strings.TrimSpace(title) {
+		if unicode.IsLetter(character) || unicode.IsNumber(character) || character == ' ' || strings.ContainsRune("._-'()&", character) {
+			result.WriteRune(character)
+			continue
+		}
+		result.WriteByte(' ')
+	}
+
+	name := strings.Trim(strings.Join(strings.Fields(result.String()), " "), " .-_'")
+	if name == "" {
+		return fallback
+	}
+	return name
+}
+
+func registerPlaylistName(names map[string]string, id, title string) error {
+	filename := PlaylistFilename(title, id)
+	key := strings.ToLower(filename)
+	if previous, exists := names[key]; exists {
+		return fmt.Errorf("playlist filename %q conflicts with %q", filename, previous)
+	}
+	names[key] = id
 	return nil
 }
 

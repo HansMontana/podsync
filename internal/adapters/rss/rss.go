@@ -3,6 +3,7 @@ package rss
 import (
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -80,7 +81,16 @@ func ParseRSS(r io.Reader, f catalog.Feed) (catalog.Feed, []catalog.Episode, err
 		})
 	}
 
-	return f, episodes, nil
+	unique := make([]catalog.Episode, 0, len(episodes))
+	seen := make(map[string]struct{}, len(episodes))
+	for _, episode := range episodes {
+		if _, exists := seen[episode.IdentityKey()]; exists {
+			continue
+		}
+		seen[episode.IdentityKey()] = struct{}{}
+		unique = append(unique, episode)
+	}
+	return f, unique, nil
 }
 
 func authorName(primary *gofeed.Person, authors []*gofeed.Person) string {
@@ -154,10 +164,18 @@ func parseDurationString(raw string) (time.Duration, error) {
 	case 1:
 		seconds = values[0]
 	case 2:
+		if values[0] > (math.MaxInt64-values[1])/60 {
+			return 0, fmt.Errorf("duration %q is too large", raw)
+		}
 		seconds = values[0]*60 + values[1]
 	case 3:
+		if values[0] > (math.MaxInt64-values[2])/3600 || values[1] > (math.MaxInt64-values[0]*3600-values[2])/60 {
+			return 0, fmt.Errorf("duration %q is too large", raw)
+		}
 		seconds = values[0]*3600 + values[1]*60 + values[2]
 	}
-
+	if seconds > math.MaxInt64/int64(time.Second) {
+		return 0, fmt.Errorf("duration %q is too large", raw)
+	}
 	return time.Duration(seconds) * time.Second, nil
 }

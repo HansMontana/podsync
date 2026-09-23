@@ -21,6 +21,13 @@ func TestM3UProducesExtendedPlaylist(t *testing.T) {
 	}
 }
 
+func TestM3USanitizesControlCharactersInTitles(t *testing.T) {
+	got := string(M3U([]Track{{Episode: catalog.Episode{Title: "A\rB\nC\x00D"}, Path: "episode.mp3"}}))
+	if strings.ContainsAny(got, "\r\x00") || !strings.Contains(got, "A B C D") {
+		t.Fatalf("M3U() = %q", got)
+	}
+}
+
 func TestFilenameUsesReadableSafeTitle(t *testing.T) {
 	if got := Filename("Süddeutsche Zeitung: Auf den Punkt", "sz"); got != "Süddeutsche Zeitung Auf den Punkt" {
 		t.Fatalf("Filename() = %q", got)

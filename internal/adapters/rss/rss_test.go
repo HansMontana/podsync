@@ -83,6 +83,23 @@ func TestParseRSSSupportsDurationFormats(t *testing.T) {
 	}
 }
 
+func TestParseRSSRejectsDurationOverflow(t *testing.T) {
+	if _, err := parseDurationString("9223372036854775807"); err == nil {
+		t.Fatal("parseDurationString() accepted an overflowing duration")
+	}
+}
+
+func TestParseRSSDeduplicatesEpisodeIdentities(t *testing.T) {
+	input := `<rss><channel><title>Example</title><item><title>First</title><guid>same</guid><enclosure url="https://example.com/first.mp3" type="audio/mpeg"/></item><item><title>Duplicate</title><guid>same</guid><enclosure url="https://example.com/second.mp3" type="audio/mpeg"/></item></channel></rss>`
+	_, episodes, err := ParseRSS(strings.NewReader(input), catalog.Feed{ID: 1, URL: "https://example.com/feed.xml"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(episodes) != 1 || episodes[0].Title != "First" {
+		t.Fatalf("got episodes %+v", episodes)
+	}
+}
+
 func TestParseRSSRejectsAtomFeed(t *testing.T) {
 	input := `<feed xmlns="http://www.w3.org/2005/Atom"><title>Example</title></feed>`
 

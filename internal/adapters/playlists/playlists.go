@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
@@ -21,10 +22,19 @@ func M3U(tracks []Track) []byte {
 		builder.WriteString("#EXTINF:")
 		builder.WriteString(strconv.FormatInt(int64(track.Episode.Duration/time.Second), 10))
 		builder.WriteString(",")
-		builder.WriteString(strings.ReplaceAll(track.Episode.Title, "\n", " "))
+		builder.WriteString(sanitizePlaylistTitle(track.Episode.Title))
 		builder.WriteString("\n")
 		builder.WriteString(track.Path)
 		builder.WriteString("\n")
 	}
 	return []byte(builder.String())
+}
+
+func sanitizePlaylistTitle(value string) string {
+	return strings.Map(func(character rune) rune {
+		if character == '\r' || character == '\n' || unicode.IsControl(character) {
+			return ' '
+		}
+		return character
+	}, value)
 }

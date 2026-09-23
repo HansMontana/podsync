@@ -73,9 +73,21 @@ func extension(e catalog.Episode) string {
 
 	parsed, err := url.Parse(e.Enclosure.URL)
 	if err == nil {
-		if ext := path.Ext(parsed.Path); ext != "" && len(ext) <= 8 {
+		if ext := path.Ext(parsed.Path); validExtension(ext) {
 			return strings.ToLower(ext)
 		}
 	}
 	return ".audio"
+}
+
+func validExtension(value string) bool {
+	if len(value) < 2 || len(value) > 8 || value[0] != '.' {
+		return false
+	}
+	for _, character := range value[1:] {
+		if (character < 'a' || character > 'z') && (character < 'A' || character > 'Z') && (character < '0' || character > '9') {
+			return false
+		}
+	}
+	return true
 }
