@@ -1,36 +1,36 @@
-package sync
+package catalog
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"net/http"
 	"sync"
 
-	"github.com/HansMontana/podsync/internal/adapters/rss"
-	applicationcatalog "github.com/HansMontana/podsync/internal/application/catalog"
-	"github.com/HansMontana/podsync/internal/domain/catalog"
+	domaincatalog "github.com/HansMontana/podsync/internal/domain/catalog"
 )
 
+// FeedReader fetches and parses a catalog feed without exposing its transport
+// or feed format to the application layer.
+type FeedReader interface {
+	Fetch(context.Context, domaincatalog.Feed) (FetchResult, error)
+	Parse(FetchResult, domaincatalog.Feed) (domaincatalog.Feed, []domaincatalog.Episode, error)
+}
+
+// FetchResult contains a fetched feed and its cache metadata.
+type FetchResult struct {
+	Body         []byte
+	ETag         string
+	LastModified string
+	NotModified  bool
+}
+
 // RefreshFeed fetches and persists the current episodes for one feed.
-func RefreshFeed(
-	ctx context.Context,
-	repository applicationcatalog.Repository,
-	client *http.Client,
-	feedID int64,
-) error {
-	return RefreshFeedWithArchive(ctx, repository, client, feedID, false)
+func RefreshFeed(ctx context.Context, repository Repository, reader FeedReader, feedID int64) error {
+	return RefreshFeedWithArchive(ctx, repository, reader, feedID, false)
 }
 
 // RefreshFeedWithArchive retains known historical episodes for an archive
-// feed when the source RSS only exposes a recent window.
-func RefreshFeedWithArchive(
-	ctx context.Context,
-	repository applicationcatalog.Repository,
-	client *http.Client,
-	feedID int64,
-	archive bool,
-) error {
+// feed when the source only exposes a recent window.
+func RefreshFeedWithArchive(ctx context.Context, repository Repository, reader FeedReader, feedID int64, archive bool) error {
 	current, err := repository.Load()
 	if err != nil {
 		return fmt.Errorf("load state for feed refresh: %w", err)
@@ -47,7 +47,7 @@ func RefreshFeedWithArchive(
 		return fmt.Errorf("refresh feed %d: feed not found", feedID)
 	}
 
-	result, err := rss.FetchRSS(ctx, client, current.Feeds[feedIndex])
+	result, err := reader.Fetch(ctx, current.Feeds[feedIndex])
 	if err != nil {
 		return err
 	}
@@ -55,16 +55,13 @@ func RefreshFeedWithArchive(
 		return nil
 	}
 
-	refreshedFeed, episodes, err := rss.ParseRSS(
-		bytes.NewReader(result.Body),
-		current.Feeds[feedIndex],
-	)
+	refreshedFeed, episodes, err := reader.Parse(result, current.Feeds[feedIndex])
 	if err != nil {
 		return fmt.Errorf("refresh feed %d: %w", feedID, err)
 	}
 	refreshedFeed.ETag = result.ETag
 	refreshedFeed.LastModified = result.LastModified
-	updated, err := catalog.ApplyRefresh(current, catalog.RefreshResult{Feed: refreshedFeed, Episodes: episodes, Archive: archive})
+	updated, err := domaincatalog.ApplyRefresh(current, domaincatalog.RefreshResult{Feed: refreshedFeed, Episodes: episodes, Archive: archive})
 	if err != nil {
 		return err
 	}
@@ -75,17 +72,17 @@ func RefreshFeedWithArchive(
 }
 
 // RefreshFeeds fetches and persists multiple feeds with one state load and save.
-func RefreshFeeds(ctx context.Context, repository applicationcatalog.Repository, client *http.Client, requests []RefreshRequest) error {
+func RefreshFeeds(ctx context.Context, repository Repository, reader FeedReader, requests []RefreshRequest) error {
 	current, err := repository.Load()
 	if err != nil {
 		return fmt.Errorf("load state for feed refresh: %w", err)
 	}
-	results, err := fetchRefreshResults(ctx, client, current, requests)
+	results, err := fetchRefreshResults(ctx, reader, current, requests)
 	if err != nil {
 		return err
 	}
 	for _, result := range results {
-		current, err = catalog.ApplyRefresh(current, result)
+		current, err = domaincatalog.ApplyRefresh(current, result)
 		if err != nil {
 			return err
 		}
@@ -100,14 +97,14 @@ func RefreshFeeds(ctx context.Context, repository applicationcatalog.Repository,
 
 const refreshWorkers = 10
 
-func fetchRefreshResults(ctx context.Context, client *http.Client, current catalog.Catalog, requests []RefreshRequest) ([]catalog.RefreshResult, error) {
+func fetchRefreshResults(ctx context.Context, reader FeedReader, current domaincatalog.Catalog, requests []RefreshRequest) ([]domaincatalog.RefreshResult, error) {
 	if len(requests) == 0 {
 		return nil, nil
 	}
 	parentCtx := ctx
 	workerCtx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
-	results := make([]catalog.RefreshResult, len(requests))
+	results := make([]domaincatalog.RefreshResult, len(requests))
 	valid := make([]bool, len(requests))
 	jobs := make(chan int)
 	var workers sync.WaitGroup
@@ -128,17 +125,17 @@ func fetchRefreshResults(ctx context.Context, client *http.Client, current catal
 				request := requests[index]
 				known, err := findFeed(current, request.FeedID)
 				if err == nil {
-					response, fetchErr := rss.FetchRSS(workerCtx, client, known)
+					response, fetchErr := reader.Fetch(workerCtx, known)
 					if fetchErr != nil {
 						err = fmt.Errorf("refresh feed %d: %w", request.FeedID, fetchErr)
 					} else if !response.NotModified {
-						var episodes []catalog.Episode
-						var refreshed catalog.Feed
-						refreshed, episodes, err = rss.ParseRSS(bytes.NewReader(response.Body), known)
+						var episodes []domaincatalog.Episode
+						var refreshed domaincatalog.Feed
+						refreshed, episodes, err = reader.Parse(response, known)
 						if err == nil {
 							refreshed.ETag = response.ETag
 							refreshed.LastModified = response.LastModified
-							results[index] = catalog.RefreshResult{Feed: refreshed, Episodes: episodes, Archive: request.Archive}
+							results[index] = domaincatalog.RefreshResult{Feed: refreshed, Episodes: episodes, Archive: request.Archive}
 							// Each job owns a distinct result slot; application remains ordered below.
 							valid[index] = true
 						}
@@ -173,7 +170,7 @@ func fetchRefreshResults(ctx context.Context, client *http.Client, current catal
 	if firstErr != nil {
 		return nil, firstErr
 	}
-	ordered := make([]catalog.RefreshResult, 0, len(requests))
+	ordered := make([]domaincatalog.RefreshResult, 0, len(requests))
 	for index := range results {
 		if valid[index] {
 			ordered = append(ordered, results[index])
@@ -187,11 +184,11 @@ type RefreshRequest struct {
 	Archive bool
 }
 
-func findFeed(current catalog.Catalog, feedID int64) (catalog.Feed, error) {
+func findFeed(current domaincatalog.Catalog, feedID int64) (domaincatalog.Feed, error) {
 	for _, known := range current.Feeds {
 		if known.ID == feedID {
 			return known, nil
 		}
 	}
-	return catalog.Feed{}, fmt.Errorf("refresh feed %d: feed not found", feedID)
+	return domaincatalog.Feed{}, fmt.Errorf("refresh feed %d: feed not found", feedID)
 }

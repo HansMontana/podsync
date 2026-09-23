@@ -12,7 +12,6 @@ import (
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/domain/curation"
-	syncer "github.com/HansMontana/podsync/internal/sync"
 )
 
 type lockedRepository struct {
@@ -163,7 +162,7 @@ func reconcileState(repository applicationcatalog.Repository, cfg curation.Confi
 	return nil
 }
 
-func refreshRequests(current catalog.Catalog, cfg curation.Config) ([]syncer.RefreshRequest, error) {
+func refreshRequests(current catalog.Catalog, cfg curation.Config) ([]applicationcatalog.RefreshRequest, error) {
 	byURL := make(map[string]int64, len(current.Feeds))
 	for _, known := range current.Feeds {
 		normalized, err := catalog.NormalizeURL(known.URL)
@@ -176,7 +175,7 @@ func refreshRequests(current catalog.Catalog, cfg curation.Config) ([]syncer.Ref
 	for _, logical := range cfg.Feeds {
 		archiveBySource[logical.Source] = archiveBySource[logical.Source] || logical.Archive
 	}
-	requests := make([]syncer.RefreshRequest, 0, len(cfg.Sources))
+	requests := make([]applicationcatalog.RefreshRequest, 0, len(cfg.Sources))
 	for _, source := range cfg.Sources {
 		normalized, err := catalog.NormalizeURL(source.URL)
 		if err != nil {
@@ -186,7 +185,7 @@ func refreshRequests(current catalog.Catalog, cfg curation.Config) ([]syncer.Ref
 		if !exists {
 			return nil, fmt.Errorf("source %q was not reconciled", source.ID)
 		}
-		requests = append(requests, syncer.RefreshRequest{FeedID: feedID, Archive: archiveBySource[source.ID]})
+		requests = append(requests, applicationcatalog.RefreshRequest{FeedID: feedID, Archive: archiveBySource[source.ID]})
 	}
 	return requests, nil
 }

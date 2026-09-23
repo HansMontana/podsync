@@ -1,4 +1,4 @@
-package sync
+package catalog_test
 
 import (
 	"context"
@@ -8,16 +8,18 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/HansMontana/podsync/internal/adapters/rss"
 	"github.com/HansMontana/podsync/internal/adapters/sqlitecatalog"
+	applicationcatalog "github.com/HansMontana/podsync/internal/application/catalog"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
 
 func TestRefreshFeedReplacesOnlyTargetFeedAndPersistsMetadata(t *testing.T) {
-	rss := `<rss><channel><title>Updated feed</title><item><guid>new-episode</guid><title>New episode</title><enclosure url="https://example.com/new.mp3" type="audio/mpeg" length="42"/></item></channel></rss>`
+	rssBody := `<rss><channel><title>Updated feed</title><item><guid>new-episode</guid><title>New episode</title><enclosure url="https://example.com/new.mp3" type="audio/mpeg" length="42"/></item></channel></rss>`
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", `"updated"`)
 		w.Header().Set("Last-Modified", "Wed, 02 Sep 2026 14:39:34 +0200")
-		_, _ = w.Write([]byte(rss))
+		_, _ = w.Write([]byte(rssBody))
 	}))
 	defer server.Close()
 
@@ -46,7 +48,7 @@ func TestRefreshFeedReplacesOnlyTargetFeedAndPersistsMetadata(t *testing.T) {
 		t.Fatalf("initial Save() returned error: %v", err)
 	}
 
-	if err := RefreshFeed(context.Background(), repository, server.Client(), 1); err != nil {
+	if err := applicationcatalog.RefreshFeed(context.Background(), repository, rss.NewReader(server.Client()), 1); err != nil {
 		t.Fatalf("RefreshFeed() returned error: %v", err)
 	}
 
@@ -88,7 +90,7 @@ func TestRefreshFeedWithArchiveRetainsEpisodesOutsideRSSWindow(t *testing.T) {
 	if err := repository.Save(initial); err != nil {
 		t.Fatal(err)
 	}
-	if err := RefreshFeedWithArchive(context.Background(), repository, server.Client(), 1, true); err != nil {
+	if err := applicationcatalog.RefreshFeedWithArchive(context.Background(), repository, rss.NewReader(server.Client()), 1, true); err != nil {
 		t.Fatal(err)
 	}
 	got, err := repository.Load()
@@ -132,7 +134,7 @@ func TestRefreshFeed304LeavesStateUnchanged(t *testing.T) {
 		t.Fatalf("Save() returned error: %v", err)
 	}
 
-	if err := RefreshFeed(context.Background(), repository, server.Client(), 1); err != nil {
+	if err := applicationcatalog.RefreshFeed(context.Background(), repository, rss.NewReader(server.Client()), 1); err != nil {
 		t.Fatalf("RefreshFeed() returned error: %v", err)
 	}
 	got, err := repository.Load()
@@ -164,7 +166,7 @@ func TestRefreshFeedMalformedRSSLeavesStateUnchanged(t *testing.T) {
 		t.Fatalf("Save() returned error: %v", err)
 	}
 
-	if err := RefreshFeed(context.Background(), repository, server.Client(), 1); err == nil {
+	if err := applicationcatalog.RefreshFeed(context.Background(), repository, rss.NewReader(server.Client()), 1); err == nil {
 		t.Fatal("RefreshFeed() accepted malformed RSS")
 	}
 	got, err := repository.Load()
@@ -194,7 +196,7 @@ func TestRefreshFeedsPersistsMultipleFeedsOnce(t *testing.T) {
 	if err := repository.Save(catalog.Catalog{Feeds: []catalog.Feed{{ID: 1, URL: servers.URL + "/one"}, {ID: 2, URL: servers.URL + "/two"}}}); err != nil {
 		t.Fatal(err)
 	}
-	if err := RefreshFeeds(context.Background(), repository, servers.Client(), []RefreshRequest{{FeedID: 1}, {FeedID: 2}}); err != nil {
+	if err := applicationcatalog.RefreshFeeds(context.Background(), repository, rss.NewReader(servers.Client()), []applicationcatalog.RefreshRequest{{FeedID: 1}, {FeedID: 2}}); err != nil {
 		t.Fatal(err)
 	}
 	got, err := repository.Load()
@@ -224,7 +226,7 @@ func TestRefreshFeedsCancellationDoesNotPersistPartialResults(t *testing.T) {
 	if err := repository.Save(want); err != nil {
 		t.Fatal(err)
 	}
-	if err := RefreshFeeds(context.Background(), repository, server.Client(), []RefreshRequest{{FeedID: 1}, {FeedID: 2}}); err == nil {
+	if err := applicationcatalog.RefreshFeeds(context.Background(), repository, rss.NewReader(server.Client()), []applicationcatalog.RefreshRequest{{FeedID: 1}, {FeedID: 2}}); err == nil {
 		t.Fatal("RefreshFeeds accepted a failed worker")
 	}
 	got, err := repository.Load()
@@ -251,7 +253,7 @@ func TestRefreshFeedsReturnsParentCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := RefreshFeeds(ctx, repository, server.Client(), []RefreshRequest{{FeedID: 1}}); err == nil {
+	if err := applicationcatalog.RefreshFeeds(ctx, repository, rss.NewReader(server.Client()), []applicationcatalog.RefreshRequest{{FeedID: 1}}); err == nil {
 		t.Fatal("canceled RefreshFeeds returned nil")
 	}
 }

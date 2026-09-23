@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/HansMontana/podsync/internal/adapters/rss"
 	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
+	applicationcatalog "github.com/HansMontana/podsync/internal/application/catalog"
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/domain/curation"
-	syncer "github.com/HansMontana/podsync/internal/sync"
 )
 
 func feedCommand(ctx context.Context, args []string) error {
@@ -259,7 +260,7 @@ func reconcileDeviceWithLockContext(ctx context.Context, deviceRoot, configPath 
 	if err != nil {
 		return err
 	}
-	if err := syncer.RefreshFeeds(ctx, repository, httpClient, requests); err != nil {
+	if err := applicationcatalog.RefreshFeeds(ctx, repository, rss.NewReader(httpClient), requests); err != nil {
 		return fmt.Errorf("refresh feeds: %w", err)
 	}
 	for _, source := range cfg.Sources {
