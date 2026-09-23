@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/HansMontana/podsync/internal/adapters/rss"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/feed"
 	"github.com/HansMontana/podsync/internal/state"
 )
 
@@ -47,7 +47,7 @@ func RefreshFeedWithArchive(
 		return fmt.Errorf("refresh feed %d: feed not found", feedID)
 	}
 
-	result, err := feed.FetchRSS(ctx, client, current.Feeds[feedIndex])
+	result, err := rss.FetchRSS(ctx, client, current.Feeds[feedIndex])
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func RefreshFeedWithArchive(
 		return nil
 	}
 
-	refreshedFeed, episodes, err := feed.ParseRSS(
+	refreshedFeed, episodes, err := rss.ParseRSS(
 		bytes.NewReader(result.Body),
 		current.Feeds[feedIndex],
 	)
@@ -135,13 +135,13 @@ func fetchRefreshResults(ctx context.Context, client *http.Client, current catal
 				request := requests[index]
 				known, err := findFeed(current, request.FeedID)
 				if err == nil {
-					response, fetchErr := feed.FetchRSS(workerCtx, client, known)
+					response, fetchErr := rss.FetchRSS(workerCtx, client, known)
 					if fetchErr != nil {
 						err = fmt.Errorf("refresh feed %d: %w", request.FeedID, fetchErr)
 					} else if !response.NotModified {
 						var episodes []catalog.Episode
 						var refreshed catalog.Feed
-						refreshed, episodes, err = feed.ParseRSS(bytes.NewReader(response.Body), known)
+						refreshed, episodes, err = rss.ParseRSS(bytes.NewReader(response.Body), known)
 						if err == nil {
 							refreshed.ETag = response.ETag
 							refreshed.LastModified = response.LastModified
