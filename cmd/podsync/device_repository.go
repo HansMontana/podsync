@@ -55,6 +55,12 @@ func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, l
 		_ = repository.Close()
 		return layout, nil, curation.Config{}, err
 	}
+	if !readOnly {
+		if err := recoverPendingFeedRemoval(layout, repository, cfg); err != nil {
+			_ = repository.Close()
+			return layout, nil, curation.Config{}, err
+		}
+	}
 	if !readOnly && persistConfig && configPath != layout.ConfigPath() {
 		if err := tomlconfig.Save(layout.ConfigPath(), cfg); err != nil {
 			_ = repository.Close()
@@ -62,6 +68,53 @@ func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, l
 		}
 	}
 	return layout, repository, cfg, nil
+}
+
+func recoverPendingFeedRemoval(layout devicefs.Layout, repository applicationcatalog.Repository, cfg curation.Config) error {
+	pending, err := layout.LoadPendingFeedRemoval()
+	if err != nil {
+		return err
+	}
+	if pending.URL == "" {
+		return nil
+	}
+	pendingURL, err := catalog.NormalizeURL(pending.URL)
+	if err != nil {
+		return fmt.Errorf("normalize pending feed removal URL: %w", err)
+	}
+	for _, source := range cfg.Sources {
+		sourceURL, sourceErr := catalog.NormalizeURL(source.URL)
+		if sourceErr == nil && sourceURL == pendingURL {
+			return layout.ClearPendingFeedRemoval()
+		}
+	}
+	current, err := repository.Load()
+	if err != nil {
+		return fmt.Errorf("load state for pending feed removal: %w", err)
+	}
+	remainingFeeds := current.Feeds[:0]
+	removedIDs := make(map[int64]struct{})
+	for _, feed := range current.Feeds {
+		if feed.SameIdentity(catalog.Feed{URL: pendingURL}) {
+			removedIDs[feed.ID] = struct{}{}
+			continue
+		}
+		remainingFeeds = append(remainingFeeds, feed)
+	}
+	if len(removedIDs) > 0 {
+		remainingEpisodes := current.Episodes[:0]
+		for _, episode := range current.Episodes {
+			if _, removed := removedIDs[episode.FeedID]; !removed {
+				remainingEpisodes = append(remainingEpisodes, episode)
+			}
+		}
+		current.Feeds = remainingFeeds
+		current.Episodes = remainingEpisodes
+		if err := repository.Save(current); err != nil {
+			return fmt.Errorf("complete pending feed removal: %w", err)
+		}
+	}
+	return layout.ClearPendingFeedRemoval()
 }
 
 func validateStagingDirectory(deviceRoot, stagingDir string) error {

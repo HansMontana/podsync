@@ -14,6 +14,7 @@ import (
 	devicefs "github.com/HansMontana/podsync/internal/adapters/devicefs"
 	"github.com/HansMontana/podsync/internal/adapters/sqlitecatalog"
 	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/domain/curation"
 )
 
@@ -288,6 +289,68 @@ func TestFeedCommandsManageDeviceConfiguration(t *testing.T) {
 	updated, err = tomlconfig.Load(filepath.Join(root, "Podsync", "podsync.toml"))
 	if err != nil || len(updated.Sources) != 1 {
 		t.Fatalf("got final config %+v, error %v", updated, err)
+	}
+}
+
+func TestPendingFeedRemovalIsCompletedAfterConfigurationWasSaved(t *testing.T) {
+	root := t.TempDir()
+	hostConfig := filepath.Join(t.TempDir(), "config.toml")
+	feedURL := "https://example.com/news.xml"
+	cfg := curation.Config{Sources: []curation.SourceFeed{{ID: "news", URL: feedURL}}}
+	if err := tomlconfig.Save(hostConfig, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{"reconcile", "-device-root", root, "-config", hostConfig}); err != nil {
+		t.Fatal(err)
+	}
+	repository, err := sqlitecatalog.NewSQLiteRepository(filepath.Join(root, "Podsync", "podsync.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := repository.Load()
+	if err != nil {
+		_ = repository.Close()
+		t.Fatal(err)
+	}
+	current.Episodes = append(current.Episodes, catalog.Episode{
+		FeedID: current.Feeds[0].ID,
+		GUID:   "episode-1",
+		Title:  "Episode",
+		Enclosure: catalog.Enclosure{
+			URL:  "https://example.com/episode.mp3",
+			Type: "audio/mpeg",
+		},
+	})
+	if err := repository.Save(current); err != nil {
+		_ = repository.Close()
+		t.Fatal(err)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	updated := curation.Config{}
+	layout := devicefs.Layout{Root: root}
+	if err := tomlconfig.Save(layout.ConfigPath(), updated); err != nil {
+		t.Fatal(err)
+	}
+	if err := layout.SavePendingFeedRemoval(feedURL); err != nil {
+		t.Fatal(err)
+	}
+	_, reopened, _, err := openDevice(root, "", false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	loaded, err := reopened.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Feeds) != 0 || len(loaded.Episodes) != 0 {
+		t.Fatalf("pending removal left state: %+v", loaded)
+	}
+	if _, err := os.Stat(layout.PendingFeedRemovalPath()); !os.IsNotExist(err) {
+		t.Fatalf("pending removal remains, error: %v", err)
 	}
 }
 

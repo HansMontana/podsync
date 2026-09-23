@@ -42,25 +42,29 @@ func manifestContent(paths []string) []byte {
 	return content.Bytes()
 }
 
-func loadPlaybackRecords(layout devicefs.Layout) ([]rockboxplayback.Record, error) {
+func loadPlaybackRecords(layout devicefs.Layout) ([]rockboxplayback.Record, []error, error) {
 	paths, err := layout.PlaybackLogPaths()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	sort.Strings(paths)
 	var records []rockboxplayback.Record
+	var warnings []error
 	for _, path := range paths {
 		file, err := os.Open(path)
 		if err != nil {
-			return nil, fmt.Errorf("open playback log %q: %w", path, err)
+			warnings = append(warnings, fmt.Errorf("open playback log %q: %w", path, err))
+			continue
 		}
 		parsed, parseErr := rockboxplayback.ParseLog(file)
 		closeErr := file.Close()
 		if parseErr != nil {
-			return nil, fmt.Errorf("parse playback log %q: %w", path, parseErr)
+			warnings = append(warnings, fmt.Errorf("parse playback log %q: %w", path, parseErr))
+			continue
 		}
 		if closeErr != nil {
-			return nil, fmt.Errorf("close playback log %q: %w", path, closeErr)
+			warnings = append(warnings, fmt.Errorf("close playback log %q: %w", path, closeErr))
+			continue
 		}
 		records = append(records, parsed...)
 	}
@@ -68,31 +72,35 @@ func loadPlaybackRecords(layout devicefs.Layout) ([]rockboxplayback.Record, erro
 	filenamePath := filepath.Join(layout.TagCacheDirectory(), "database_4.tcd")
 	masterExists, err := fileExists(masterPath)
 	if err != nil {
-		return nil, fmt.Errorf("inspect TagCache master: %w", err)
+		warnings = append(warnings, fmt.Errorf("inspect TagCache master: %w", err))
+		return rockboxplayback.MergeRecords(records), warnings, nil
 	}
 	filenameExists, err := fileExists(filenamePath)
 	if err != nil {
-		return nil, fmt.Errorf("inspect TagCache filename index: %w", err)
+		warnings = append(warnings, fmt.Errorf("inspect TagCache filename index: %w", err))
+		return rockboxplayback.MergeRecords(records), warnings, nil
 	}
 	if masterExists != filenameExists {
-		return nil, fmt.Errorf("incomplete TagCache: master=%t filename-index=%t", masterExists, filenameExists)
+		warnings = append(warnings, fmt.Errorf("incomplete TagCache: master=%t filename-index=%t", masterExists, filenameExists))
+		return rockboxplayback.MergeRecords(records), warnings, nil
 	}
 	if masterExists {
 		parsed, err := rockboxplayback.ParseTagCache(layout.TagCacheDirectory())
 		if err != nil {
-			return nil, fmt.Errorf("parse TagCache: %w", err)
+			warnings = append(warnings, fmt.Errorf("parse TagCache: %w", err))
+			return rockboxplayback.MergeRecords(records), warnings, nil
 		}
-		return rockboxplayback.PreferRecords(parsed, rockboxplayback.MergeRecords(records)), nil
+		return rockboxplayback.PreferRecords(parsed, rockboxplayback.MergeRecords(records)), warnings, nil
 	}
-	return rockboxplayback.MergeRecords(records), nil
+	return rockboxplayback.MergeRecords(records), warnings, nil
 }
 
-func loadPlaybackRecordsAndStates(layout devicefs.Layout, episodes []catalog.Episode, resolver media.Resolver) ([]rockboxplayback.Record, map[string]playback.State, error) {
-	records, err := loadPlaybackRecords(layout)
+func loadPlaybackRecordsAndStates(layout devicefs.Layout, episodes []catalog.Episode, resolver media.Resolver) ([]rockboxplayback.Record, map[string]playback.State, []error, error) {
+	records, warnings, err := loadPlaybackRecords(layout)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return records, rockboxplayback.ForEpisodesWithResolver(episodes, records, resolver), nil
+	return records, rockboxplayback.ForEpisodesWithResolver(episodes, records, resolver), warnings, nil
 }
 
 func fileExists(path string) (bool, error) {

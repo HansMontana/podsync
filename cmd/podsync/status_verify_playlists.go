@@ -30,9 +30,12 @@ func status(args []string) error {
 		return err
 	}
 	logger.Info(fmt.Sprintf("Feeds: %d\tEpisodes: %d", len(current.Feeds), len(current.Episodes)))
-	records, err := loadPlaybackRecords(layout)
+	records, warnings, err := loadPlaybackRecords(layout)
 	if err != nil {
 		return fmt.Errorf("load playback state: %w", err)
+	}
+	for _, warning := range warnings {
+		logger.Warn(warning.Error())
 	}
 	logger.Info(fmt.Sprintf("Playback records: %d", len(records)))
 	logicalIDs, err := cfg.LogicalFeedIDs(current)
@@ -116,9 +119,12 @@ func generatePlaylist(ctx context.Context, args []string, briefingMode bool) err
 		return err
 	}
 	resolver := media.Resolver(logicalIDs)
-	_, playbackStates, err := loadPlaybackRecordsAndStates(layout, current.Episodes, resolver)
+	_, playbackStates, warnings, err := loadPlaybackRecordsAndStates(layout, current.Episodes, resolver)
 	if err != nil {
 		return err
+	}
+	for _, warning := range warnings {
+		commandLogger(name).Warn(warning.Error())
 	}
 	var content []byte
 	if briefingMode {

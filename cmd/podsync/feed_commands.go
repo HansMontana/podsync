@@ -139,10 +139,6 @@ func removeFeed(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	previous := catalog.Catalog{
-		Feeds:    append([]catalog.Feed(nil), current.Feeds...),
-		Episodes: append([]catalog.Episode(nil), current.Episodes...),
-	}
 	remaining := current.Feeds[:0]
 	removedIDs := make(map[int64]struct{})
 	for _, known := range current.Feeds {
@@ -160,12 +156,17 @@ func removeFeed(ctx context.Context, args []string) error {
 		}
 	}
 	current.Episodes = episodes
-	if err := saveStateThenConfig(
-		func() error { return repository.Save(current) },
-		func() error { return tomlconfig.Save(layout.ConfigPath(), cfg) },
-		func() error { return repository.Save(previous) },
-	); err != nil {
-		return err
+	if err := layout.SavePendingFeedRemoval(removedURL); err != nil {
+		return fmt.Errorf("record pending feed removal: %w", err)
+	}
+	if err := tomlconfig.Save(layout.ConfigPath(), cfg); err != nil {
+		return fmt.Errorf("save device config: %w", err)
+	}
+	if err := repository.Save(current); err != nil {
+		return fmt.Errorf("save state after config removal: %w", err)
+	}
+	if err := layout.ClearPendingFeedRemoval(); err != nil {
+		return fmt.Errorf("clear pending feed removal: %w", err)
 	}
 	commandLogger("feed").Info(fmt.Sprintf("Removed source %s", *id))
 	return nil

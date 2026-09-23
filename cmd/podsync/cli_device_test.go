@@ -45,16 +45,19 @@ func TestLoadPlaybackRecordsAllowsMissingTagCache(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, ".rockbox"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	records, err := loadPlaybackRecords(devicefs.Layout{Root: root})
+	records, warnings, err := loadPlaybackRecords(devicefs.Layout{Root: root})
 	if err != nil {
 		t.Fatalf("loadPlaybackRecords() returned error: %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("got warnings %+v", warnings)
 	}
 	if len(records) != 0 {
 		t.Fatalf("got records %+v", records)
 	}
 }
 
-func TestStatusReportsPlaybackImportErrors(t *testing.T) {
+func TestStatusTreatsIncompleteTagCacheAsUnknownPlayback(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".rockbox"), 0o755); err != nil {
 		t.Fatal(err)
@@ -62,8 +65,12 @@ func TestStatusReportsPlaybackImportErrors(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ".rockbox", "database_idx.tcd"), []byte("partial"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := run([]string{"status", "-device-root", root}); err == nil {
-		t.Fatal("status accepted incomplete TagCache data")
+	records, warnings, err := loadPlaybackRecords(devicefs.Layout{Root: root})
+	if err != nil {
+		t.Fatalf("loadPlaybackRecords() rejected incomplete TagCache data: %v", err)
+	}
+	if len(records) != 0 || len(warnings) != 1 {
+		t.Fatalf("got records=%+v warnings=%+v", records, warnings)
 	}
 }
 

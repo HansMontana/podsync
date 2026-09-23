@@ -2,8 +2,8 @@ package devicefs
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +11,10 @@ import (
 
 type Layout struct {
 	Root string
+}
+
+type PendingFeedRemoval struct {
+	URL string `json:"url"`
 }
 
 func (l Layout) StateDirectory() string {
@@ -43,6 +47,50 @@ func (l Layout) ManifestPath() string {
 
 func (l Layout) PendingManifestPath() string {
 	return filepath.Join(l.StateDirectory(), "pending-managed-files.txt")
+}
+
+func (l Layout) PendingFeedRemovalPath() string {
+	return filepath.Join(l.StateDirectory(), "pending-feed-removal.json")
+}
+
+func (l Layout) SavePendingFeedRemoval(url string) error {
+	if strings.TrimSpace(url) == "" {
+		return fmt.Errorf("pending feed removal URL cannot be empty")
+	}
+	content, err := json.Marshal(PendingFeedRemoval{URL: url})
+	if err != nil {
+		return fmt.Errorf("encode pending feed removal: %w", err)
+	}
+	return writeAtomic(l.PendingFeedRemovalPath(), content, 0o600, "pending feed removal")
+}
+
+func (l Layout) LoadPendingFeedRemoval() (PendingFeedRemoval, error) {
+	if err := RejectSymlink(l.PendingFeedRemovalPath()); err != nil {
+		return PendingFeedRemoval{}, err
+	}
+	content, err := os.ReadFile(l.PendingFeedRemovalPath())
+	if os.IsNotExist(err) {
+		return PendingFeedRemoval{}, nil
+	}
+	if err != nil {
+		return PendingFeedRemoval{}, fmt.Errorf("read pending feed removal: %w", err)
+	}
+	var pending PendingFeedRemoval
+	if err := json.Unmarshal(content, &pending); err != nil {
+		return PendingFeedRemoval{}, fmt.Errorf("decode pending feed removal: %w", err)
+	}
+	if strings.TrimSpace(pending.URL) == "" {
+		return PendingFeedRemoval{}, fmt.Errorf("pending feed removal URL is empty")
+	}
+	return pending, nil
+}
+
+func (l Layout) ClearPendingFeedRemoval() error {
+	err := os.Remove(l.PendingFeedRemovalPath())
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }
 
 func (l Layout) ManifestRelativePath() string {
@@ -124,30 +172,41 @@ func loadPathList(path string) ([]string, error) {
 }
 
 func writePathList(path string, paths []string) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create path-list directory: %w", err)
+	var content strings.Builder
+	for _, current := range paths {
+		content.WriteString(current)
+		content.WriteByte('\n')
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".podsync-paths-*")
+	return writeAtomic(path, []byte(content.String()), 0o600, "path list")
+}
+
+func writeAtomic(path string, content []byte, mode os.FileMode, description string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create %s directory: %w", description, err)
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".podsync-atomic-*")
 	if err != nil {
-		return fmt.Errorf("create temporary path list: %w", err)
+		return fmt.Errorf("create temporary %s: %w", description, err)
 	}
 	temporaryPath := temporary.Name()
 	defer os.Remove(temporaryPath)
-	for _, current := range paths {
-		if _, err := io.WriteString(temporary, current+"\n"); err != nil {
-			_ = temporary.Close()
-			return fmt.Errorf("write path list: %w", err)
-		}
+	if err := temporary.Chmod(mode); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("set %s permissions: %w", description, err)
+	}
+	if _, err := temporary.Write(content); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("write %s: %w", description, err)
 	}
 	if err := temporary.Sync(); err != nil {
 		_ = temporary.Close()
-		return fmt.Errorf("sync path list: %w", err)
+		return fmt.Errorf("sync %s: %w", description, err)
 	}
 	if err := temporary.Close(); err != nil {
-		return fmt.Errorf("close path list: %w", err)
+		return fmt.Errorf("close %s: %w", description, err)
 	}
 	if err := os.Rename(temporaryPath, path); err != nil {
-		return fmt.Errorf("install path list: %w", err)
+		return fmt.Errorf("install %s: %w", description, err)
 	}
 	return nil
 }

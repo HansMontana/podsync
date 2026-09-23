@@ -86,9 +86,12 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		return err
 	}
 	resolver := media.Resolver(logicalIDs)
-	_, states, err := loadPlaybackRecordsAndStates(layout, current.Episodes, resolver)
+	_, states, warnings, err := loadPlaybackRecordsAndStates(layout, current.Episodes, resolver)
 	if err != nil {
 		return err
+	}
+	for _, warning := range warnings {
+		logger.Warn(warning.Error())
 	}
 	selected := make(map[string]catalog.Episode)
 	var playlistFiles []applicationdevice.PlaylistFile
