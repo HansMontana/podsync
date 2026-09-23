@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/HansMontana/podsync/internal/adapters/media"
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/domain/playback"
-	"github.com/HansMontana/podsync/internal/media"
 	rockboxplayback "github.com/HansMontana/podsync/internal/playback"
 )
 

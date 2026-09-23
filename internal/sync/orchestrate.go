@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/HansMontana/podsync/internal/adapters/media"
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/download"
-	"github.com/HansMontana/podsync/internal/media"
 	"github.com/HansMontana/podsync/internal/metadata"
 )
 

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"path"
 
+	"github.com/HansMontana/podsync/internal/adapters/media"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/domain/curation"
 	"github.com/HansMontana/podsync/internal/domain/playback"
-	"github.com/HansMontana/podsync/internal/media"
 )
 
 func LogicalFeed(cfg curation.Config, current catalog.Catalog, feedID string, playbackStates map[string]playback.State) ([]byte, error) {

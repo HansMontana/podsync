@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/HansMontana/podsync/internal/adapters/media"
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/media"
 )
 
 func TestMissingEpisodeChunksUsesEpisodeFallbackLimit(t *testing.T) {

@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/HansMontana/podsync/internal/adapters/media"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/media"
 )
 
 func TestEpisodesStagesBeforeApplyingAndDeletesOnlyManagedFiles(t *testing.T) {

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/HansMontana/podsync/internal/adapters/media"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	domainplayback "github.com/HansMontana/podsync/internal/domain/playback"
-	"github.com/HansMontana/podsync/internal/media"
 )
 
 type Record struct {

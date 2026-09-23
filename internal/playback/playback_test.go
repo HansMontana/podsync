@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/HansMontana/podsync/internal/adapters/media"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/media"
 )
 
 func TestForEpisodesMatchesNormalizedDevicePaths(t *testing.T) {
