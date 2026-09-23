@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/HansMontana/podsync/internal/adapters/download"
 	"github.com/HansMontana/podsync/internal/adapters/media"
+	"github.com/HansMontana/podsync/internal/adapters/metadata"
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
-	"github.com/HansMontana/podsync/internal/download"
-	"github.com/HansMontana/podsync/internal/metadata"
 )
 
 type ProgressFunc func(completed, total int, current catalog.Episode, reused bool)
