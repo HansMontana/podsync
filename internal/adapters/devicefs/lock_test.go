@@ -62,3 +62,14 @@ func TestRejectSymlink(t *testing.T) {
 		t.Fatal("RejectSymlink accepted a symlink")
 	}
 }
+
+func TestAcquireLockRejectsSymlinkedStateDirectory(t *testing.T) {
+	root := t.TempDir()
+	target := t.TempDir()
+	if err := os.Symlink(target, filepath.Join(root, "Podsync")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if _, err := AcquireLock(root); err == nil {
+		t.Fatal("AcquireLock accepted a symlinked state directory")
+	}
+}

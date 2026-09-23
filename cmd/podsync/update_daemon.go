@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"runtime"
 	"syscall"
 	"time"
@@ -57,9 +56,6 @@ func runUpdate(ctx context.Context, options updateOptions) error {
 			return fmt.Errorf("verify detected device: %w", err)
 		}
 		identity = options.identity
-	}
-	if err := os.MkdirAll(filepath.Join(resolvedRoot, "Podsync"), 0o755); err != nil {
-		return fmt.Errorf("prepare device lock: %w", err)
 	}
 	lock := options.lock
 	if lock == nil {

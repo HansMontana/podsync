@@ -3,10 +3,12 @@ package devicefs
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 type Layout struct {
@@ -136,7 +138,10 @@ func (l Layout) ClearPendingFeedRemoval() error {
 	if os.IsNotExist(err) {
 		return nil
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return syncDirectory(filepath.Dir(l.PendingFeedRemovalPath()))
 }
 
 func (l Layout) ManifestRelativePath() string {
@@ -187,7 +192,28 @@ func (l Layout) ClearPendingManagedPaths() error {
 	if os.IsNotExist(err) {
 		return nil
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return syncDirectory(filepath.Dir(l.PendingManifestPath()))
+}
+
+func EnsureStateDirectory(root string) error {
+	path := filepath.Join(root, "Podsync")
+	if err := RejectSymlink(path); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return fmt.Errorf("create device state directory: %w", err)
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return fmt.Errorf("inspect device state directory: %w", err)
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("device state directory is not a real directory")
+	}
+	return nil
 }
 
 func loadPathList(path string) ([]string, error) {
@@ -253,6 +279,22 @@ func writeAtomic(path string, content []byte, mode os.FileMode, description stri
 	}
 	if err := os.Rename(temporaryPath, path); err != nil {
 		return fmt.Errorf("install %s: %w", description, err)
+	}
+	return syncDirectory(filepath.Dir(path))
+}
+
+func syncDirectory(path string) error {
+	directory, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("open directory for sync: %w", err)
+	}
+	err = directory.Sync()
+	closeErr := directory.Close()
+	if err != nil && !errors.Is(err, syscall.EINVAL) && !errors.Is(err, syscall.ENOTSUP) {
+		return fmt.Errorf("sync directory: %w", err)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close directory after sync: %w", closeErr)
 	}
 	return nil
 }

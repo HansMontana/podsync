@@ -14,7 +14,13 @@ type Lock struct {
 }
 
 func AcquireLock(root string) (*Lock, error) {
+	if err := EnsureStateDirectory(root); err != nil {
+		return nil, err
+	}
 	path := filepath.Join(root, "Podsync", ".podsync.lock")
+	if err := RejectSymlink(path); err != nil {
+		return nil, err
+	}
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open device lock: %w", err)

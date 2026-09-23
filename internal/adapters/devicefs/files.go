@@ -223,6 +223,9 @@ func writeFromReader(ctx context.Context, root, relative string, reader io.Reade
 	if err := os.Rename(temporaryPath, destination); err != nil {
 		return fmt.Errorf("install %q: %w", relative, err)
 	}
+	if err := syncDirectory(filepath.Dir(destination)); err != nil {
+		return fmt.Errorf("sync destination directory: %w", err)
+	}
 	return nil
 }
 

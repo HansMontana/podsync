@@ -233,8 +233,8 @@ func openRepositoryModeWithLock(root string, readOnly bool, heldLock *devicefs.L
 		return layout, nil, err
 	}
 	if !readOnly {
-		if err := os.MkdirAll(layout.StateDirectory(), 0o755); err != nil {
-			return layout, nil, fmt.Errorf("create device state directory: %w", err)
+		if err := devicefs.EnsureStateDirectory(root); err != nil {
+			return layout, nil, err
 		}
 	}
 	var lock *devicefs.Lock

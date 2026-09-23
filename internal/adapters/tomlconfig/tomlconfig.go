@@ -2,10 +2,12 @@ package tomlconfig
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"syscall"
 
 	"github.com/BurntSushi/toml"
 	"github.com/HansMontana/podsync/internal/domain/curation"
@@ -94,6 +96,18 @@ func Save(path string, cfg curation.Config) error {
 	}
 	if err := os.Rename(temporaryPath, path); err != nil {
 		return fmt.Errorf("install config: %w", err)
+	}
+	directory, err := os.Open(filepath.Dir(path))
+	if err != nil {
+		return fmt.Errorf("open config directory for sync: %w", err)
+	}
+	syncErr := directory.Sync()
+	closeErr := directory.Close()
+	if syncErr != nil && !errors.Is(syncErr, syscall.EINVAL) && !errors.Is(syncErr, syscall.ENOTSUP) {
+		return fmt.Errorf("sync config directory: %w", syncErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close config directory after sync: %w", closeErr)
 	}
 	return nil
 }
