@@ -13,7 +13,7 @@ import (
 )
 
 func TestEpisodeDownloadsToStaging(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "audio/mpeg")
 		_, _ = w.Write([]byte("audio data"))
 	}))
@@ -37,7 +37,7 @@ func TestEpisodeDownloadsToStaging(t *testing.T) {
 }
 
 func TestEpisodeRejectsFailedResponse(t *testing.T) {
-	server := httptest.NewServer(http.NotFoundHandler())
+	server := httptest.NewTLSServer(http.NotFoundHandler())
 	defer server.Close()
 
 	if _, err := Episode(context.Background(), server.Client(), catalog.Episode{Enclosure: catalog.Enclosure{URL: server.URL}}, t.TempDir()); err == nil {
@@ -46,7 +46,7 @@ func TestEpisodeRejectsFailedResponse(t *testing.T) {
 }
 
 func TestEpisodeRejectsNonAudioResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "video/mp4")
 		_, _ = w.Write([]byte("video"))
 	}))
@@ -59,7 +59,7 @@ func TestEpisodeRejectsNonAudioResponse(t *testing.T) {
 }
 
 func TestEpisodeRejectsHTMLResponseDeclaredAsAudio(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		_, _ = w.Write([]byte("<html><body>not audio</body></html>"))
 	}))
@@ -72,7 +72,7 @@ func TestEpisodeRejectsHTMLResponseDeclaredAsAudio(t *testing.T) {
 }
 
 func TestEpisodeRejectsVideoSignatureWithoutContentType(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte{0, 0, 0, 24, 'f', 't', 'y', 'p', 'm', 'p', '4', '2'})
 	}))
 	defer server.Close()
@@ -84,7 +84,7 @@ func TestEpisodeRejectsVideoSignatureWithoutContentType(t *testing.T) {
 }
 
 func TestEpisodeAllowsEnclosureLengthAboveHistoricalLimit(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "audio/mpeg")
 		_, _ = w.Write([]byte("audio"))
 	}))
@@ -106,7 +106,7 @@ func TestEpisodeRejectsMissingAudioURL(t *testing.T) {
 }
 
 func TestEpisodeRejectsEmptyDownload(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer server.Close()
 	if _, err := Episode(context.Background(), server.Client(), catalog.Episode{Enclosure: catalog.Enclosure{URL: server.URL}}, t.TempDir()); err == nil {
 		t.Fatal("Episode() accepted an empty download")
@@ -114,7 +114,7 @@ func TestEpisodeRejectsEmptyDownload(t *testing.T) {
 }
 
 func TestEpisodeAllowsAdvisoryEnclosureSizeMismatch(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("audio"))
 	}))
 	defer server.Close()
@@ -132,7 +132,7 @@ func TestEpisodeAllowsAdvisoryEnclosureSizeMismatch(t *testing.T) {
 }
 
 func TestEpisodeRejectsResponseAboveMaximumSize(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "audio/mpeg")
 		w.Header().Set("Content-Length", "2147483649")
 		_, _ = w.Write([]byte("audio"))
@@ -147,7 +147,7 @@ func TestEpisodeRejectsResponseAboveMaximumSize(t *testing.T) {
 
 func TestEpisodeRejectsChunkedResponseAboveMaximumSize(t *testing.T) {
 	const testLimit int64 = 2 << 20
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "audio/mpeg")
 		for written := int64(0); written <= testLimit; written += 1 << 20 {
 			chunk := make([]byte, 1<<20)

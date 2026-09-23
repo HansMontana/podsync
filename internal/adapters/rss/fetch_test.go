@@ -11,7 +11,7 @@ import (
 )
 
 func TestFetchRSSUsesConditionalHeaders(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if got := r.Header.Get("If-None-Match"); got != `"feed-1"` {
 			t.Errorf("If-None-Match = %q, want %q", got, `"feed-1"`)
 		}
@@ -36,7 +36,7 @@ func TestFetchRSSUsesConditionalHeaders(t *testing.T) {
 }
 
 func TestFetchRSSReturnsBodyAndCacheHeaders(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", `"feed-2"`)
 		w.Header().Set("Last-Modified", "Wed, 02 Sep 2026 14:39:34 +0200")
 		_, _ = w.Write([]byte("<rss/>"))
@@ -57,7 +57,7 @@ func TestFetchRSSReturnsBodyAndCacheHeaders(t *testing.T) {
 
 func TestFetchRSSAcceptsLargerRealWorldFeeds(t *testing.T) {
 	body := bytes.Repeat([]byte("x"), 11<<20)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(body)
 	}))
 	defer server.Close()
@@ -72,7 +72,7 @@ func TestFetchRSSAcceptsLargerRealWorldFeeds(t *testing.T) {
 }
 
 func TestFetchRSSRejectsUnexpectedStatus(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 	}))
 	defer server.Close()

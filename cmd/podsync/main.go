@@ -3,16 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	"github.com/HansMontana/podsync/internal/adapters/httpclient"
 	"github.com/HansMontana/podsync/internal/adapters/logging"
 )
 
-var httpClient = &http.Client{Timeout: 10 * time.Minute}
+var httpClient = httpclient.New(10 * time.Minute)
 
 func main() {
 	logger := commandLogger("cli")

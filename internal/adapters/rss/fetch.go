@@ -25,6 +25,9 @@ func FetchRSS(ctx context.Context, client *http.Client, f catalog.Feed) (FetchRe
 	if err != nil {
 		return FetchResult{}, fmt.Errorf("normalize feed URL: %w", err)
 	}
+	if err := catalog.ValidateRemoteURL(url); err != nil {
+		return FetchResult{}, fmt.Errorf("validate feed URL: %w", err)
+	}
 	if client == nil {
 		client = http.DefaultClient
 	}

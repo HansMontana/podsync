@@ -17,7 +17,7 @@ import (
 
 func TestRefreshFeedReplacesOnlyTargetFeedAndPersistsMetadata(t *testing.T) {
 	rssBody := `<rss><channel><title>Updated feed</title><item><guid>new-episode</guid><title>New episode</title><enclosure url="https://example.com/new.mp3" type="audio/mpeg" length="42"/></item></channel></rss>`
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("ETag", `"updated"`)
 		w.Header().Set("Last-Modified", "Wed, 02 Sep 2026 14:39:34 +0200")
 		_, _ = w.Write([]byte(rssBody))
@@ -69,7 +69,7 @@ func TestRefreshFeedReplacesOnlyTargetFeedAndPersistsMetadata(t *testing.T) {
 }
 
 func TestRefreshFeedWithArchiveRetainsEpisodesOutsideRSSWindow(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`<rss><channel><title>Archive</title><item><guid>new</guid><title>New</title><enclosure url="https://example.com/new.mp3" type="audio/mpeg"/></item></channel></rss>`))
 	}))
 	defer server.Close()
@@ -113,7 +113,7 @@ func TestRefreshFeedWithArchiveRetainsEpisodesOutsideRSSWindow(t *testing.T) {
 }
 
 func TestRefreshFeed304LeavesStateUnchanged(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("If-None-Match") != `"current"` {
 			t.Errorf("missing conditional ETag header")
 		}
@@ -148,7 +148,7 @@ func TestRefreshFeed304LeavesStateUnchanged(t *testing.T) {
 }
 
 func TestRefreshFeedMalformedRSSLeavesStateUnchanged(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`<rss><channel><title>broken`))
 	}))
 	defer server.Close()
@@ -180,7 +180,7 @@ func TestRefreshFeedMalformedRSSLeavesStateUnchanged(t *testing.T) {
 }
 
 func TestRefreshFeedsPersistsMultipleFeedsOnce(t *testing.T) {
-	servers := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	servers := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		guid := "one"
 		if r.URL.Path == "/two" {
 			guid = "two"
@@ -214,7 +214,7 @@ func TestRefreshFeedsPersistsMultipleFeedsOnce(t *testing.T) {
 }
 
 func TestRefreshFeedsPersistsSuccessfulResultsAndReportsFailures(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/fail" {
 			http.Error(w, "failed", http.StatusInternalServerError)
 			return
@@ -251,7 +251,7 @@ func TestRefreshFeedsPersistsSuccessfulResultsAndReportsFailures(t *testing.T) {
 }
 
 func TestRefreshFeedsReturnsParentCancellation(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("canceled refresh made an HTTP request")
 	}))
 	defer server.Close()

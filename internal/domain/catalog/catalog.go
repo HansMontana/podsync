@@ -62,6 +62,24 @@ func NormalizeURL(raw string) (string, error) {
 	return parsed.String(), nil
 }
 
+// ValidateRemoteURL restricts network fetches to authenticated HTTPS URLs.
+func ValidateRemoteURL(raw string) error {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return fmt.Errorf("parse remote URL: %w", err)
+	}
+	if parsed.Scheme != "https" {
+		return fmt.Errorf("remote URL must use HTTPS")
+	}
+	if parsed.Host == "" {
+		return fmt.Errorf("remote URL has no host")
+	}
+	if parsed.User != nil {
+		return fmt.Errorf("remote URL must not contain credentials")
+	}
+	return nil
+}
+
 func (f Feed) SameIdentity(other Feed) bool {
 	first, err := NormalizeURL(f.URL)
 	if err != nil {

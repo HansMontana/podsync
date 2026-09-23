@@ -3,7 +3,6 @@ package rss
 import (
 	"fmt"
 	"io"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -109,15 +108,8 @@ func audioEnclosure(item *gofeed.Item) (*gofeed.Enclosure, bool) {
 }
 
 func validateEnclosureURL(raw string) error {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return fmt.Errorf("parse audio URL: %w", err)
-	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return fmt.Errorf("audio URL must use HTTP or HTTPS")
-	}
-	if parsed.Host == "" {
-		return fmt.Errorf("audio URL has no host")
+	if err := catalog.ValidateRemoteURL(raw); err != nil {
+		return fmt.Errorf("audio URL: %w", err)
 	}
 	return nil
 }

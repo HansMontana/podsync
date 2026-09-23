@@ -13,7 +13,7 @@ import (
 )
 
 func TestDownloadEpisodeReportsUnsupportedMedia(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "video/mp4")
 		_, _ = w.Write([]byte("video"))
 	}))

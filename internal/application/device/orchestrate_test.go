@@ -25,7 +25,7 @@ func realDeviceFiles() DeviceFiles {
 }
 
 func TestEpisodesStagesBeforeApplyingAndDeletesOnlyManagedFiles(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("audio"))
 	}))
 	defer server.Close()
@@ -57,7 +57,7 @@ func TestEpisodesStagesBeforeApplyingAndDeletesOnlyManagedFiles(t *testing.T) {
 }
 
 func TestEpisodesDoesNotChangeDeviceWhenDownloadFails(t *testing.T) {
-	server := httptest.NewServer(http.NotFoundHandler())
+	server := httptest.NewTLSServer(http.NotFoundHandler())
 	defer server.Close()
 	root := t.TempDir()
 	old := filepath.Join(root, "Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3")
@@ -78,7 +78,7 @@ func TestEpisodesDoesNotChangeDeviceWhenDownloadFails(t *testing.T) {
 }
 
 func TestEpisodesSkipsUnsupportedMediaAndRemovesItFromPlaylists(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/video" {
 			w.Header().Set("Content-Type", "video/mp4")
 			_, _ = w.Write([]byte("video"))
@@ -116,7 +116,7 @@ func TestEpisodesSkipsUnsupportedMediaAndRemovesItFromPlaylists(t *testing.T) {
 
 func TestEpisodesReusesExistingMatchingFile(t *testing.T) {
 	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
 		_, _ = w.Write([]byte("audio"))
 	}))
@@ -155,7 +155,7 @@ func TestEpisodesReusesExistingMatchingFile(t *testing.T) {
 
 func TestEpisodesReplacesExistingFileWhenEnclosureChanges(t *testing.T) {
 	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
 		_, _ = w.Write([]byte("replacement audio"))
 	}))
@@ -192,7 +192,7 @@ func TestEpisodesReplacesExistingFileWhenEnclosureChanges(t *testing.T) {
 
 func TestEpisodesReplacesExistingMP3WithWrongKnownSize(t *testing.T) {
 	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
 		_, _ = w.Write([]byte("audio"))
 	}))
@@ -222,7 +222,7 @@ func TestEpisodesReplacesExistingMP3WithWrongKnownSize(t *testing.T) {
 
 func TestEpisodesFastPathDoesNotInspectExistingMP3(t *testing.T) {
 	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
 		_, _ = w.Write([]byte("unexpected download"))
 	}))
@@ -253,7 +253,7 @@ func TestEpisodesFastPathDoesNotInspectExistingMP3(t *testing.T) {
 
 func TestEpisodesRedownloadsUnreadableExistingMP3(t *testing.T) {
 	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
 		_, _ = w.Write([]byte("replacement audio"))
 	}))
@@ -285,7 +285,7 @@ func TestEpisodesRedownloadsUnreadableExistingMP3(t *testing.T) {
 }
 
 func TestEpisodesKeepsUnreadableExistingMP3WhenRedownloadFails(t *testing.T) {
-	server := httptest.NewServer(http.NotFoundHandler())
+	server := httptest.NewTLSServer(http.NotFoundHandler())
 	defer server.Close()
 
 	root := t.TempDir()

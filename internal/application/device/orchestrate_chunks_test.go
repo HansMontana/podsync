@@ -31,7 +31,7 @@ func TestMissingEpisodeChunksUsesEpisodeFallbackLimit(t *testing.T) {
 }
 
 func TestChunkedSyncResumesBeforeFinalization(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("audio"))
 	}))
 	defer server.Close()
@@ -88,7 +88,7 @@ func TestChunkedSyncResumesBeforeFinalization(t *testing.T) {
 }
 
 func TestSingleBatchInterruptionPreservesPendingOwnership(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("audio"))
 	}))
 	defer server.Close()
@@ -172,7 +172,7 @@ func TestChunkedSyncRecoversAfterFinalizationInterruption(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				_, _ = w.Write([]byte("audio"))
 			}))
 			defer server.Close()

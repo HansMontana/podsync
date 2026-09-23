@@ -32,7 +32,6 @@ func TestNormalizeURLRemovesDefaultPorts(t *testing.T) {
 		raw  string
 		want string
 	}{
-		{raw: "http://example.com:80/feed.xml", want: "http://example.com/feed.xml"},
 		{raw: "https://example.com:443/feed.xml", want: "https://example.com/feed.xml"},
 	} {
 		got, err := NormalizeURL(test.raw)
@@ -42,6 +41,15 @@ func TestNormalizeURLRemovesDefaultPorts(t *testing.T) {
 		if got != test.want {
 			t.Fatalf("NormalizeURL(%q) = %q, want %q", test.raw, got, test.want)
 		}
+	}
+}
+
+func TestValidateRemoteURLRequiresHTTPS(t *testing.T) {
+	if err := ValidateRemoteURL("http://example.com/feed.xml"); err == nil {
+		t.Fatal("ValidateRemoteURL() accepted HTTP")
+	}
+	if err := ValidateRemoteURL("https://example.com/feed.xml"); err != nil {
+		t.Fatalf("ValidateRemoteURL() rejected HTTPS: %v", err)
 	}
 }
 

@@ -42,6 +42,9 @@ func episode(ctx context.Context, client *http.Client, e catalog.Episode, stagin
 	if e.Enclosure.URL == "" {
 		return "", fmt.Errorf("episode has no audio URL")
 	}
+	if err := catalog.ValidateRemoteURL(e.Enclosure.URL); err != nil {
+		return "", fmt.Errorf("validate audio URL: %w", err)
+	}
 	if client == nil {
 		client = http.DefaultClient
 	}
