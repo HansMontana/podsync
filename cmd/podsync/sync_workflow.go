@@ -11,13 +11,13 @@ import (
 	"strings"
 
 	devicefs "github.com/HansMontana/podsync/internal/adapters/devicefs"
+	"github.com/HansMontana/podsync/internal/adapters/logging"
 	"github.com/HansMontana/podsync/internal/adapters/media"
 	"github.com/HansMontana/podsync/internal/adapters/playlists"
 	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
 	applicationdevice "github.com/HansMontana/podsync/internal/application/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/domain/curation"
-	"github.com/HansMontana/podsync/internal/logging"
 )
 
 type syncOptions struct {

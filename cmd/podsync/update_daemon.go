@@ -13,7 +13,7 @@ import (
 	"time"
 
 	devicefs "github.com/HansMontana/podsync/internal/adapters/devicefs"
-	"github.com/HansMontana/podsync/internal/logging"
+	"github.com/HansMontana/podsync/internal/adapters/logging"
 )
 
 func update(ctx context.Context, args []string) error {

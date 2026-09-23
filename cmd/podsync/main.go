@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/HansMontana/podsync/internal/logging"
+	"github.com/HansMontana/podsync/internal/adapters/logging"
 )
 
 var httpClient = &http.Client{Timeout: 10 * time.Minute}
