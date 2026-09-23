@@ -1,28 +1,27 @@
-package briefing
+package curation
 
 import (
 	"testing"
 	"time"
 
-	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/domain/playback"
 )
 
 func TestBuildOrdersBriefingSectionsAndLimitsEpisodes(t *testing.T) {
-	cfg := config.Config{
-		Sources: []config.SourceFeed{
+	cfg := Config{
+		Sources: []SourceFeed{
 			{ID: "one", URL: "https://example.com/one.xml"},
 			{ID: "two", URL: "https://example.com/two.xml"},
 		},
-		Feeds: []config.LogicalFeed{
-			{ID: "first", Source: "one", Order: config.NewestFirst},
-			{ID: "second", Source: "two", Order: config.NewestFirst},
+		Feeds: []LogicalFeed{
+			{ID: "first", Source: "one", Order: NewestFirst},
+			{ID: "second", Source: "two", Order: NewestFirst},
 		},
-		Briefings: []config.Briefing{
-			{ID: "morning", Sections: []config.BriefingSection{
-				{Feed: "first", Order: config.OldestFirst, Limit: 1, UnplayedOnly: true},
-				{Feed: "second", Order: config.NewestFirst, Limit: 2},
+		Briefings: []Briefing{
+			{ID: "morning", Sections: []BriefingSection{
+				{Feed: "first", Order: OldestFirst, Limit: 1, UnplayedOnly: true},
+				{Feed: "second", Order: NewestFirst, Limit: 2},
 			}},
 		},
 	}
@@ -44,12 +43,12 @@ func TestBuildOrdersBriefingSectionsAndLimitsEpisodes(t *testing.T) {
 }
 
 func TestBuildSkipsOnlyPlayedBriefingSection(t *testing.T) {
-	cfg := config.Config{
-		Sources: []config.SourceFeed{{ID: "one", URL: "https://example.com/one.xml"}, {ID: "two", URL: "https://example.com/two.xml"}},
-		Feeds:   []config.LogicalFeed{{ID: "first", Source: "one", Order: config.NewestFirst}, {ID: "second", Source: "two", Order: config.NewestFirst}},
-		Briefings: []config.Briefing{{ID: "morning", Sections: []config.BriefingSection{
-			{Feed: "first", Order: config.NewestFirst, Limit: 1, UnplayedOnly: true},
-			{Feed: "second", Order: config.NewestFirst, Limit: 1, UnplayedOnly: true},
+	cfg := Config{
+		Sources: []SourceFeed{{ID: "one", URL: "https://example.com/one.xml"}, {ID: "two", URL: "https://example.com/two.xml"}},
+		Feeds:   []LogicalFeed{{ID: "first", Source: "one", Order: NewestFirst}, {ID: "second", Source: "two", Order: NewestFirst}},
+		Briefings: []Briefing{{ID: "morning", Sections: []BriefingSection{
+			{Feed: "first", Order: NewestFirst, Limit: 1, UnplayedOnly: true},
+			{Feed: "second", Order: NewestFirst, Limit: 1, UnplayedOnly: true},
 		}}},
 	}
 	first := catalog.Episode{FeedID: 1, GUID: "first", PublishedAt: time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)}

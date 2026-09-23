@@ -6,7 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/HansMontana/podsync/internal/config"
+	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
+	"github.com/HansMontana/podsync/internal/domain/curation"
 	"github.com/HansMontana/podsync/internal/state"
 )
 
@@ -17,7 +18,7 @@ func TestRealFeedCLIWorkflow(t *testing.T) {
 
 	root := t.TempDir()
 	configPath := filepath.Join("..", "..", "examples", "daily-briefing.toml")
-	expected, err := config.Load(configPath)
+	expected, err := tomlconfig.Load(configPath)
 	if err != nil {
 		t.Fatalf("load daily briefing example: %v", err)
 	}
@@ -73,7 +74,7 @@ func TestRealFeedCLIWorkflow(t *testing.T) {
 	}
 
 	added := expected
-	added.Sources = append(added.Sources, config.SourceFeed{
+	added.Sources = append(added.Sources, curation.SourceFeed{
 		ID:  "nightvale",
 		URL: "https://feeds.megaphone.fm/SBP4591212513",
 	})
@@ -94,7 +95,7 @@ func TestRealFeedCLIWorkflow(t *testing.T) {
 
 	podcastRoot := t.TempDir()
 	podcastConfigPath := filepath.Join("..", "..", "examples", "podcasts.toml")
-	podcastExpected, err := config.Load(podcastConfigPath)
+	podcastExpected, err := tomlconfig.Load(podcastConfigPath)
 	if err != nil {
 		t.Fatalf("load podcasts example: %v", err)
 	}
@@ -122,10 +123,10 @@ func TestRealFeedCLIWorkflow(t *testing.T) {
 	}
 }
 
-func assertDeviceConfig(t *testing.T, root string, want config.Config) {
+func assertDeviceConfig(t *testing.T, root string, want curation.Config) {
 	t.Helper()
 
-	got, err := config.Load(filepath.Join(root, "Podsync", "podsync.toml"))
+	got, err := tomlconfig.Load(filepath.Join(root, "Podsync", "podsync.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,15 +1,10 @@
-package config
+package curation
 
 import (
-	"bytes"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
-	"github.com/BurntSushi/toml"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
 
@@ -21,105 +16,45 @@ const (
 )
 
 type Config struct {
-	Sources   []SourceFeed  `toml:"source"`
-	Feeds     []LogicalFeed `toml:"feed"`
-	Briefings []Briefing    `toml:"briefing"`
+	Sources   []SourceFeed
+	Feeds     []LogicalFeed
+	Briefings []Briefing
 }
 
 type SourceFeed struct {
-	ID  string `toml:"id"`
-	URL string `toml:"url"`
+	ID  string
+	URL string
 }
 
 type LogicalFeed struct {
-	ID           string `toml:"id"`
-	Title        string `toml:"title"`
-	Artist       string `toml:"artist"`
-	Source       string `toml:"source"`
-	Archive      bool   `toml:"archive"`
-	Order        Order  `toml:"order"`
-	Limit        int    `toml:"limit"`
-	UnplayedOnly bool   `toml:"unplayed_only"`
-	Filter       Filter `toml:"filter"`
+	ID           string
+	Title        string
+	Artist       string
+	Source       string
+	Archive      bool
+	Order        Order
+	Limit        int
+	UnplayedOnly bool
+	Filter       Filter
 }
 
 type Filter struct {
-	TitleContains       string   `toml:"title_contains"`
-	DescriptionContains string   `toml:"description_contains"`
-	TitleExcludes       []string `toml:"title_excludes"`
+	TitleContains       string
+	DescriptionContains string
+	TitleExcludes       []string
 }
 
 type Briefing struct {
-	ID       string            `toml:"id"`
-	Title    string            `toml:"title"`
-	Sections []BriefingSection `toml:"section"`
+	ID       string
+	Title    string
+	Sections []BriefingSection
 }
 
 type BriefingSection struct {
-	Feed         string `toml:"feed"`
-	Order        Order  `toml:"order"`
-	Limit        int    `toml:"limit"`
-	UnplayedOnly bool   `toml:"unplayed_only"`
-}
-
-func Load(path string) (Config, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return Config{}, fmt.Errorf("open config: %w", err)
-	}
-	defer file.Close()
-
-	return Parse(file)
-}
-
-// Save validates and atomically writes configuration to path.
-func Save(path string, cfg Config) error {
-	if err := cfg.Validate(); err != nil {
-		return fmt.Errorf("validate config: %w", err)
-	}
-	var encoded bytes.Buffer
-	if err := toml.NewEncoder(&encoded).Encode(cfg); err != nil {
-		return fmt.Errorf("encode config: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create config directory: %w", err)
-	}
-	temporary, err := os.CreateTemp(filepath.Dir(path), ".podsync-config-*")
-	if err != nil {
-		return fmt.Errorf("create temporary config: %w", err)
-	}
-	temporaryPath := temporary.Name()
-	defer os.Remove(temporaryPath)
-	if err := temporary.Chmod(0o644); err != nil {
-		_ = temporary.Close()
-		return fmt.Errorf("set config permissions: %w", err)
-	}
-	if _, err := temporary.Write(encoded.Bytes()); err != nil {
-		_ = temporary.Close()
-		return fmt.Errorf("write temporary config: %w", err)
-	}
-	if err := temporary.Close(); err != nil {
-		return fmt.Errorf("close temporary config: %w", err)
-	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		return fmt.Errorf("install config: %w", err)
-	}
-	return nil
-}
-
-func Parse(r io.Reader) (Config, error) {
-	var cfg Config
-	metadata, err := toml.NewDecoder(r).Decode(&cfg)
-	if err != nil {
-		return Config{}, fmt.Errorf("decode config: %w", err)
-	}
-	if undecoded := metadata.Undecoded(); len(undecoded) > 0 {
-		return Config{}, fmt.Errorf("unknown configuration key %q", undecoded[0])
-	}
-	if err := cfg.Validate(); err != nil {
-		return Config{}, fmt.Errorf("validate config: %w", err)
-	}
-	return cfg, nil
+	Feed         string
+	Order        Order
+	Limit        int
+	UnplayedOnly bool
 }
 
 func (c Config) Validate() error {

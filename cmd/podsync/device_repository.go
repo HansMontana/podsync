@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/HansMontana/podsync/internal/config"
+	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
+	"github.com/HansMontana/podsync/internal/domain/curation"
 	"github.com/HansMontana/podsync/internal/state"
 	syncer "github.com/HansMontana/podsync/internal/sync"
 )
@@ -31,14 +32,14 @@ func (r *lockedRepository) Close() error {
 	return lockErr
 }
 
-func openDevice(root, configPath string, readOnly, persistConfig bool) (device.Layout, state.Repository, config.Config, error) {
+func openDevice(root, configPath string, readOnly, persistConfig bool) (device.Layout, state.Repository, curation.Config, error) {
 	return openDeviceWithLock(root, configPath, readOnly, persistConfig, nil)
 }
 
-func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, lock *device.Lock) (device.Layout, state.Repository, config.Config, error) {
+func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, lock *device.Lock) (device.Layout, state.Repository, curation.Config, error) {
 	layout, repository, err := openRepositoryModeWithLock(root, readOnly, lock)
 	if err != nil {
-		return layout, nil, config.Config{}, err
+		return layout, nil, curation.Config{}, err
 	}
 	if configPath == "" {
 		configPath = layout.ConfigPath()
@@ -46,18 +47,18 @@ func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, l
 	if configPath == layout.ConfigPath() {
 		if err := device.RejectSymlink(configPath); err != nil {
 			_ = repository.Close()
-			return layout, nil, config.Config{}, err
+			return layout, nil, curation.Config{}, err
 		}
 	}
-	cfg, err := config.Load(configPath)
+	cfg, err := tomlconfig.Load(configPath)
 	if err != nil {
 		_ = repository.Close()
-		return layout, nil, config.Config{}, err
+		return layout, nil, curation.Config{}, err
 	}
 	if !readOnly && persistConfig && configPath != layout.ConfigPath() {
-		if err := config.Save(layout.ConfigPath(), cfg); err != nil {
+		if err := tomlconfig.Save(layout.ConfigPath(), cfg); err != nil {
 			_ = repository.Close()
-			return layout, nil, config.Config{}, fmt.Errorf("save device config: %w", err)
+			return layout, nil, curation.Config{}, fmt.Errorf("save device config: %w", err)
 		}
 	}
 	return layout, repository, cfg, nil
@@ -146,7 +147,7 @@ func openRepositoryModeWithLock(root string, readOnly bool, heldLock *device.Loc
 	return layout, repository, nil
 }
 
-func reconcileState(repository state.Repository, cfg config.Config) error {
+func reconcileState(repository state.Repository, cfg curation.Config) error {
 	current, err := repository.Load()
 	if err != nil {
 		return err
@@ -161,7 +162,7 @@ func reconcileState(repository state.Repository, cfg config.Config) error {
 	return nil
 }
 
-func refreshRequests(current catalog.Catalog, cfg config.Config) ([]syncer.RefreshRequest, error) {
+func refreshRequests(current catalog.Catalog, cfg curation.Config) ([]syncer.RefreshRequest, error) {
 	byURL := make(map[string]int64, len(current.Feeds))
 	for _, known := range current.Feeds {
 		normalized, err := catalog.NormalizeURL(known.URL)

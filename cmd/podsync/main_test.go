@@ -13,8 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HansMontana/podsync/internal/config"
+	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
 	"github.com/HansMontana/podsync/internal/device"
+	"github.com/HansMontana/podsync/internal/domain/curation"
 	"github.com/HansMontana/podsync/internal/state"
 )
 
@@ -170,11 +171,11 @@ func TestRefreshAndSyncCommandsUseDeviceStateAndStaging(t *testing.T) {
 
 	root := t.TempDir()
 	hostConfig := filepath.Join(t.TempDir(), "config.toml")
-	cfg := config.Config{
-		Sources: []config.SourceFeed{{ID: "news", URL: server.URL + "/feed.xml"}},
-		Feeds:   []config.LogicalFeed{{ID: "news", Source: "news", Order: config.NewestFirst}},
+	cfg := curation.Config{
+		Sources: []curation.SourceFeed{{ID: "news", URL: server.URL + "/feed.xml"}},
+		Feeds:   []curation.LogicalFeed{{ID: "news", Source: "news", Order: curation.NewestFirst}},
 	}
-	if err := config.Save(hostConfig, cfg); err != nil {
+	if err := tomlconfig.Save(hostConfig, cfg); err != nil {
 		t.Fatal(err)
 	}
 	if err := run([]string{"refresh", "-device-root", root, "-config", hostConfig}); err != nil {
@@ -238,11 +239,11 @@ func TestUpdateCommandRunsDeepVerificationByDefaultAndSupportsOptOut(t *testing.
 
 	root := t.TempDir()
 	hostConfig := filepath.Join(t.TempDir(), "config.toml")
-	cfg := config.Config{
-		Sources: []config.SourceFeed{{ID: "news", URL: server.URL + "/feed.xml"}},
-		Feeds:   []config.LogicalFeed{{ID: "news", Title: "News", Source: "news", Order: config.NewestFirst}},
+	cfg := curation.Config{
+		Sources: []curation.SourceFeed{{ID: "news", URL: server.URL + "/feed.xml"}},
+		Feeds:   []curation.LogicalFeed{{ID: "news", Title: "News", Source: "news", Order: curation.NewestFirst}},
 	}
-	if err := config.Save(hostConfig, cfg); err != nil {
+	if err := tomlconfig.Save(hostConfig, cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -270,11 +271,11 @@ func TestUpdateStopsWhenRefreshFails(t *testing.T) {
 
 	root := t.TempDir()
 	hostConfig := filepath.Join(t.TempDir(), "config.toml")
-	cfg := config.Config{
-		Sources: []config.SourceFeed{{ID: "news", URL: server.URL + "/feed.xml"}},
-		Feeds:   []config.LogicalFeed{{ID: "news", Title: "News", Source: "news", Order: config.NewestFirst}},
+	cfg := curation.Config{
+		Sources: []curation.SourceFeed{{ID: "news", URL: server.URL + "/feed.xml"}},
+		Feeds:   []curation.LogicalFeed{{ID: "news", Title: "News", Source: "news", Order: curation.NewestFirst}},
 	}
-	if err := config.Save(hostConfig, cfg); err != nil {
+	if err := tomlconfig.Save(hostConfig, cfg); err != nil {
 		t.Fatal(err)
 	}
 	if err := run([]string{"update", "-device-root", root, "-config", hostConfig}); err == nil {
@@ -288,8 +289,8 @@ func TestUpdateStopsWhenRefreshFails(t *testing.T) {
 func TestFeedCommandsManageDeviceConfiguration(t *testing.T) {
 	root := t.TempDir()
 	hostConfig := filepath.Join(t.TempDir(), "config.toml")
-	cfg := config.Config{Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}}}
-	if err := config.Save(hostConfig, cfg); err != nil {
+	cfg := curation.Config{Sources: []curation.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}}}
+	if err := tomlconfig.Save(hostConfig, cfg); err != nil {
 		t.Fatal(err)
 	}
 	if err := run([]string{"reconcile", "-device-root", root, "-config", hostConfig}); err != nil {
@@ -298,14 +299,14 @@ func TestFeedCommandsManageDeviceConfiguration(t *testing.T) {
 	if err := run([]string{"feed", "add", "-device-root", root, "-id", "sports", "-url", "https://example.com/sports.xml"}); err != nil {
 		t.Fatalf("feed add command failed: %v", err)
 	}
-	updated, err := config.Load(filepath.Join(root, "Podsync", "podsync.toml"))
+	updated, err := tomlconfig.Load(filepath.Join(root, "Podsync", "podsync.toml"))
 	if err != nil || len(updated.Sources) != 2 {
 		t.Fatalf("got updated config %+v, error %v", updated, err)
 	}
 	if err := run([]string{"feed", "remove", "-device-root", root, "-id", "sports"}); err != nil {
 		t.Fatalf("feed remove command failed: %v", err)
 	}
-	updated, err = config.Load(filepath.Join(root, "Podsync", "podsync.toml"))
+	updated, err = tomlconfig.Load(filepath.Join(root, "Podsync", "podsync.toml"))
 	if err != nil || len(updated.Sources) != 1 {
 		t.Fatalf("got final config %+v, error %v", updated, err)
 	}
@@ -314,11 +315,11 @@ func TestFeedCommandsManageDeviceConfiguration(t *testing.T) {
 func TestStandalonePlaylistDoesNotPromoteUnrelatedPendingOwnership(t *testing.T) {
 	root := t.TempDir()
 	hostConfig := filepath.Join(t.TempDir(), "config.toml")
-	cfg := config.Config{
-		Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
-		Feeds:   []config.LogicalFeed{{ID: "news", Source: "news", Order: config.NewestFirst}},
+	cfg := curation.Config{
+		Sources: []curation.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
+		Feeds:   []curation.LogicalFeed{{ID: "news", Source: "news", Order: curation.NewestFirst}},
 	}
-	if err := config.Save(hostConfig, cfg); err != nil {
+	if err := tomlconfig.Save(hostConfig, cfg); err != nil {
 		t.Fatal(err)
 	}
 	if err := run([]string{"reconcile", "-device-root", root, "-config", hostConfig}); err != nil {
@@ -361,9 +362,9 @@ func TestSyncFailureDoesNotPersistSuppliedConfiguration(t *testing.T) {
 	defer server.Close()
 
 	root := t.TempDir()
-	original := config.Config{Sources: []config.SourceFeed{{ID: "news", URL: server.URL + "/feed.xml"}}, Feeds: []config.LogicalFeed{{ID: "news", Source: "news", Order: config.NewestFirst}}}
+	original := curation.Config{Sources: []curation.SourceFeed{{ID: "news", URL: server.URL + "/feed.xml"}}, Feeds: []curation.LogicalFeed{{ID: "news", Source: "news", Order: curation.NewestFirst}}}
 	originalPath := filepath.Join(t.TempDir(), "original.toml")
-	if err := config.Save(originalPath, original); err != nil {
+	if err := tomlconfig.Save(originalPath, original); err != nil {
 		t.Fatal(err)
 	}
 	if err := run([]string{"refresh", "-device-root", root, "-config", originalPath}); err != nil {
@@ -374,9 +375,9 @@ func TestSyncFailureDoesNotPersistSuppliedConfiguration(t *testing.T) {
 		t.Fatal(err)
 	}
 	updated := original
-	updated.Sources = append(updated.Sources, config.SourceFeed{ID: "sports", URL: "https://example.com/sports.xml"})
+	updated.Sources = append(updated.Sources, curation.SourceFeed{ID: "sports", URL: "https://example.com/sports.xml"})
 	updatedPath := filepath.Join(t.TempDir(), "updated.toml")
-	if err := config.Save(updatedPath, updated); err != nil {
+	if err := tomlconfig.Save(updatedPath, updated); err != nil {
 		t.Fatal(err)
 	}
 	if err := run([]string{"sync", "-device-root", root, "-config", updatedPath}); err == nil {

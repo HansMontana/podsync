@@ -1,12 +1,10 @@
-package briefing
+package curation
 
 import (
 	"fmt"
 
-	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/domain/playback"
-	"github.com/HansMontana/podsync/internal/selection"
 )
 
 type Plan struct {
@@ -15,8 +13,8 @@ type Plan struct {
 	Episodes []catalog.Episode
 }
 
-func Build(cfg config.Config, current catalog.Catalog, briefingID string, playbackStates map[string]playback.State) (Plan, error) {
-	var briefingConfig *config.Briefing
+func Build(cfg Config, current catalog.Catalog, briefingID string, playbackStates map[string]playback.State) (Plan, error) {
+	var briefingConfig *Briefing
 	for i := range cfg.Briefings {
 		if cfg.Briefings[i].ID == briefingID {
 			briefingConfig = &cfg.Briefings[i]
@@ -29,7 +27,7 @@ func Build(cfg config.Config, current catalog.Catalog, briefingID string, playba
 
 	plan := Plan{ID: briefingConfig.ID, Title: briefingConfig.Title}
 	for _, section := range briefingConfig.Sections {
-		episodes, err := selection.FeedOrdered(cfg, current, section.Feed, playbackStates, false, section.Order)
+		episodes, err := FeedOrdered(cfg, current, section.Feed, playbackStates, false, section.Order)
 		if err != nil {
 			return Plan{}, fmt.Errorf("briefing %q section %q: %w", briefingID, section.Feed, err)
 		}

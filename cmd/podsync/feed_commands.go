@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/HansMontana/podsync/internal/config"
+	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
+	"github.com/HansMontana/podsync/internal/domain/curation"
 	syncer "github.com/HansMontana/podsync/internal/sync"
 )
 
@@ -75,12 +76,12 @@ func addFeed(ctx context.Context, args []string) error {
 		return err
 	}
 	defer repository.Close()
-	cfg.Sources = append(cfg.Sources, config.SourceFeed{ID: *id, URL: *feedURL})
+	cfg.Sources = append(cfg.Sources, curation.SourceFeed{ID: *id, URL: *feedURL})
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
 	if err := saveConfigThenState(
-		func() error { return config.Save(layout.ConfigPath(), cfg) },
+		func() error { return tomlconfig.Save(layout.ConfigPath(), cfg) },
 		func() error { return reconcileState(repository, cfg) },
 	); err != nil {
 		return err
@@ -160,7 +161,7 @@ func removeFeed(ctx context.Context, args []string) error {
 	current.Episodes = episodes
 	if err := saveStateThenConfig(
 		func() error { return repository.Save(current) },
-		func() error { return config.Save(layout.ConfigPath(), cfg) },
+		func() error { return tomlconfig.Save(layout.ConfigPath(), cfg) },
 		func() error { return repository.Save(previous) },
 	); err != nil {
 		return err
@@ -203,7 +204,7 @@ func validateConfig(args []string) error {
 	if *configPath == "" {
 		return fmt.Errorf("-config is required")
 	}
-	if _, err := config.Load(*configPath); err != nil {
+	if _, err := tomlconfig.Load(*configPath); err != nil {
 		return err
 	}
 	commandLogger("config").Info("Configuration is valid")

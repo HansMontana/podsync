@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
+	"github.com/HansMontana/podsync/internal/domain/curation"
 	"github.com/HansMontana/podsync/internal/domain/playback"
 )
 
@@ -31,9 +31,9 @@ func TestFilenameUsesReadableSafeTitle(t *testing.T) {
 }
 
 func TestLogicalFeedUsesStableDevicePathsAndConfiguredOrder(t *testing.T) {
-	cfg := config.Config{
-		Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
-		Feeds:   []config.LogicalFeed{{ID: "world", Source: "news", Order: config.OldestFirst, Limit: 1}},
+	cfg := curation.Config{
+		Sources: []curation.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
+		Feeds:   []curation.LogicalFeed{{ID: "world", Source: "news", Order: curation.OldestFirst, Limit: 1}},
 	}
 	current := catalog.Catalog{
 		Feeds: []catalog.Feed{{ID: 1, URL: "https://example.com/news.xml"}},

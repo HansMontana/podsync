@@ -1,19 +1,18 @@
-package selection
+package curation
 
 import (
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/HansMontana/podsync/internal/config"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/domain/playback"
 )
 
 func TestFeedSelectsNewestUnplayedEpisodesAndFilters(t *testing.T) {
-	cfg := config.Config{
-		Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
-		Feeds:   []config.LogicalFeed{{ID: "world", Source: "news", Order: config.NewestFirst, Filter: config.Filter{TitleContains: "World"}}},
+	cfg := Config{
+		Sources: []SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
+		Feeds:   []LogicalFeed{{ID: "world", Source: "news", Order: NewestFirst, Filter: Filter{TitleContains: "World"}}},
 	}
 	newest := catalog.Episode{FeedID: 1, GUID: "new", Title: "World latest", PublishedAt: time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)}
 	oldest := catalog.Episode{FeedID: 1, GUID: "old", Title: "World earlier", PublishedAt: time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)}
@@ -31,9 +30,9 @@ func TestFeedSelectsNewestUnplayedEpisodesAndFilters(t *testing.T) {
 }
 
 func TestFeedTreatsUnknownPlaybackAsUnplayed(t *testing.T) {
-	cfg := config.Config{
-		Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
-		Feeds:   []config.LogicalFeed{{ID: "news", Source: "news", Order: config.OldestFirst}},
+	cfg := Config{
+		Sources: []SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
+		Feeds:   []LogicalFeed{{ID: "news", Source: "news", Order: OldestFirst}},
 	}
 	episodeValue := catalog.Episode{FeedID: 1, GUID: "episode-1", PublishedAt: time.Now()}
 	got, err := Feed(cfg, catalog.Catalog{Feeds: []catalog.Feed{{ID: 1, URL: "https://example.com/news.xml"}}, Episodes: []catalog.Episode{episodeValue}}, "news", nil, true)
@@ -46,9 +45,9 @@ func TestFeedTreatsUnknownPlaybackAsUnplayed(t *testing.T) {
 }
 
 func TestFeedSupportsOldestFirst(t *testing.T) {
-	cfg := config.Config{
-		Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
-		Feeds:   []config.LogicalFeed{{ID: "news", Source: "news", Order: config.OldestFirst}},
+	cfg := Config{
+		Sources: []SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
+		Feeds:   []LogicalFeed{{ID: "news", Source: "news", Order: OldestFirst}},
 	}
 	earlier := catalog.Episode{FeedID: 1, GUID: "earlier", PublishedAt: time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)}
 	later := catalog.Episode{FeedID: 1, GUID: "later", PublishedAt: time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)}
@@ -62,9 +61,9 @@ func TestFeedSupportsOldestFirst(t *testing.T) {
 }
 
 func TestFeedForSyncSelectsNewestEpisodesRegardlessOfPlaylistOrder(t *testing.T) {
-	cfg := config.Config{
-		Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
-		Feeds:   []config.LogicalFeed{{ID: "news", Source: "news", Order: config.OldestFirst, Limit: 2}},
+	cfg := Config{
+		Sources: []SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
+		Feeds:   []LogicalFeed{{ID: "news", Source: "news", Order: OldestFirst, Limit: 2}},
 	}
 	episodes := []catalog.Episode{
 		{FeedID: 1, GUID: "oldest", PublishedAt: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)},
@@ -81,9 +80,9 @@ func TestFeedForSyncSelectsNewestEpisodesRegardlessOfPlaylistOrder(t *testing.T)
 }
 
 func TestArchiveFeedIgnoresLimitAndPlaybackFilters(t *testing.T) {
-	cfg := config.Config{
-		Sources: []config.SourceFeed{{ID: "archive", URL: "https://example.com/archive.xml"}},
-		Feeds:   []config.LogicalFeed{{ID: "archive", Source: "archive", Archive: true, Limit: 1, UnplayedOnly: true}},
+	cfg := Config{
+		Sources: []SourceFeed{{ID: "archive", URL: "https://example.com/archive.xml"}},
+		Feeds:   []LogicalFeed{{ID: "archive", Source: "archive", Archive: true, Limit: 1, UnplayedOnly: true}},
 	}
 	episodes := []catalog.Episode{
 		{FeedID: 1, GUID: "old", PublishedAt: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)},
@@ -101,9 +100,9 @@ func TestArchiveFeedIgnoresLimitAndPlaybackFilters(t *testing.T) {
 }
 
 func TestFeedUnplayedLimitBackfillsOlderEpisodes(t *testing.T) {
-	cfg := config.Config{
-		Sources: []config.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
-		Feeds:   []config.LogicalFeed{{ID: "news", Source: "news", Order: config.NewestFirst, Limit: 5, UnplayedOnly: true}},
+	cfg := Config{
+		Sources: []SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
+		Feeds:   []LogicalFeed{{ID: "news", Source: "news", Order: NewestFirst, Limit: 5, UnplayedOnly: true}},
 	}
 	episodes := make([]catalog.Episode, 0, 6)
 	playbackStates := make(map[string]playback.State)

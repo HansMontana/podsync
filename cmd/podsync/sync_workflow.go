@@ -10,14 +10,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/HansMontana/podsync/internal/briefing"
-	"github.com/HansMontana/podsync/internal/config"
+	"github.com/HansMontana/podsync/internal/adapters/tomlconfig"
 	"github.com/HansMontana/podsync/internal/device"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
+	"github.com/HansMontana/podsync/internal/domain/curation"
 	"github.com/HansMontana/podsync/internal/logging"
 	"github.com/HansMontana/podsync/internal/media"
 	"github.com/HansMontana/podsync/internal/playlists"
-	"github.com/HansMontana/podsync/internal/selection"
 	syncer "github.com/HansMontana/podsync/internal/sync"
 )
 
@@ -98,7 +97,7 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		feedNames[known.ID] = known.Name
 	}
 	for _, logical := range cfg.Feeds {
-		episodes, selectErr := selection.FeedForSync(cfg, current, logical.ID, states, false)
+		episodes, selectErr := curation.FeedForSync(cfg, current, logical.ID, states, false)
 		if selectErr != nil {
 			return selectErr
 		}
@@ -112,7 +111,7 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		playlistFiles = append(playlistFiles, syncer.PlaylistFile{Relative: path.Join("Playlists", playlists.Filename(logical.Title, logical.ID)+".m3u8"), Content: content})
 	}
 	for _, configured := range cfg.Briefings {
-		plan, generateErr := briefing.Build(cfg, current, configured.ID, states)
+		plan, generateErr := curation.Build(cfg, current, configured.ID, states)
 		if generateErr != nil {
 			return generateErr
 		}
@@ -220,7 +219,7 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		return fmt.Errorf("before persisting sync state: %w", err)
 	}
 	if configProvided {
-		if err := config.Save(layout.ConfigPath(), cfg); err != nil {
+		if err := tomlconfig.Save(layout.ConfigPath(), cfg); err != nil {
 			return fmt.Errorf("save device config: %w", err)
 		}
 	}

@@ -1,4 +1,4 @@
-package config
+package tomlconfig
 
 import (
 	"path/filepath"
@@ -7,17 +7,18 @@ import (
 	"testing"
 
 	"github.com/HansMontana/podsync/internal/domain/catalog"
+	"github.com/HansMontana/podsync/internal/domain/curation"
 )
 
 func TestSaveAndLoadRoundTrip(t *testing.T) {
 	path := t.TempDir() + "/Podsync/podsync.toml"
-	want := Config{
-		Sources: []SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
-		Feeds:   []LogicalFeed{{ID: "world", Title: "World", Source: "news", Order: NewestFirst}},
-		Briefings: []Briefing{{
+	want := curation.Config{
+		Sources: []curation.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
+		Feeds:   []curation.LogicalFeed{{ID: "world", Title: "World", Source: "news", Order: curation.NewestFirst}},
+		Briefings: []curation.Briefing{{
 			ID:       "morning",
 			Title:    "Morning",
-			Sections: []BriefingSection{{Feed: "world", Order: OldestFirst, Limit: 3, UnplayedOnly: true}},
+			Sections: []curation.BriefingSection{{Feed: "world", Order: curation.OldestFirst, Limit: 3, UnplayedOnly: true}},
 		}},
 	}
 	if err := Save(path, want); err != nil {
@@ -74,7 +75,7 @@ unplayed_only = true
 func TestExampleConfigsParseAndValidate(t *testing.T) {
 	for _, name := range []string{"podcasts.toml", "daily-briefing.toml"} {
 		t.Run(name, func(t *testing.T) {
-			path := filepath.Join("..", "..", "examples", name)
+			path := filepath.Join("..", "..", "..", "examples", name)
 			if _, err := Load(path); err != nil {
 				t.Fatalf("Load(%q) returned error: %v", path, err)
 			}
@@ -83,7 +84,7 @@ func TestExampleConfigsParseAndValidate(t *testing.T) {
 }
 
 func TestEnsureSourcesAddsMissingFeedsAndPreservesExistingMetadata(t *testing.T) {
-	cfg := Config{Sources: []SourceFeed{
+	cfg := curation.Config{Sources: []curation.SourceFeed{
 		{ID: "existing", URL: "https://example.com/existing.xml"},
 		{ID: "new", URL: "https://example.com/new.xml"},
 	}}
@@ -102,7 +103,7 @@ func TestEnsureSourcesAddsMissingFeedsAndPreservesExistingMetadata(t *testing.T)
 }
 
 func TestConfigFilterMatchesCaseInsensitively(t *testing.T) {
-	filter := Filter{TitleContains: "world", DescriptionContains: "Politics"}
+	filter := curation.Filter{TitleContains: "world", DescriptionContains: "Politics"}
 	if !filter.Matches(catalog.Episode{Title: "WORLD today", Description: "Politics and context"}) {
 		t.Fatal("filter did not match episode")
 	}
