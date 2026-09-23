@@ -9,9 +9,9 @@ import (
 
 	devicefs "github.com/HansMontana/podsync/internal/adapters/devicefs"
 	"github.com/HansMontana/podsync/internal/adapters/media"
+	rockboxplayback "github.com/HansMontana/podsync/internal/adapters/rockbox"
 	"github.com/HansMontana/podsync/internal/domain/catalog"
 	"github.com/HansMontana/podsync/internal/domain/playback"
-	rockboxplayback "github.com/HansMontana/podsync/internal/playback"
 )
 
 func appendUnique(paths []string, value string) []string {

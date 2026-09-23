@@ -8,7 +8,7 @@ import (
 	devicefs "github.com/HansMontana/podsync/internal/adapters/devicefs"
 	"github.com/HansMontana/podsync/internal/adapters/media"
 	"github.com/HansMontana/podsync/internal/adapters/playlists"
-	"github.com/HansMontana/podsync/internal/playback"
+	"github.com/HansMontana/podsync/internal/adapters/rockbox"
 )
 
 func status(args []string) error {
@@ -39,7 +39,7 @@ func status(args []string) error {
 	if err != nil {
 		return err
 	}
-	states := playback.ForEpisodesWithResolver(current.Episodes, records, media.Resolver(logicalIDs))
+	states := rockbox.ForEpisodesWithResolver(current.Episodes, records, media.Resolver(logicalIDs))
 	played := 0
 	for _, state := range states {
 		if state.Played() {
