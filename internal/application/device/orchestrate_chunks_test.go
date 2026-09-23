@@ -30,6 +30,24 @@ func TestMissingEpisodeChunksUsesEpisodeFallbackLimit(t *testing.T) {
 	}
 }
 
+func TestPreparationProgressCountsEpisodesOnceAcrossBatches(t *testing.T) {
+	resolver := media.Resolver{1: "podcast"}
+	episodes := []catalog.Episode{
+		{FeedID: 1, GUID: "one"},
+		{FeedID: 1, GUID: "two"},
+	}
+	var reports [][2]int
+	progress := newPreparationProgress(len(episodes), resolver, func(completed, total int, current catalog.Episode, reused bool) {
+		reports = append(reports, [2]int{completed, total})
+	})
+	progress.Report(1, 1, episodes[0], false)
+	progress.Report(1, 1, episodes[0], true)
+	progress.Report(1, 1, episodes[1], true)
+	if len(reports) != 2 || reports[0] != [2]int{1, 2} || reports[1] != [2]int{2, 2} {
+		t.Fatalf("got progress reports %v", reports)
+	}
+}
+
 func TestChunkedSyncResumesBeforeFinalization(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("audio"))

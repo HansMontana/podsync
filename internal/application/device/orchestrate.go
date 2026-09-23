@@ -62,6 +62,7 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	preparationProgress := newPreparationProgress(len(episodes), resolver, progress)
 	signatures, err := options.Files.LoadMediaSignatures(deviceRoot)
 	if err != nil {
 		return fmt.Errorf("load media signatures: %w", err)
@@ -87,7 +88,7 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 	}
 	if len(chunks) <= 1 {
 		skipped := make(map[string]struct{})
-		err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, signatures, options, skipped, progress, fileProgress, warning)
+		err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, signatures, options, skipped, preparationProgress.Report, fileProgress, warning)
 		if err != nil {
 			return err
 		}
@@ -104,7 +105,7 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 	skipped := make(map[string]struct{})
 
 	for _, chunk := range chunks {
-		if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, chunk, nil, nil, feedNames, resolver, signatures, options, skipped, progress, fileProgress, warning); err != nil {
+		if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, chunk, nil, nil, feedNames, resolver, signatures, options, skipped, preparationProgress.Report, fileProgress, warning); err != nil {
 			return fmt.Errorf("apply episode chunk: %w", err)
 		}
 	}
@@ -114,7 +115,7 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 			remaining = append(remaining, current)
 		}
 	}
-	if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, remaining, filterSkippedPlaylists(playlists, skipped), managed, feedNames, resolver, signatures, options, skipped, progress, fileProgress, warning); err != nil {
+	if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, remaining, filterSkippedPlaylists(playlists, skipped), managed, feedNames, resolver, signatures, options, skipped, preparationProgress.Report, fileProgress, warning); err != nil {
 		return err
 	}
 	if err := options.Files.ClearPendingManagedPaths(deviceRoot); err != nil {
