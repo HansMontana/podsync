@@ -21,7 +21,7 @@ func TestMissingEpisodeChunksUsesEpisodeFallbackLimit(t *testing.T) {
 		episodes[i] = catalog.Episode{FeedID: 1, GUID: fmt.Sprintf("episode-%d", i), Enclosure: catalog.Enclosure{URL: "https://example.com/episode.mp3"}}
 	}
 
-	chunks, err := missingEpisodeChunks(t.TempDir(), episodes, media.Resolver{1: "podcast"}, realDeviceFiles())
+	chunks, err := missingEpisodeChunks(t.TempDir(), episodes, media.Resolver{1: "podcast"}, map[string]string{}, realDeviceFiles())
 	if err != nil {
 		t.Fatal(err)
 	}

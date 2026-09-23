@@ -49,6 +49,52 @@ func (l Layout) PendingManifestPath() string {
 	return filepath.Join(l.StateDirectory(), "pending-managed-files.txt")
 }
 
+func (l Layout) MediaSignaturesPath() string {
+	return filepath.Join(l.StateDirectory(), "media-signatures.json")
+}
+
+func (l Layout) LoadMediaSignatures() (map[string]string, error) {
+	if err := RejectSymlink(l.MediaSignaturesPath()); err != nil {
+		return nil, err
+	}
+	content, err := os.ReadFile(l.MediaSignaturesPath())
+	if os.IsNotExist(err) {
+		return map[string]string{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read media signatures: %w", err)
+	}
+	var signatures map[string]string
+	if err := json.Unmarshal(content, &signatures); err != nil {
+		return nil, fmt.Errorf("decode media signatures: %w", err)
+	}
+	if signatures == nil {
+		signatures = map[string]string{}
+	}
+	for path := range signatures {
+		if err := validateOwnedPath(path); err != nil {
+			return nil, fmt.Errorf("validate media signature path: %w", err)
+		}
+	}
+	return signatures, nil
+}
+
+func (l Layout) SaveMediaSignatures(signatures map[string]string) error {
+	for path, signature := range signatures {
+		if err := validateOwnedPath(path); err != nil {
+			return fmt.Errorf("validate media signature path: %w", err)
+		}
+		if strings.TrimSpace(signature) == "" {
+			return fmt.Errorf("media signature for %q is empty", path)
+		}
+	}
+	content, err := json.Marshal(signatures)
+	if err != nil {
+		return fmt.Errorf("encode media signatures: %w", err)
+	}
+	return writeAtomic(l.MediaSignaturesPath(), content, 0o600, "media signatures")
+}
+
 func (l Layout) PendingFeedRemovalPath() string {
 	return filepath.Join(l.StateDirectory(), "pending-feed-removal.json")
 }

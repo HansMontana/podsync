@@ -31,6 +31,14 @@ func (Operations) ClearPendingManagedPaths(root string) error {
 	return (Layout{Root: root}).ClearPendingManagedPaths()
 }
 
+func (Operations) LoadMediaSignatures(root string) (map[string]string, error) {
+	return (Layout{Root: root}).LoadMediaSignatures()
+}
+
+func (Operations) SaveMediaSignatures(root string, signatures map[string]string) error {
+	return (Layout{Root: root}).SaveMediaSignatures(signatures)
+}
+
 func (Operations) BuildFilePlan(managed []string, copies []deviceport.FileCopy, playlists []deviceport.PlaylistFile, keep []string) (deviceport.FilePlan, error) {
 	technicalCopies := make([]FileCopy, len(copies))
 	for i, copy := range copies {

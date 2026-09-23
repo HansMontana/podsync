@@ -2,6 +2,8 @@ package device
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -59,7 +61,11 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 	if options.Files == nil {
 		return fmt.Errorf("device files are required")
 	}
-	chunks, err := missingEpisodeChunks(deviceRoot, episodes, resolver, options.Files)
+	signatures, err := options.Files.LoadMediaSignatures(deviceRoot)
+	if err != nil {
+		return fmt.Errorf("load media signatures: %w", err)
+	}
+	chunks, err := missingEpisodeChunks(deviceRoot, episodes, resolver, signatures, options.Files)
 	if err != nil {
 		return fmt.Errorf("plan episode chunks: %w", err)
 	}
@@ -77,7 +83,7 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 	}
 	if len(chunks) <= 1 {
 		skipped := make(map[string]struct{})
-		err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, skipped, progress, fileProgress, warning)
+		err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, signatures, options, skipped, progress, fileProgress, warning)
 		if err != nil {
 			return err
 		}
@@ -86,12 +92,15 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 				return fmt.Errorf("clear pending episode ownership: %w", err)
 			}
 		}
+		if err := saveEpisodeSignatures(deviceRoot, episodes, skipped, resolver, options.Files); err != nil {
+			return err
+		}
 		return nil
 	}
 	skipped := make(map[string]struct{})
 
 	for _, chunk := range chunks {
-		if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, chunk, nil, nil, feedNames, resolver, options, skipped, progress, fileProgress, warning); err != nil {
+		if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, chunk, nil, nil, feedNames, resolver, signatures, options, skipped, progress, fileProgress, warning); err != nil {
 			return fmt.Errorf("apply episode chunk: %w", err)
 		}
 	}
@@ -101,11 +110,29 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 			remaining = append(remaining, current)
 		}
 	}
-	if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, remaining, filterSkippedPlaylists(playlists, skipped), managed, feedNames, resolver, options, skipped, progress, fileProgress, warning); err != nil {
+	if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, remaining, filterSkippedPlaylists(playlists, skipped), managed, feedNames, resolver, signatures, options, skipped, progress, fileProgress, warning); err != nil {
 		return err
 	}
 	if err := options.Files.ClearPendingManagedPaths(deviceRoot); err != nil {
 		return fmt.Errorf("clear pending episode ownership: %w", err)
+	}
+	if err := saveEpisodeSignatures(deviceRoot, episodes, skipped, resolver, options.Files); err != nil {
+		return err
+	}
+	return nil
+}
+
+func saveEpisodeSignatures(deviceRoot string, episodes []catalog.Episode, skipped map[string]struct{}, resolver PathResolver, files DeviceFiles) error {
+	signatures := make(map[string]string, len(episodes))
+	for _, current := range episodes {
+		relative := resolver.RelativePathFor(current)
+		if _, skip := skipped[relative]; skip {
+			continue
+		}
+		signatures[relative] = mediaSignature(current)
+	}
+	if err := files.SaveMediaSignatures(deviceRoot, signatures); err != nil {
+		return fmt.Errorf("save media signatures: %w", err)
 	}
 	return nil
 }
@@ -164,7 +191,7 @@ func filterSkippedPlaylists(playlists []PlaylistFile, skipped map[string]struct{
 	return filtered
 }
 
-func missingEpisodeChunks(deviceRoot string, episodes []catalog.Episode, resolver PathResolver, files DeviceFiles) ([][]catalog.Episode, error) {
+func missingEpisodeChunks(deviceRoot string, episodes []catalog.Episode, resolver PathResolver, signatures map[string]string, files DeviceFiles) ([][]catalog.Episode, error) {
 	var chunks [][]catalog.Episode
 	var chunk []catalog.Episode
 	var chunkBytes int64
@@ -178,7 +205,7 @@ func missingEpisodeChunks(deviceRoot string, episodes []catalog.Episode, resolve
 	}
 	for _, current := range episodes {
 		relative := resolver.RelativePathFor(current)
-		exists, err := reusableFile(deviceRoot, relative, current.Enclosure.Length, files)
+		exists, err := reusableFile(deviceRoot, relative, current, signatures, files)
 		if err != nil {
 			return nil, fmt.Errorf("inspect existing episode %q: %w", current.Title, err)
 		}
@@ -199,7 +226,7 @@ func missingEpisodeChunks(deviceRoot string, episodes []catalog.Episode, resolve
 	return chunks, nil
 }
 
-func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, options EpisodeSyncOptions, skipped map[string]struct{}, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
+func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, signatures map[string]string, options EpisodeSyncOptions, skipped map[string]struct{}, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
 	var copies []FileCopy
 	var keep []string
 	var staged []string
@@ -216,7 +243,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 		default:
 		}
 		relative := resolver.RelativePathFor(current)
-		exists, err := reusableFile(deviceRoot, relative, current.Enclosure.Length, options.Files)
+		exists, err := reusableFile(deviceRoot, relative, current, signatures, options.Files)
 		if err != nil {
 			return fmt.Errorf("inspect existing episode %q: %w", current.Title, err)
 		}
@@ -437,7 +464,7 @@ func warn(warning WarningFunc, message string) {
 	}
 }
 
-func reusableFile(deviceRoot, relative string, expectedLength int64, files DeviceFiles) (bool, error) {
+func reusableFile(deviceRoot, relative string, current catalog.Episode, signatures map[string]string, files DeviceFiles) (bool, error) {
 	path, err := files.SafeDevicePath(deviceRoot, relative, false)
 	if err != nil {
 		return false, err
@@ -452,8 +479,17 @@ func reusableFile(deviceRoot, relative string, expectedLength int64, files Devic
 	if !fileInfo.Mode().IsRegular() || fileInfo.Size() == 0 {
 		return false, nil
 	}
-	if expectedLength > 0 && !strings.EqualFold(filepath.Ext(relative), ".mp3") && fileInfo.Size() != expectedLength {
+	if current.Enclosure.Length > 0 && fileInfo.Size() != current.Enclosure.Length {
+		return false, nil
+	}
+	if signature, exists := signatures[relative]; exists && signature != mediaSignature(current) {
 		return false, nil
 	}
 	return true, nil
+}
+
+func mediaSignature(current catalog.Episode) string {
+	value := fmt.Sprintf("%s\x00%s\x00%d", current.Enclosure.URL, current.Enclosure.Type, current.Enclosure.Length)
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:])
 }

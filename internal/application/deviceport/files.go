@@ -35,6 +35,8 @@ type DeviceFiles interface {
 	LoadPendingManagedPaths(root string) ([]string, error)
 	SavePendingManagedPaths(root string, paths []string) error
 	ClearPendingManagedPaths(root string) error
+	LoadMediaSignatures(root string) (map[string]string, error)
+	SaveMediaSignatures(root string, signatures map[string]string) error
 	BuildFilePlan(managed []string, copies []FileCopy, playlists []PlaylistFile, keep []string) (FilePlan, error)
 	ApplyFilePlan(context.Context, string, FilePlan, FileProgressFunc) error
 	SafeDevicePath(root, relative string, allowMissing bool) (string, error)

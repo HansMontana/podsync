@@ -153,7 +153,44 @@ func TestEpisodesReusesExistingMatchingFile(t *testing.T) {
 	}
 }
 
-func TestEpisodesRetagsExistingMP3WithWrongKnownSize(t *testing.T) {
+func TestEpisodesReplacesExistingFileWhenEnclosureChanges(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write([]byte("replacement audio"))
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	current := catalog.Episode{FeedID: 1, GUID: "one", Title: "One", Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/ogg", Length: 5}}
+	old := current
+	old.Enclosure.URL = "https://example.com/old.ogg"
+	resolver := media.Resolver{1: "podcast-1"}
+	relative := resolver.RelativePathFor(current)
+	destination := filepath.Join(root, filepath.FromSlash(relative))
+	if err := os.MkdirAll(filepath.Dir(destination), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(destination, []byte("old!!"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := (devicefs.Layout{Root: root}).SaveMediaSignatures(map[string]string{relative: mediaSignature(old)}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations(), Files: realDeviceFiles()}); err != nil {
+		t.Fatalf("Episodes() returned error: %v", err)
+	}
+	if requests.Load() != 1 {
+		t.Fatalf("downloaded replacement %d times", requests.Load())
+	}
+	data, err := os.ReadFile(destination)
+	if err != nil || string(data) == "old!!" {
+		t.Fatalf("replacement was not installed: %q, error %v", data, err)
+	}
+}
+
+func TestEpisodesReplacesExistingMP3WithWrongKnownSize(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests.Add(1)
@@ -175,11 +212,11 @@ func TestEpisodesRetagsExistingMP3WithWrongKnownSize(t *testing.T) {
 	if err := EpisodesWithResolverAndProgressAndWarningsWithOptions(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, nil, nil, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{VerifyMedia: true, MediaOps: realMediaOperations(), Files: realDeviceFiles()}, nil, nil, nil); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
-	if requests.Load() != 0 {
-		t.Fatalf("downloaded existing file %d times", requests.Load())
+	if requests.Load() != 1 {
+		t.Fatalf("downloaded replacement %d times", requests.Load())
 	}
 	if info, err := os.Stat(destination); err != nil || info.Size() <= int64(len("old")) {
-		t.Fatalf("existing file was not retagged, info %v, error %v", info, err)
+		t.Fatalf("replacement was not installed, info %v, error %v", info, err)
 	}
 }
 
