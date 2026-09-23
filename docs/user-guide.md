@@ -47,8 +47,9 @@ Only manifest-listed podsync paths are eligible for deletion. Podsync does not
 delete `AUDIO/`, `iPod_Control/`, or other files created outside podsync. Sync
 can write or replace its selected generated `Podcasts/<logical-feed>/...` and
 `Playlists/...` destinations even when they were not in an earlier manifest.
-Existing generated audio is reused when it is a non-empty regular file. MP3
-metadata is inspected by default for selected existing episodes.
+Existing generated audio is reused when it is a non-empty regular file with a
+matching delivery signature and expected length. MP3 metadata is inspected by
+default for selected existing episodes.
 Individual episode downloads are limited to 2 GiB and RSS responses to 32 MiB.
 
 ## Build
