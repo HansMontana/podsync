@@ -302,10 +302,10 @@ go test -count=1 ./...
 git diff --check
 ```
 
-For focused state work:
+For focused persistence work:
 
 ```bash
-go test -count=1 ./internal/state
+go test -count=1 ./internal/adapters/sqlitecatalog
 ```
 
 `-count=1` is intentional when verifying a change because it avoids relying on cached results.
@@ -325,9 +325,9 @@ Prefer explicit straightforward code over clever compression.
 Domain package directories are intentionally singular:
 
 ```text
-internal/episode
-internal/feed
-internal/state
+internal/domain/catalog
+internal/domain/curation
+internal/domain/playback
 ```
 
 Keep domain package names singular unless a real design reason requires otherwise.
@@ -430,9 +430,9 @@ Local filenames and filesystem paths must not determine episode identity.
 
 Do not add a synthetic `Episode.ID` merely because SQL tables commonly have integer primary keys. Add domain identity fields only when the domain needs them.
 
-## State
+## Catalog
 
-`state.State` represents durable podsync state.
+`catalog.Catalog` represents durable podsync state.
 
 Established validation rules include:
 
@@ -441,7 +441,7 @@ Established validation rules include:
 - episodes reference known feed IDs
 - duplicate episode identities are rejected
 
-Treat `State.Validate()` as an important domain integrity boundary.
+Treat `Catalog.Validate()` as an important domain integrity boundary.
 
 When adding a mutation or persistence path, consider whether invalid state must be rejected before durable data is changed.
 
@@ -454,13 +454,13 @@ Persistence uses SQLite.
 Conceptually:
 
 ```text
-State
+Catalog
   |
   v
-Repository
+application/catalog.Repository
   |
   v
-SQLiteRepository
+adapters/sqlitecatalog.SQLiteRepository
   |
   v
 SQLite database on iPod
@@ -470,8 +470,8 @@ The repository boundary currently has the shape:
 
 ```go
 type Repository interface {
-    Load() (State, error)
-    Save(State) error
+    Load() (catalog.Catalog, error)
+    Save(catalog.Catalog) error
     Close() error
 }
 ```
@@ -531,12 +531,12 @@ Schema belongs in explicit SQL migration files.
 Current structure is approximately:
 
 ```text
-internal/state/
+internal/adapters/sqlitecatalog/
 ├── migrations/
 │   └── 001_initial.sql
 ├── repository.go
-├── repository_test.go
-└── state.go
+├── repository_compatibility_test.go
+└── repository_persistence_test.go
 ```
 
 Migrations are embedded into the executable with Go `embed`.
