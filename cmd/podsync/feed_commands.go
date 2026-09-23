@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	devicefs "github.com/HansMontana/podsync/internal/adapters/devicefs"
 	"github.com/HansMontana/podsync/internal/adapters/rss"
@@ -48,9 +49,10 @@ func listFeeds(args []string) error {
 	if err != nil {
 		return err
 	}
-	logger := commandLogger("feed")
 	for _, known := range current.Feeds {
-		logger.Info(fmt.Sprintf("%d\t%s\t%s", known.ID, known.Name, known.URL))
+		if _, err := fmt.Fprintf(os.Stdout, "%d\t%s\t%s\n", known.ID, known.Name, known.URL); err != nil {
+			return fmt.Errorf("write feed list: %w", err)
+		}
 	}
 	return nil
 }

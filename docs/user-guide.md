@@ -49,6 +49,7 @@ can write or replace its selected generated `Podcasts/<logical-feed>/...` and
 `Playlists/...` destinations even when they were not in an earlier manifest.
 Existing generated audio is reused when it is a non-empty regular file. MP3
 metadata is inspected by default for selected existing episodes.
+Individual episode downloads are limited to 2 GiB and RSS responses to 32 MiB.
 
 ## Build
 
@@ -150,6 +151,9 @@ title_contains = "World"
 Logical-feed selection is a rolling queue. Played episodes are filtered first,
 then older unplayed episodes fill the configured limit.
 
+Feed and enclosure URLs must use HTTPS. Podsync rejects remote hosts that
+resolve to loopback, private, link-local, unspecified, or multicast addresses.
+
 `limit = 0` or an omitted limit means no limit. Valid ordering values are
 `newest_first` and `oldest_first`.
 
@@ -208,9 +212,9 @@ Refresh all configured source feeds:
 podsync refresh -device-root /media/hansmontana/HANSPOD
 ```
 
-`refresh` fetches up to ten sources concurrently and persists the refreshed
-state as one batch. If a source fails or the command is canceled, the batch is
-not persisted. `sync` uses stored episodes and does not fetch RSS; use
+`refresh` fetches up to four sources concurrently and persists successful source
+results as one batch. Failed sources retain their previous state. Cancellation
+does not persist the in-progress batch. `sync` uses stored episodes and does not fetch RSS; use
 `reconcile` or `feed add`, then configure a logical `[[feed]]` entry, then
 `refresh` and `sync` for new feed content.
 
@@ -227,8 +231,10 @@ Deep existing-MP3 metadata verification runs by default. To skip it:
 podsync update -skip-verify-media
 ```
 
-The update workflow stops if refresh or sync fails. Final device verification is
-run only after a successful sync.
+The update workflow stops when refresh has no successful sources or sync fails.
+When some sources refresh successfully and others fail, it syncs the available
+data, runs final verification, and returns a non-zero status describing the
+refresh failures.
 
 Show state and playback counts:
 

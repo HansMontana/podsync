@@ -92,7 +92,7 @@ podsync update -skip-verify-media
 
 `sync` uses already refreshed episode state. For new content, use
 `reconcile` or `feed add`, then configure a logical `[[feed]]` entry, then
-`refresh` and `sync`. Refresh fetches up to ten sources concurrently and saves
+`refresh` and `sync`. Refresh fetches up to four sources concurrently and saves
 the refreshed device state as one batch.
 
 Linux daemon mode waits for an initialized, already-mounted device and runs one
