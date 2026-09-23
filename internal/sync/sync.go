@@ -64,7 +64,7 @@ func RefreshFeedWithArchive(
 	}
 	refreshedFeed.ETag = result.ETag
 	refreshedFeed.LastModified = result.LastModified
-	updated, err := ApplyRefresh(current, RefreshResult{Feed: refreshedFeed, Episodes: episodes, Archive: archive})
+	updated, err := catalog.ApplyRefresh(current, catalog.RefreshResult{Feed: refreshedFeed, Episodes: episodes, Archive: archive})
 	if err != nil {
 		return err
 	}
@@ -72,13 +72,6 @@ func RefreshFeedWithArchive(
 		return fmt.Errorf("save refreshed feed %d: %w", feedID, err)
 	}
 	return nil
-}
-
-// RefreshResult describes one fetched and parsed source feed without persisting it.
-type RefreshResult struct {
-	Feed     catalog.Feed
-	Episodes []catalog.Episode
-	Archive  bool
 }
 
 // RefreshFeeds fetches and persists multiple feeds with one state load and save.
@@ -92,7 +85,7 @@ func RefreshFeeds(ctx context.Context, repository applicationcatalog.Repository,
 		return err
 	}
 	for _, result := range results {
-		current, err = ApplyRefresh(current, result)
+		current, err = catalog.ApplyRefresh(current, result)
 		if err != nil {
 			return err
 		}
@@ -107,14 +100,14 @@ func RefreshFeeds(ctx context.Context, repository applicationcatalog.Repository,
 
 const refreshWorkers = 10
 
-func fetchRefreshResults(ctx context.Context, client *http.Client, current catalog.Catalog, requests []RefreshRequest) ([]RefreshResult, error) {
+func fetchRefreshResults(ctx context.Context, client *http.Client, current catalog.Catalog, requests []RefreshRequest) ([]catalog.RefreshResult, error) {
 	if len(requests) == 0 {
 		return nil, nil
 	}
 	parentCtx := ctx
 	workerCtx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
-	results := make([]RefreshResult, len(requests))
+	results := make([]catalog.RefreshResult, len(requests))
 	valid := make([]bool, len(requests))
 	jobs := make(chan int)
 	var workers sync.WaitGroup
@@ -145,7 +138,7 @@ func fetchRefreshResults(ctx context.Context, client *http.Client, current catal
 						if err == nil {
 							refreshed.ETag = response.ETag
 							refreshed.LastModified = response.LastModified
-							results[index] = RefreshResult{Feed: refreshed, Episodes: episodes, Archive: request.Archive}
+							results[index] = catalog.RefreshResult{Feed: refreshed, Episodes: episodes, Archive: request.Archive}
 							// Each job owns a distinct result slot; application remains ordered below.
 							valid[index] = true
 						}
@@ -180,7 +173,7 @@ func fetchRefreshResults(ctx context.Context, client *http.Client, current catal
 	if firstErr != nil {
 		return nil, firstErr
 	}
-	ordered := make([]RefreshResult, 0, len(requests))
+	ordered := make([]catalog.RefreshResult, 0, len(requests))
 	for index := range results {
 		if valid[index] {
 			ordered = append(ordered, results[index])
@@ -201,52 +194,4 @@ func findFeed(current catalog.Catalog, feedID int64) (catalog.Feed, error) {
 		}
 	}
 	return catalog.Feed{}, fmt.Errorf("refresh feed %d: feed not found", feedID)
-}
-
-// ApplyRefresh replaces one source feed in memory while retaining archive history.
-func ApplyRefresh(current catalog.Catalog, result RefreshResult) (catalog.Catalog, error) {
-	feedIndex := -1
-	for i, known := range current.Feeds {
-		if known.ID == result.Feed.ID {
-			feedIndex = i
-			break
-		}
-	}
-	if feedIndex == -1 {
-		return catalog.Catalog{}, fmt.Errorf("refresh feed %d: feed not found", result.Feed.ID)
-	}
-
-	previousEpisodes := current.Episodes
-	retainedEpisodes := make([]catalog.Episode, 0, len(previousEpisodes))
-	for _, existing := range previousEpisodes {
-		if existing.FeedID != result.Feed.ID {
-			retainedEpisodes = append(retainedEpisodes, existing)
-		}
-	}
-	if len(result.Episodes) == 0 {
-		for _, existing := range previousEpisodes {
-			if existing.FeedID == result.Feed.ID {
-				return catalog.Catalog{}, fmt.Errorf("refresh feed %d: refusing to replace existing episodes with an empty feed", result.Feed.ID)
-			}
-		}
-	}
-	if result.Archive {
-		known := make(map[string]struct{}, len(result.Episodes))
-		for _, refreshed := range result.Episodes {
-			known[refreshed.IdentityKey()] = struct{}{}
-		}
-		for _, existing := range previousEpisodes {
-			if existing.FeedID == result.Feed.ID {
-				if _, exists := known[existing.IdentityKey()]; !exists {
-					result.Episodes = append(result.Episodes, existing)
-				}
-			}
-		}
-	}
-	current.Feeds[feedIndex] = result.Feed
-	current.Episodes = append(retainedEpisodes, result.Episodes...)
-	if err := current.Validate(); err != nil {
-		return catalog.Catalog{}, fmt.Errorf("validate refreshed state: %w", err)
-	}
-	return current, nil
 }

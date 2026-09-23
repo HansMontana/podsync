@@ -149,6 +149,63 @@ type Catalog struct {
 	Episodes []Episode
 }
 
+// RefreshResult describes one fetched and parsed source feed without
+// persisting it.
+type RefreshResult struct {
+	Feed     Feed
+	Episodes []Episode
+	Archive  bool
+}
+
+// ApplyRefresh replaces one source feed in memory while retaining archive
+// history.
+func ApplyRefresh(current Catalog, result RefreshResult) (Catalog, error) {
+	feedIndex := -1
+	for i, known := range current.Feeds {
+		if known.ID == result.Feed.ID {
+			feedIndex = i
+			break
+		}
+	}
+	if feedIndex == -1 {
+		return Catalog{}, fmt.Errorf("refresh feed %d: feed not found", result.Feed.ID)
+	}
+
+	previousEpisodes := current.Episodes
+	retainedEpisodes := make([]Episode, 0, len(previousEpisodes))
+	for _, existing := range previousEpisodes {
+		if existing.FeedID != result.Feed.ID {
+			retainedEpisodes = append(retainedEpisodes, existing)
+		}
+	}
+	if len(result.Episodes) == 0 {
+		for _, existing := range previousEpisodes {
+			if existing.FeedID == result.Feed.ID {
+				return Catalog{}, fmt.Errorf("refresh feed %d: refusing to replace existing episodes with an empty feed", result.Feed.ID)
+			}
+		}
+	}
+	if result.Archive {
+		known := make(map[string]struct{}, len(result.Episodes))
+		for _, refreshed := range result.Episodes {
+			known[refreshed.IdentityKey()] = struct{}{}
+		}
+		for _, existing := range previousEpisodes {
+			if existing.FeedID == result.Feed.ID {
+				if _, exists := known[existing.IdentityKey()]; !exists {
+					result.Episodes = append(result.Episodes, existing)
+				}
+			}
+		}
+	}
+	current.Feeds[feedIndex] = result.Feed
+	current.Episodes = append(retainedEpisodes, result.Episodes...)
+	if err := current.Validate(); err != nil {
+		return Catalog{}, fmt.Errorf("validate refreshed state: %w", err)
+	}
+	return current, nil
+}
+
 // Validate checks the invariants of the persistent catalog.
 func (c Catalog) Validate() error {
 	feedIDs := make(map[int64]struct{})
