@@ -41,7 +41,7 @@ func TestEpisodesStagesBeforeApplyingAndDeletesOnlyManagedFiles(t *testing.T) {
 	}
 
 	current := catalog.Episode{FeedID: 1, GUID: "one", Title: "One", Enclosure: catalog.Enclosure{URL: server.URL, Type: "audio/mpeg"}}
-	if err := Episodes(context.Background(), server.Client(), filepath.Join(t.TempDir(), "staging"), root, []catalog.Episode{current}, nil, []string{"Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3"}, EpisodeSyncOptions{MediaOps: realMediaOperations()}); err != nil {
+	if err := Episodes(context.Background(), server.Client(), filepath.Join(t.TempDir(), "staging"), root, []catalog.Episode{current}, nil, []string{"Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3"}, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{MediaOps: realMediaOperations()}); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3")); !os.IsNotExist(err) {
@@ -65,7 +65,7 @@ func TestEpisodesDoesNotChangeDeviceWhenDownloadFails(t *testing.T) {
 	}
 
 	current := catalog.Episode{FeedID: 1, GUID: "one", Enclosure: catalog.Enclosure{URL: server.URL}}
-	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, []string{"Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3"}, EpisodeSyncOptions{MediaOps: realMediaOperations()}); err == nil {
+	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, []string{"Podcasts/podcast-1/aaaaaaaaaaaaaaaa.mp3"}, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{MediaOps: realMediaOperations()}); err == nil {
 		t.Fatal("Episodes() accepted a failed download")
 	}
 	if _, err := os.Stat(old); err != nil {
@@ -92,7 +92,7 @@ func TestEpisodesSkipsUnsupportedMediaAndRemovesItFromPlaylists(t *testing.T) {
 	videoPath := resolver.RelativePathFor(video)
 	audioPath := resolver.RelativePathFor(audio)
 	playlist := devicefs.PlaylistFile{Relative: "Playlists/test.m3u8", Content: []byte("#EXTM3U\n#EXTINF:0,Video\n../" + videoPath + "\n#EXTINF:0,Audio\n../" + audioPath + "\n")}
-	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{video, audio}, []devicefs.PlaylistFile{playlist}, nil, EpisodeSyncOptions{MediaOps: realMediaOperations()}); err != nil {
+	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{video, audio}, []devicefs.PlaylistFile{playlist}, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations()}); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
 	content, err := os.ReadFile(filepath.Join(root, "Playlists/test.m3u8"))
@@ -134,7 +134,7 @@ func TestEpisodesReusesExistingMatchingFile(t *testing.T) {
 		total     int
 		reused    bool
 	}
-	if err := EpisodesWithProgress(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, nil, nil, EpisodeSyncOptions{MediaOps: realMediaOperations()}, func(completed, total int, current catalog.Episode, reused bool) {
+	if err := EpisodesWithProgress(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, nil, nil, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{MediaOps: realMediaOperations()}, func(completed, total int, current catalog.Episode, reused bool) {
 		progress.completed = completed
 		progress.total = total
 		progress.reused = reused
@@ -198,7 +198,7 @@ func TestEpisodesFastPathDoesNotInspectExistingMP3(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, nil, EpisodeSyncOptions{MediaOps: realMediaOperations()}); err != nil {
+	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{current}, nil, nil, media.Resolver{1: "podcast-1"}, EpisodeSyncOptions{MediaOps: realMediaOperations()}); err != nil {
 		t.Fatal(err)
 	}
 	if requests.Load() != 0 {
