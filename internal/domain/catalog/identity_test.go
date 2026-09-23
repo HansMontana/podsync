@@ -68,6 +68,7 @@ func TestNormalizeURLRejectsInvalidURLs(t *testing.T) {
 	for _, raw := range []string{
 		"://not-a-url",
 		"example.com/feed.xml",
+		"http://example.com/feed.xml",
 		"https://user:secret@example.com/feed.xml",
 	} {
 		if _, err := NormalizeURL(raw); err == nil {

@@ -36,22 +36,15 @@ func NormalizeURL(raw string) (string, error) {
 	if parsed.User != nil {
 		return "", fmt.Errorf("feed URL must not contain credentials")
 	}
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+	if parsed.Scheme != "https" {
 		return "", fmt.Errorf("unsupported feed URL scheme %q", parsed.Scheme)
 	}
 
 	parsed.Scheme = strings.ToLower(parsed.Scheme)
 	parsed.Host = strings.ToLower(parsed.Host)
 
-	switch parsed.Scheme {
-	case "http":
-		if parsed.Port() == "80" {
-			parsed.Host = parsed.Hostname()
-		}
-	case "https":
-		if parsed.Port() == "443" {
-			parsed.Host = parsed.Hostname()
-		}
+	if parsed.Port() == "443" {
+		parsed.Host = parsed.Hostname()
 	}
 
 	if parsed.Path == "" {
