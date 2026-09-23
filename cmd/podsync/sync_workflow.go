@@ -49,6 +49,9 @@ func syncDevice(options syncOptions) error {
 }
 
 func syncDeviceContext(ctx context.Context, options syncOptions) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	identity := options.identity
 	if identity == nil {
 		resolvedRoot, captured, err := devicefs.ResolveRootIdentity(options.deviceRoot)
@@ -221,9 +224,15 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		return fmt.Errorf("before persisting sync state: %w", err)
 	}
 	if configProvided {
+		if err := devicefs.VerifyRootIdentity(layout.Root, identity); err != nil {
+			return fmt.Errorf("before saving sync config: %w", err)
+		}
 		if err := tomlconfig.Save(layout.ConfigPath(), cfg); err != nil {
 			return fmt.Errorf("save device config: %w", err)
 		}
+	}
+	if err := devicefs.VerifyRootIdentity(layout.Root, identity); err != nil {
+		return fmt.Errorf("before persisting sync state: %w", err)
 	}
 	if err := repository.Save(current); err != nil {
 		return fmt.Errorf("save configured sources: %w", err)

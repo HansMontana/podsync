@@ -2,6 +2,7 @@ package device
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -74,6 +75,25 @@ func TestEpisodesDoesNotChangeDeviceWhenDownloadFails(t *testing.T) {
 	}
 	if _, err := os.Stat(old); err != nil {
 		t.Fatalf("device changed after failed download: %v", err)
+	}
+}
+
+func TestEpisodesCanceledBeforeWorkDoesNotCreatePendingOwnership(t *testing.T) {
+	root := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	episodeValue := catalog.Episode{FeedID: 1, GUID: "one", Enclosure: catalog.Enclosure{URL: "https://example.com/episode.mp3", Type: "audio/ogg"}}
+	resolver := media.Resolver{1: "podcast-1"}
+	err := Episodes(ctx, nil, t.TempDir(), root, []catalog.Episode{episodeValue}, nil, nil, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations(), Files: realDeviceFiles()})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Episodes() error = %v, want cancellation", err)
+	}
+	pending, err := (devicefs.Layout{Root: root}).LoadPendingManagedPaths()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("canceled operation created pending ownership: %v", pending)
 	}
 }
 

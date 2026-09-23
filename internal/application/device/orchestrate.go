@@ -2,8 +2,6 @@ package device
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -61,6 +59,9 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 	if options.Files == nil {
 		return fmt.Errorf("device files are required")
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	signatures, err := options.Files.LoadMediaSignatures(deviceRoot)
 	if err != nil {
 		return fmt.Errorf("load media signatures: %w", err)
@@ -76,6 +77,9 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 	pendingActive := len(pending) > 0
 	pendingPaths := appendUniquePaths(pending, pendingManagedPaths(episodes, playlists, resolver))
 	if len(pendingPaths) > 0 {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := options.Files.SavePendingManagedPaths(deviceRoot, pendingPaths); err != nil {
 			return fmt.Errorf("save pending episode ownership: %w", err)
 		}
@@ -118,21 +122,6 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 	}
 	if err := saveEpisodeSignatures(deviceRoot, episodes, skipped, resolver, options.Files); err != nil {
 		return err
-	}
-	return nil
-}
-
-func saveEpisodeSignatures(deviceRoot string, episodes []catalog.Episode, skipped map[string]struct{}, resolver PathResolver, files DeviceFiles) error {
-	signatures := make(map[string]string, len(episodes))
-	for _, current := range episodes {
-		relative := resolver.RelativePathFor(current)
-		if _, skip := skipped[relative]; skip {
-			continue
-		}
-		signatures[relative] = mediaSignature(current)
-	}
-	if err := files.SaveMediaSignatures(deviceRoot, signatures); err != nil {
-		return fmt.Errorf("save media signatures: %w", err)
 	}
 	return nil
 }
@@ -486,10 +475,4 @@ func reusableFile(deviceRoot, relative string, current catalog.Episode, signatur
 		return false, nil
 	}
 	return true, nil
-}
-
-func mediaSignature(current catalog.Episode) string {
-	value := fmt.Sprintf("%s\x00%s\x00%d", current.Enclosure.URL, current.Enclosure.Type, current.Enclosure.Length)
-	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:])
 }
