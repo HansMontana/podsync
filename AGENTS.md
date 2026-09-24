@@ -825,7 +825,7 @@ The following product direction is intentional, but should still be implemented 
 4. Support per-feed episode ordering: newest-first, oldest-first, or both where useful. (Implemented.)
 5. Generate playlists for logical feeds using the configured ordering. (Implemented.)
 6. Define daily briefings as ordered sections containing selected logical feeds and per-section episode limits. (Implemented.)
-7. Read Rockbox playback statistics, including play count and last-played information, from the iPod. (Playback-log and binary TagCache import implemented.)
+7. Read Rockbox playback statistics, including play count from TagCache and last-played timestamps from playback logs, from the iPod. (Playback-log and binary TagCache import implemented.)
 8. Match Rockbox playback records to stable episode identities without making local paths the domain identity. (Implemented for current stable media paths; migration of older path formats remains intentionally unsupported.)
 9. Add configurable selection rules such as unplayed-only and newest-episode limits. (Implemented.)
 10. Detect the iPod and apply sync plans safely: download to transient host storage, copy final files to the iPod, and remove obsolete files conservatively. (Implemented with explicit-root and standard-location detection.)

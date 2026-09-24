@@ -76,9 +76,9 @@ Show the version of a local build:
 
 Published releases use semantic-version tags such as `v0.1.0`. Release
 archives are provided for Linux amd64, Linux arm64, macOS Intel, and macOS
-Apple Silicon. The macOS artifacts are for CLI use; daemon mode remains
-Linux-only. They are currently unsigned and not notarized, so macOS may show a
-Gatekeeper warning after download.
+Apple Silicon. The macOS artifacts are experimental CLI builds; daemon mode
+remains Linux-only. They are currently unsigned and not notarized, so macOS may
+show a Gatekeeper warning after download.
 
 Verify a macOS archive before opening it. Replace `0.1.1` and the architecture
 with the release you downloaded:
@@ -388,8 +388,10 @@ This is not required merely to play a generated path-based playlist, but it is
 needed for Rockbox database browsing and for TagCache statistics on newly added
 files.
 
-An opt-in integration is available for the podsync Rockbox fork that supports
-the device-local update marker. Add this to `Podsync/podsync.toml`:
+The following is an **experimental, fork-only** integration for the personal
+[`HansMontana/rockbox`](https://github.com/HansMontana/rockbox) fork. It is not
+an upstream Rockbox feature and requires a fork build containing the marker
+support documented in that repository. Add this to `Podsync/podsync.toml`:
 
 ```toml
 [integrations.rockbox]
@@ -401,11 +403,14 @@ When enabled, `sync`, `update`, and `daemon` create
 deleted, or rewritten. Rockbox removes the marker after it successfully updates
 TagCache. Podsync never writes TagCache databases directly. This setting is
 disabled by default, is not autodetected from the device, and has no effect on
-official Rockbox builds.
+upstream or other Rockbox builds.
 
-During sync, podsync normalizes metadata on MP3 files using the RSS episode and
-feed state. The episode title is written as the title, the feed name as album
-and artist, `Podcast` as genre, and the publication year when available. Existing
+If the marker cannot be created, podsync leaves the request pending, completes
+the normal sync, and retries it on a later run.
+
+During sync, podsync fills missing metadata on MP3 files using the RSS episode
+and feed state. It fills the title, album, artist, `Podcast` genre, and
+publication year when available without replacing existing values. Existing
 selected managed MP3 files are checked by default. Other audio formats are
 copied without metadata changes.
 
@@ -427,8 +432,8 @@ deleted.
 
 ## Current Limitations
 
-- The application currently targets Linux; daemon mode and device locking use
-  Linux APIs.
+- Daemon mode and device locking target Linux. macOS binaries are experimental
+  CLI builds.
 
 - Database migrations are forward-only. Downgrading podsync requires restoring
   a device backup made with the older version.

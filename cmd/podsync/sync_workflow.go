@@ -198,9 +198,13 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		logger.Info(fmt.Sprintf("Dry run selected %d episodes, writes %d playlists, and deletes %d managed files", len(episodes), len(playlistFiles)-1, len(plan.Deletes)))
 		return nil
 	}
-	result, err := applicationdevice.EpisodesWithResolverAndProgressAndWarningsWithOptionsResult(ctx, httpClientFromContext(ctx), stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, applicationdevice.EpisodeSyncOptions{VerifyMedia: verifyMedia, MediaOps: mediaops.New(), Files: devicefs.New(), VerifyDevice: func() error {
+	episodeOptions := applicationdevice.EpisodeSyncOptions{VerifyMedia: verifyMedia, MediaOps: mediaops.New(), Files: devicefs.New(), VerifyDevice: func() error {
 		return devicefs.VerifyRootIdentity(layout.Root, identity)
-	}}, func(completed, total int, current catalog.Episode, reused bool) {
+	}}
+	if cfg.Integrations.Rockbox.TagCacheUpdateMarker {
+		episodeOptions.BeforeMediaMutation = layout.SavePendingTagCacheUpdate
+	}
+	result, err := applicationdevice.EpisodesWithResolverAndProgressAndWarningsWithOptionsResult(ctx, httpClientFromContext(ctx), stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, episodeOptions, func(completed, total int, current catalog.Episode, reused bool) {
 		if logProgress(completed, total) {
 			logger.Info(fmt.Sprintf("Prepared episodes: %d/%d", completed, total))
 		}
@@ -228,9 +232,6 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 	if err := devicefs.VerifyRootIdentity(layout.Root, identity); err != nil {
 		return fmt.Errorf("before persisting sync state: %w", err)
 	}
-	if err := maybeRequestRockboxTagCacheUpdate(layout, cfg.Integrations.Rockbox.TagCacheUpdateMarker, result.MediaChanged, pendingTagCacheUpdate); err != nil {
-		return err
-	}
 	if configProvided {
 		if err := devicefs.VerifyRootIdentity(layout.Root, identity); err != nil {
 			return fmt.Errorf("before saving sync config: %w", err)
@@ -255,6 +256,9 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		if err := layout.ClearPendingSyncConfig(); err != nil {
 			return fmt.Errorf("clear pending sync config: %w", err)
 		}
+	}
+	if err := maybeRequestRockboxTagCacheUpdate(layout, cfg.Integrations.Rockbox.TagCacheUpdateMarker, result.MediaChanged, pendingTagCacheUpdate); err != nil {
+		logger.Warn(err.Error())
 	}
 	logger.Info(fmt.Sprintf("Sync complete: %d episodes, %d playlists", len(episodes), len(playlistFiles)-1))
 	return nil

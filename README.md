@@ -99,10 +99,10 @@ podsync update -skip-verify-media
 Releases use semantic-version tags such as `v0.1.0`. Pushing a matching tag
 runs the private-repository release workflow, which tests and publishes Linux
 amd64, Linux arm64, macOS Intel (`darwin/amd64`), and macOS Apple Silicon
-(`darwin/arm64`) archives with SHA-256 checksums. The macOS artifacts support
-the CLI; daemon mode remains Linux-only. The macOS artifacts are currently
-unsigned and not notarized, so macOS may require an explicit Gatekeeper approval
-after the checksum has been verified.
+(`darwin/arm64`) archives with SHA-256 checksums. The macOS artifacts are
+experimental CLI builds; daemon mode remains Linux-only. The macOS artifacts
+are currently unsigned and not notarized, so macOS may require an explicit
+Gatekeeper approval after the checksum has been verified.
 
 Show the version of a local build:
 

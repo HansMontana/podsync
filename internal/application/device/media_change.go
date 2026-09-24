@@ -1,6 +1,13 @@
 package device
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
+
+type EpisodeSyncResult struct {
+	MediaChanged bool
+}
 
 func mediaChanged(plan FilePlan) bool {
 	if len(plan.Copies) > 0 {
@@ -12,4 +19,14 @@ func mediaChanged(plan FilePlan) bool {
 		}
 	}
 	return false
+}
+
+func prepareMediaMutation(plan FilePlan, options EpisodeSyncOptions) error {
+	if !mediaChanged(plan) || options.BeforeMediaMutation == nil {
+		return nil
+	}
+	if err := options.BeforeMediaMutation(); err != nil {
+		return fmt.Errorf("prepare media mutation: %w", err)
+	}
+	return nil
 }
