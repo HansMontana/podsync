@@ -95,7 +95,11 @@ func printCommandHelp(command string) error {
 	case "verify":
 		text = "Usage: podsync verify [-device-root PATH]\n\nVerify manifest-managed device files without changing them."
 	case "feed":
-		text = "Usage: podsync feed <list|add|remove> [options]\n\nManage source feeds in device-local configuration."
+		text = "Usage: podsync feed <list|add|remove> [options]\n\n" +
+			"  list    Usage: podsync feed list [-device-root PATH]\n" +
+			"  add     Usage: podsync feed add -device-root PATH -id ID -url URL [-config PATH]\n" +
+			"  remove  Usage: podsync feed remove -device-root PATH -id ID [-config PATH]\n\n" +
+			"Manage source feeds in device-local configuration."
 	case "playlist":
 		text = "Usage: podsync playlist [-device-root PATH] -id FEED [-config PATH]\n\nGenerate one logical-feed playlist."
 	case "briefing":
@@ -122,6 +126,12 @@ func newFlagSet(name, usage string) *flag.FlagSet {
 }
 
 func parseFlags(flags *flag.FlagSet, args []string) (bool, error) {
+	for _, arg := range args {
+		if arg == "-h" || arg == "--help" {
+			flags.SetOutput(os.Stdout)
+			break
+		}
+	}
 	err := flags.Parse(args)
 	if errors.Is(err, flag.ErrHelp) {
 		return true, nil

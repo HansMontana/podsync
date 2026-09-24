@@ -25,6 +25,7 @@ Implemented:
 - Chunked syncs for large transfers with resumable intermediate batches
 - Global preparation progress across chunked transfers
 - Rockbox playback-log and TagCache parsing with stable media-path matching, with unknown records treated as unplayed
+- Partial Rockbox playback is tracked as skipped for briefing consumption without counting as completed playback
 - Existing-media reuse with default MP3 metadata verification and an opt-out
 - Linux daemon mode for one update per mounted-device session
 - Automatic mounted-device detection, read-only managed-file verification, and `PODSYNC_DEVICE_ROOT` support
@@ -65,6 +66,7 @@ podcast state.
 Requirements:
 
 - Go 1.25.7 or later
+- Linux is the currently supported application platform
 
 Run the tests:
 

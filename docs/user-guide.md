@@ -157,6 +157,7 @@ then older unplayed episodes fill the configured limit.
 
 Feed and enclosure URLs must use HTTPS. Podsync rejects remote hosts that
 resolve to loopback, private, link-local, unspecified, or multicast addresses.
+Podsync does not use environment-configured HTTP proxies for these requests.
 
 `limit = 0` or an omitted limit means no limit. Valid ordering values are
 `newest_first` and `oldest_first`.
@@ -182,9 +183,10 @@ unplayed_only = true
 ```
 
 Briefing sections behave differently from rolling logical-feed playlists. A
-section first selects its configured episode window. If that window contains a
-played episode and `unplayed_only = true`, that section is omitted. It is not
-backfilled, and later sections continue normally.
+section uses the referenced logical feed's source and filter, then applies its
+own ordering. When `unplayed_only = true`, completed and skipped episodes are
+filtered before the section limit is applied, so older eligible episodes fill
+the configured limit.
 
 ## Commands
 
@@ -238,7 +240,8 @@ podsync update -skip-verify-media
 The update workflow stops when refresh has no successful sources or sync fails.
 When some sources refresh successfully and others fail, it syncs the available
 data, runs final verification, and returns a non-zero status describing the
-refresh failures.
+refresh failures. Daemon mode retries that failed update on the next poll while
+the device remains mounted.
 
 Show state and playback counts:
 
@@ -307,9 +310,10 @@ podsync sync -device-root /media/hansmontana/HANSPOD
 Downloads first go to host-side staging. An explicit `-staging` path must be
 outside the device root. Device files are written through temporary files and
 renames. Managed deletions happen only after downloads and playlist writes
-succeed. A supplied configuration and reconciled state are persisted after file
-application succeeds; a final persistence failure can leave new files with the
-previous configuration/state and is recoverable by rerunning sync.
+succeed. After file application succeeds, supplied configuration is recorded as
+a pending device-local transaction while SQLite state and the final
+configuration are persisted. If either persistence step is interrupted, the
+next mutating command completes the pending transaction.
 
 Normal syncs inspect selected existing MP3 tags and repair missing metadata; use
 `-skip-verify-media` to avoid this work when needed. This is slower on large
@@ -339,8 +343,9 @@ Sources are used in this order:
 3. Missing or untrusted records are treated as unplayed.
 
 A playback-log entry counts as played only when at least 90% of the episode
-duration was reached. Short previews and abandoned partial listens remain
-unplayed.
+duration was reached. A valid shorter entry is recorded as skipped: it is not
+completed playback, but it is consumed by briefing sections using
+`unplayed_only = true`.
 
 Rockbox playback logging can be enabled from its playback/settings menu. The
 log is useful for newly played files before TagCache is refreshed.
@@ -379,6 +384,9 @@ intended rolling-queue behavior. Files outside podsync-managed paths are not
 deleted.
 
 ## Current Limitations
+
+- The application currently targets Linux; daemon mode and device locking use
+  Linux APIs.
 
 - Database migrations are forward-only. Downgrading podsync requires restoring
   a device backup made with the older version.

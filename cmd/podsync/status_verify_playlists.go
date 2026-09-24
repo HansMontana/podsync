@@ -44,12 +44,21 @@ func status(args []string) error {
 	}
 	states := rockbox.ForEpisodesWithResolver(current.Episodes, records, media.Resolver(logicalIDs))
 	played := 0
+	skipped := 0
+	consumed := 0
 	for _, state := range states {
 		if state.Played() {
 			played++
 		}
+		if state.Skipped {
+			skipped++
+		}
+		if state.Consumed() {
+			consumed++
+		}
 	}
 	logger.Info(fmt.Sprintf("Played: %d", played))
+	logger.Info(fmt.Sprintf("Skipped: %d\tConsumed: %d", skipped, consumed))
 	return nil
 }
 
