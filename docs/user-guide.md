@@ -388,6 +388,21 @@ This is not required merely to play a generated path-based playlist, but it is
 needed for Rockbox database browsing and for TagCache statistics on newly added
 files.
 
+An opt-in integration is available for the podsync Rockbox fork that supports
+the device-local update marker. Add this to `Podsync/podsync.toml`:
+
+```toml
+[integrations.rockbox]
+tagcache_update_marker = true
+```
+
+When enabled, `sync`, `update`, and `daemon` create
+`.rockbox/tagcache_update.pending` after podcast media is added, replaced,
+deleted, or rewritten. Rockbox removes the marker after it successfully updates
+TagCache. Podsync never writes TagCache databases directly. This setting is
+disabled by default, is not autodetected from the device, and has no effect on
+official Rockbox builds.
+
 During sync, podsync normalizes metadata on MP3 files using the RSS episode and
 feed state. The episode title is written as the title, the feed name as album
 and artist, `Podcast` as genre, and the publication year when available. Existing

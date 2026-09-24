@@ -14,9 +14,18 @@ import (
 )
 
 type configDTO struct {
-	Sources   []sourceFeedDTO  `toml:"source"`
-	Feeds     []logicalFeedDTO `toml:"feed"`
-	Briefings []briefingDTO    `toml:"briefing"`
+	Sources      []sourceFeedDTO  `toml:"source"`
+	Feeds        []logicalFeedDTO `toml:"feed"`
+	Briefings    []briefingDTO    `toml:"briefing"`
+	Integrations *integrationsDTO `toml:"integrations"`
+}
+
+type integrationsDTO struct {
+	Rockbox rockboxIntegrationDTO `toml:"rockbox"`
+}
+
+type rockboxIntegrationDTO struct {
+	TagCacheUpdateMarker bool `toml:"tagcache_update_marker"`
 }
 
 type sourceFeedDTO struct {
@@ -133,6 +142,12 @@ func toDTO(cfg curation.Config) configDTO {
 		Sources:   make([]sourceFeedDTO, len(cfg.Sources)),
 		Feeds:     make([]logicalFeedDTO, len(cfg.Feeds)),
 		Briefings: make([]briefingDTO, len(cfg.Briefings)),
+		Integrations: &integrationsDTO{Rockbox: rockboxIntegrationDTO{
+			TagCacheUpdateMarker: cfg.Integrations.Rockbox.TagCacheUpdateMarker,
+		}},
+	}
+	if !cfg.Integrations.Rockbox.TagCacheUpdateMarker {
+		result.Integrations = nil
 	}
 	for i, source := range cfg.Sources {
 		result.Sources[i] = sourceFeedDTO{ID: source.ID, URL: source.URL}
@@ -164,6 +179,9 @@ func fromDTO(dto configDTO) curation.Config {
 		Sources:   make([]curation.SourceFeed, len(dto.Sources)),
 		Feeds:     make([]curation.LogicalFeed, len(dto.Feeds)),
 		Briefings: make([]curation.Briefing, len(dto.Briefings)),
+	}
+	if dto.Integrations != nil {
+		result.Integrations.Rockbox.TagCacheUpdateMarker = dto.Integrations.Rockbox.TagCacheUpdateMarker
 	}
 	for i, source := range dto.Sources {
 		result.Sources[i] = curation.SourceFeed{ID: source.ID, URL: source.URL}

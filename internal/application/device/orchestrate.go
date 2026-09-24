@@ -24,6 +24,10 @@ type EpisodeSyncOptions struct {
 	Files        DeviceFiles
 }
 
+type EpisodeSyncResult struct {
+	MediaChanged bool
+}
+
 const existingReadAttempts = 3
 
 const (
@@ -53,61 +57,69 @@ func EpisodesWithResolverAndProgressAndWarnings(ctx context.Context, client *htt
 }
 
 func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, options EpisodeSyncOptions, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
+	_, err := EpisodesWithResolverAndProgressAndWarningsWithOptionsResult(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, options, progress, fileProgress, warning)
+	return err
+}
+
+func EpisodesWithResolverAndProgressAndWarningsWithOptionsResult(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, options EpisodeSyncOptions, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) (EpisodeSyncResult, error) {
 	if options.MediaOps == nil {
-		return fmt.Errorf("media operations are required")
+		return EpisodeSyncResult{}, fmt.Errorf("media operations are required")
 	}
 	if options.Files == nil {
-		return fmt.Errorf("device files are required")
+		return EpisodeSyncResult{}, fmt.Errorf("device files are required")
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return EpisodeSyncResult{}, err
 	}
 	preparationProgress := newPreparationProgress(len(episodes), resolver, progress)
 	signatures, err := options.Files.LoadMediaSignatures(deviceRoot)
 	if err != nil {
-		return fmt.Errorf("load media signatures: %w", err)
+		return EpisodeSyncResult{}, fmt.Errorf("load media signatures: %w", err)
 	}
 	chunks, err := missingEpisodeChunks(deviceRoot, episodes, resolver, signatures, options.Files)
 	if err != nil {
-		return fmt.Errorf("plan episode chunks: %w", err)
+		return EpisodeSyncResult{}, fmt.Errorf("plan episode chunks: %w", err)
 	}
 	pending, err := options.Files.LoadPendingManagedPaths(deviceRoot)
 	if err != nil {
-		return fmt.Errorf("load pending episode ownership: %w", err)
+		return EpisodeSyncResult{}, fmt.Errorf("load pending episode ownership: %w", err)
 	}
 	pendingActive := len(pending) > 0
 	pendingPaths := appendUniquePaths(pending, pendingManagedPaths(episodes, playlists, resolver))
 	if len(pendingPaths) > 0 {
 		if err := ctx.Err(); err != nil {
-			return err
+			return EpisodeSyncResult{}, err
 		}
 		if err := options.Files.SavePendingManagedPaths(deviceRoot, pendingPaths); err != nil {
-			return fmt.Errorf("save pending episode ownership: %w", err)
+			return EpisodeSyncResult{}, fmt.Errorf("save pending episode ownership: %w", err)
 		}
 		pendingActive = true
 	}
 	if len(chunks) <= 1 {
 		skipped := make(map[string]struct{})
-		err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, signatures, options, skipped, preparationProgress.Report, fileProgress, warning)
+		changed, err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, episodes, playlists, managed, feedNames, resolver, signatures, options, skipped, preparationProgress.Report, fileProgress, warning)
 		if err != nil {
-			return err
+			return EpisodeSyncResult{}, err
 		}
 		if pendingActive {
 			if err := options.Files.ClearPendingManagedPaths(deviceRoot); err != nil {
-				return fmt.Errorf("clear pending episode ownership: %w", err)
+				return EpisodeSyncResult{}, fmt.Errorf("clear pending episode ownership: %w", err)
 			}
 		}
 		if err := saveEpisodeSignatures(deviceRoot, episodes, skipped, resolver, options.Files); err != nil {
-			return err
+			return EpisodeSyncResult{}, err
 		}
-		return nil
+		return EpisodeSyncResult{MediaChanged: changed}, nil
 	}
 	skipped := make(map[string]struct{})
+	mediaChanged := false
 
 	for _, chunk := range chunks {
-		if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, chunk, nil, nil, feedNames, resolver, signatures, options, skipped, preparationProgress.Report, fileProgress, warning); err != nil {
-			return fmt.Errorf("apply episode chunk: %w", err)
+		changed, err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, chunk, nil, nil, feedNames, resolver, signatures, options, skipped, preparationProgress.Report, fileProgress, warning)
+		if err != nil {
+			return EpisodeSyncResult{}, fmt.Errorf("apply episode chunk: %w", err)
 		}
+		mediaChanged = mediaChanged || changed
 	}
 	remaining := make([]catalog.Episode, 0, len(episodes))
 	for _, current := range episodes {
@@ -115,16 +127,18 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 			remaining = append(remaining, current)
 		}
 	}
-	if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, remaining, playlists, managed, feedNames, resolver, signatures, options, skipped, preparationProgress.Report, fileProgress, warning); err != nil {
-		return err
+	changed, err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, remaining, playlists, managed, feedNames, resolver, signatures, options, skipped, preparationProgress.Report, fileProgress, warning)
+	if err != nil {
+		return EpisodeSyncResult{}, err
 	}
+	mediaChanged = mediaChanged || changed
 	if err := options.Files.ClearPendingManagedPaths(deviceRoot); err != nil {
-		return fmt.Errorf("clear pending episode ownership: %w", err)
+		return EpisodeSyncResult{}, fmt.Errorf("clear pending episode ownership: %w", err)
 	}
 	if err := saveEpisodeSignatures(deviceRoot, episodes, skipped, resolver, options.Files); err != nil {
-		return err
+		return EpisodeSyncResult{}, err
 	}
-	return nil
+	return EpisodeSyncResult{MediaChanged: mediaChanged}, nil
 }
 
 func pendingManagedPaths(episodes []catalog.Episode, playlists []PlaylistFile, resolver PathResolver) []string {
@@ -220,7 +234,7 @@ func missingEpisodeChunks(deviceRoot string, episodes []catalog.Episode, resolve
 	return chunks, nil
 }
 
-func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, signatures map[string]string, options EpisodeSyncOptions, skipped map[string]struct{}, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) error {
+func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, deviceRoot string, episodes []catalog.Episode, playlists []PlaylistFile, managed []string, feedNames map[int64]string, resolver PathResolver, signatures map[string]string, options EpisodeSyncOptions, skipped map[string]struct{}, progress ProgressFunc, fileProgress FileProgressFunc, warning WarningFunc) (bool, error) {
 	var copies []FileCopy
 	var keep []string
 	var staged []string
@@ -233,13 +247,13 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 	for _, current := range episodes {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return false, ctx.Err()
 		default:
 		}
 		relative := resolver.RelativePathFor(current)
 		exists, err := reusableFile(deviceRoot, relative, current, signatures, options.Files)
 		if err != nil {
-			return fmt.Errorf("inspect existing episode %q: %w", current.Title, err)
+			return false, fmt.Errorf("inspect existing episode %q: %w", current.Title, err)
 		}
 		if exists {
 			changed := false
@@ -266,7 +280,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 					return err
 				}); err != nil {
 					if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-						return err
+						return false, err
 					}
 					readErr = &existingReadError{err: err}
 				}
@@ -287,11 +301,11 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 					})
 					if stageErr != nil {
 						if errors.Is(stageErr, context.Canceled) || errors.Is(stageErr, context.DeadlineExceeded) {
-							return stageErr
+							return false, stageErr
 						}
 						var typedReadErr *existingReadError
 						if !errors.As(stageErr, &typedReadErr) {
-							return fmt.Errorf("stage existing episode %q: %w", current.Title, stageErr)
+							return false, fmt.Errorf("stage existing episode %q: %w", current.Title, stageErr)
 						}
 						readErr = typedReadErr
 					}
@@ -307,7 +321,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 					staged = append(staged, stagedPath)
 					if isMP3(current, relative) {
 						if _, metadataErr := options.MediaOps.NormalizeMP3(stagedPath, feedNames[current.FeedID], current); metadataErr != nil {
-							return fmt.Errorf("normalize metadata for %q: %w", current.Title, metadataErr)
+							return false, fmt.Errorf("normalize metadata for %q: %w", current.Title, metadataErr)
 						}
 					}
 					copies = append(copies, FileCopy{Source: stagedPath, Relative: relative})
@@ -320,7 +334,7 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 				var metadataErr error
 				changed, metadataErr = options.MediaOps.NormalizeMP3(stagedPath, feedNames[current.FeedID], current)
 				if metadataErr != nil {
-					return fmt.Errorf("normalize metadata for %q: %w", current.Title, metadataErr)
+					return false, fmt.Errorf("normalize metadata for %q: %w", current.Title, metadataErr)
 				}
 				if changed {
 					copies = append(copies, FileCopy{Source: stagedPath, Relative: relative})
@@ -343,12 +357,12 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 				warn(warning, fmt.Sprintf("skipping %q: %v", current.Title, err))
 				continue
 			}
-			return fmt.Errorf("stage episode %q: %w", current.Title, err)
+			return false, fmt.Errorf("stage episode %q: %w", current.Title, err)
 		}
 		staged = append(staged, stagedPath)
 		if isMP3(current, relative) {
 			if _, metadataErr := options.MediaOps.NormalizeMP3(stagedPath, feedNames[current.FeedID], current); metadataErr != nil {
-				return fmt.Errorf("normalize metadata for %q: %w", current.Title, metadataErr)
+				return false, fmt.Errorf("normalize metadata for %q: %w", current.Title, metadataErr)
 			}
 		}
 		copies = append(copies, FileCopy{Source: stagedPath, Relative: relative})
@@ -361,18 +375,18 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 	keep = append(keep, retained...)
 	plan, err := options.Files.BuildFilePlan(managed, copies, filterSkippedPlaylists(playlists, skipped, retained), keep)
 	if err != nil {
-		return fmt.Errorf("build episode sync plan: %w", err)
+		return false, fmt.Errorf("build episode sync plan: %w", err)
 	}
 	if options.VerifyDevice != nil {
 		if err := options.VerifyDevice(); err != nil {
-			return fmt.Errorf("verify device before file application: %w", err)
+			return false, fmt.Errorf("verify device before file application: %w", err)
 		}
 		plan.VerifyDevice = options.VerifyDevice
 	}
 	if err := options.Files.ApplyFilePlan(ctx, deviceRoot, plan, fileProgress); err != nil {
-		return fmt.Errorf("apply episode sync plan: %w", err)
+		return false, fmt.Errorf("apply episode sync plan: %w", err)
 	}
-	return nil
+	return mediaChanged(plan), nil
 }
 
 func retryExistingRead(ctx context.Context, operation func() error) error {

@@ -23,6 +23,8 @@ const (
 	maxDeviceJSONSize = 1 << 20
 	maxManagedPaths   = 100_000
 	maxManifestSize   = 16 << 20
+	tagCacheMarker    = ".rockbox/tagcache_update.pending"
+	pendingTagCache   = "pending-rockbox-tagcache-update"
 )
 
 func (l Layout) StateDirectory() string {
@@ -66,6 +68,97 @@ func (l Layout) PlaybackLogPaths() ([]string, error) {
 
 func (l Layout) TagCacheDirectory() string {
 	return filepath.Join(l.Root, ".rockbox")
+}
+
+func (l Layout) TagCacheUpdateMarkerPath() string {
+	return filepath.Join(l.Root, tagCacheMarker)
+}
+
+func (l Layout) PendingTagCacheUpdatePath() string {
+	return filepath.Join(l.StateDirectory(), pendingTagCache)
+}
+
+func (l Layout) LoadPendingTagCacheUpdate() (bool, error) {
+	path := l.PendingTagCacheUpdatePath()
+	if err := RejectSymlink(path); err != nil {
+		return false, err
+	}
+	if err := checkRegularFileSize(path, 64); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("inspect pending Rockbox TagCache update: %w", err)
+	}
+	return true, nil
+}
+
+func (l Layout) SavePendingTagCacheUpdate() error {
+	if err := EnsureStateDirectory(l.Root); err != nil {
+		return err
+	}
+	path := l.PendingTagCacheUpdatePath()
+	if err := RejectSymlink(path); err != nil {
+		return err
+	}
+	return writeAtomic(path, []byte("pending\n"), 0o600, "pending Rockbox TagCache update")
+}
+
+func (l Layout) ClearPendingTagCacheUpdate() error {
+	path := l.PendingTagCacheUpdatePath()
+	if err := RejectSymlink(path); err != nil {
+		return err
+	}
+	err := os.Remove(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("remove pending Rockbox TagCache update: %w", err)
+	}
+	return syncDirectory(filepath.Dir(path))
+}
+
+// RequestTagCacheUpdate creates Rockbox's idempotent update request marker.
+// It never creates .rockbox or replaces an existing marker.
+func (l Layout) RequestTagCacheUpdate() error {
+	directory := l.TagCacheDirectory()
+	if err := RejectSymlink(directory); err != nil {
+		return err
+	}
+	info, err := os.Lstat(directory)
+	if err != nil {
+		return fmt.Errorf("inspect Rockbox directory: %w", err)
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("Rockbox path is not a real directory: %q", directory)
+	}
+
+	marker := l.TagCacheUpdateMarkerPath()
+	if err := RejectSymlink(marker); err != nil {
+		return err
+	}
+	info, err = os.Lstat(marker)
+	if err == nil {
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("Rockbox TagCache marker is not a regular file: %q", marker)
+		}
+		return nil
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect Rockbox TagCache marker: %w", err)
+	}
+
+	file, err := os.OpenFile(marker, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return fmt.Errorf("create Rockbox TagCache marker: %w", err)
+	}
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("close Rockbox TagCache marker: %w", err)
+	}
+	if err := syncDirectory(directory); err != nil {
+		return fmt.Errorf("sync Rockbox directory after marker: %w", err)
+	}
+	return nil
 }
 
 func (l Layout) ManifestPath() string {

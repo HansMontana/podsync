@@ -17,9 +17,18 @@ const (
 )
 
 type Config struct {
-	Sources   []SourceFeed
-	Feeds     []LogicalFeed
-	Briefings []Briefing
+	Sources      []SourceFeed
+	Feeds        []LogicalFeed
+	Briefings    []Briefing
+	Integrations IntegrationConfig
+}
+
+type IntegrationConfig struct {
+	Rockbox RockboxConfig
+}
+
+type RockboxConfig struct {
+	TagCacheUpdateMarker bool
 }
 
 type SourceFeed struct {

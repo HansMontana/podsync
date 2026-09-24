@@ -150,6 +150,10 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 	if err != nil {
 		return err
 	}
+	pendingTagCacheUpdate, err := layout.LoadPendingTagCacheUpdate()
+	if err != nil {
+		return err
+	}
 	if stagingDir != "" {
 		if err := validateStagingDirectory(layout.Root, stagingDir); err != nil {
 			return err
@@ -194,7 +198,7 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		logger.Info(fmt.Sprintf("Dry run selected %d episodes, writes %d playlists, and deletes %d managed files", len(episodes), len(playlistFiles)-1, len(plan.Deletes)))
 		return nil
 	}
-	if err := applicationdevice.EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx, httpClientFromContext(ctx), stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, applicationdevice.EpisodeSyncOptions{VerifyMedia: verifyMedia, MediaOps: mediaops.New(), Files: devicefs.New(), VerifyDevice: func() error {
+	result, err := applicationdevice.EpisodesWithResolverAndProgressAndWarningsWithOptionsResult(ctx, httpClientFromContext(ctx), stagingDir, layout.Root, episodes, playlistFiles, managed, feedNames, resolver, applicationdevice.EpisodeSyncOptions{VerifyMedia: verifyMedia, MediaOps: mediaops.New(), Files: devicefs.New(), VerifyDevice: func() error {
 		return devicefs.VerifyRootIdentity(layout.Root, identity)
 	}}, func(completed, total int, current catalog.Episode, reused bool) {
 		if logProgress(completed, total) {
@@ -217,11 +221,15 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		}
 	}, func(message string) {
 		logger.Warn(message)
-	}); err != nil {
+	})
+	if err != nil {
 		return err
 	}
 	if err := devicefs.VerifyRootIdentity(layout.Root, identity); err != nil {
 		return fmt.Errorf("before persisting sync state: %w", err)
+	}
+	if err := maybeRequestRockboxTagCacheUpdate(layout, cfg.Integrations.Rockbox.TagCacheUpdateMarker, result.MediaChanged, pendingTagCacheUpdate); err != nil {
+		return err
 	}
 	if configProvided {
 		if err := devicefs.VerifyRootIdentity(layout.Root, identity); err != nil {
@@ -249,6 +257,22 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		}
 	}
 	logger.Info(fmt.Sprintf("Sync complete: %d episodes, %d playlists", len(episodes), len(playlistFiles)-1))
+	return nil
+}
+
+func maybeRequestRockboxTagCacheUpdate(layout devicefs.Layout, enabled, mediaChanged, pending bool) error {
+	if !enabled || (!mediaChanged && !pending) {
+		return nil
+	}
+	if err := layout.SavePendingTagCacheUpdate(); err != nil {
+		return fmt.Errorf("save pending Rockbox TagCache update: %w", err)
+	}
+	if err := layout.RequestTagCacheUpdate(); err != nil {
+		return fmt.Errorf("request Rockbox TagCache update: %w", err)
+	}
+	if err := layout.ClearPendingTagCacheUpdate(); err != nil {
+		return fmt.Errorf("clear pending Rockbox TagCache update: %w", err)
+	}
 	return nil
 }
 

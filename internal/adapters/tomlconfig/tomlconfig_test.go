@@ -72,6 +72,36 @@ unplayed_only = true
 	}
 }
 
+func TestParseAndSaveRockboxIntegration(t *testing.T) {
+	input := `
+[[source]]
+id = "news"
+url = "https://example.com/news.xml"
+
+[integrations.rockbox]
+tagcache_update_marker = true
+`
+	cfg, err := Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("Parse() returned error: %v", err)
+	}
+	if !cfg.Integrations.Rockbox.TagCacheUpdateMarker {
+		t.Fatal("Rockbox TagCache marker opt-in was not parsed")
+	}
+
+	path := filepath.Join(t.TempDir(), "podsync.toml")
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save() returned error: %v", err)
+	}
+	got, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() returned error: %v", err)
+	}
+	if !got.Integrations.Rockbox.TagCacheUpdateMarker {
+		t.Fatal("Rockbox TagCache marker opt-in was not preserved")
+	}
+}
+
 func TestExampleConfigsParseAndValidate(t *testing.T) {
 	for _, name := range []string{"podcasts.toml", "daily-briefing.toml"} {
 		t.Run(name, func(t *testing.T) {
