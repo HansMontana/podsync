@@ -38,3 +38,26 @@ func managedPathIdentityMarker(relative string) string {
 	}
 	return strings.TrimSuffix(name[marker+4:], filepath.Ext(name))
 }
+
+func appendManagedManifestPaths(content []byte, retained []string) []byte {
+	text := strings.TrimRight(string(content), "\n")
+	lines := make([]string, 0)
+	if text != "" {
+		lines = strings.Split(text, "\n")
+	}
+	existing := make(map[string]struct{}, len(lines)+len(retained))
+	for _, line := range lines {
+		existing[strings.TrimSpace(line)] = struct{}{}
+	}
+	for _, relative := range retained {
+		if _, exists := existing[relative]; exists {
+			continue
+		}
+		lines = append(lines, relative)
+		existing[relative] = struct{}{}
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return []byte(strings.Join(lines, "\n") + "\n")
+}

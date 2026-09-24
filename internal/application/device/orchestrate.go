@@ -115,7 +115,7 @@ func EpisodesWithResolverAndProgressAndWarningsWithOptions(ctx context.Context, 
 			remaining = append(remaining, current)
 		}
 	}
-	if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, remaining, filterSkippedPlaylists(playlists, skipped), managed, feedNames, resolver, signatures, options, skipped, preparationProgress.Report, fileProgress, warning); err != nil {
+	if err := syncEpisodeBatch(ctx, client, stagingDir, deviceRoot, remaining, playlists, managed, feedNames, resolver, signatures, options, skipped, preparationProgress.Report, fileProgress, warning); err != nil {
 		return err
 	}
 	if err := options.Files.ClearPendingManagedPaths(deviceRoot); err != nil {
@@ -156,8 +156,8 @@ func appendUniquePaths(paths, additions []string) []string {
 	return result
 }
 
-func filterSkippedPlaylists(playlists []PlaylistFile, skipped map[string]struct{}) []PlaylistFile {
-	if len(skipped) == 0 {
+func filterSkippedPlaylists(playlists []PlaylistFile, skipped map[string]struct{}, retained []string) []PlaylistFile {
+	if len(skipped) == 0 && len(retained) == 0 {
 		return playlists
 	}
 	filtered := make([]PlaylistFile, len(playlists))
@@ -175,6 +175,10 @@ func filterSkippedPlaylists(playlists []PlaylistFile, skipped map[string]struct{
 				continue
 			}
 			kept = append(kept, line)
+		}
+		if filtered[i].Relative == "Podsync/managed-files.txt" {
+			filtered[i].Content = appendManagedManifestPaths([]byte(strings.Join(kept, "\n")), retained)
+			continue
 		}
 		filtered[i].Content = []byte(strings.Join(kept, "\n"))
 	}
@@ -353,8 +357,9 @@ func syncEpisodeBatch(ctx context.Context, client *http.Client, stagingDir, devi
 		}
 	}
 
-	keep = append(keep, managedPathsForSkippedEpisodes(managed, skipped)...)
-	plan, err := options.Files.BuildFilePlan(managed, copies, filterSkippedPlaylists(playlists, skipped), keep)
+	retained := managedPathsForSkippedEpisodes(managed, skipped)
+	keep = append(keep, retained...)
+	plan, err := options.Files.BuildFilePlan(managed, copies, filterSkippedPlaylists(playlists, skipped, retained), keep)
 	if err != nil {
 		return fmt.Errorf("build episode sync plan: %w", err)
 	}

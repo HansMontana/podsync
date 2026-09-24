@@ -86,3 +86,28 @@ func TestBuildDoesNotBackfillSkippedBriefingSection(t *testing.T) {
 		t.Fatalf("got plan episodes %+v", plan.Episodes)
 	}
 }
+
+func TestBuildFiltersConsumedEpisodesWithinBriefingWindowWithoutBackfill(t *testing.T) {
+	cfg := Config{
+		Sources: []SourceFeed{{ID: "one", URL: "https://example.com/one.xml"}},
+		Feeds:   []LogicalFeed{{ID: "first", Source: "one", Order: NewestFirst}},
+		Briefings: []Briefing{{ID: "morning", Sections: []BriefingSection{
+			{Feed: "first", Order: NewestFirst, Limit: 3, UnplayedOnly: true},
+		}}},
+	}
+	newest := catalog.Episode{FeedID: 1, GUID: "newest", PublishedAt: time.Date(2026, 9, 4, 0, 0, 0, 0, time.UTC)}
+	consumed := catalog.Episode{FeedID: 1, GUID: "consumed", PublishedAt: time.Date(2026, 9, 3, 0, 0, 0, 0, time.UTC)}
+	third := catalog.Episode{FeedID: 1, GUID: "third", PublishedAt: time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)}
+	older := catalog.Episode{FeedID: 1, GUID: "older", PublishedAt: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)}
+
+	plan, err := Build(cfg, catalog.Catalog{
+		Feeds:    []catalog.Feed{{ID: 1, URL: "https://example.com/one.xml"}},
+		Episodes: []catalog.Episode{newest, consumed, third, older},
+	}, "morning", map[string]playback.State{consumed.IdentityKey(): {Known: true, Skipped: true}})
+	if err != nil {
+		t.Fatalf("Build() returned error: %v", err)
+	}
+	if len(plan.Episodes) != 2 || plan.Episodes[0].GUID != "newest" || plan.Episodes[1].GUID != "third" {
+		t.Fatalf("got plan episodes %+v", plan.Episodes)
+	}
+}

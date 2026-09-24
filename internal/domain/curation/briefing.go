@@ -34,19 +34,16 @@ func Build(cfg Config, current catalog.Catalog, briefingID string, playbackState
 		if len(episodes) > section.Limit {
 			episodes = episodes[:section.Limit]
 		}
-		if section.UnplayedOnly && hasConsumedEpisode(episodes, playbackStates) {
-			continue
+		if section.UnplayedOnly {
+			unplayed := episodes[:0]
+			for _, episode := range episodes {
+				if !playbackStates[episode.IdentityKey()].Consumed() {
+					unplayed = append(unplayed, episode)
+				}
+			}
+			episodes = unplayed
 		}
 		plan.Episodes = append(plan.Episodes, episodes...)
 	}
 	return plan, nil
-}
-
-func hasConsumedEpisode(episodes []catalog.Episode, playbackStates map[string]playback.State) bool {
-	for _, current := range episodes {
-		if playbackStates[current.IdentityKey()].Consumed() {
-			return true
-		}
-	}
-	return false
 }

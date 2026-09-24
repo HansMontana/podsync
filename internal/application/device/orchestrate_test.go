@@ -157,8 +157,9 @@ func TestEpisodesKeepsOldManagedPathWhenUnsupportedReplacementChangesPath(t *tes
 		t.Fatal(err)
 	}
 	playlist := PlaylistFile{Relative: "Playlists/test.m3u8", Content: []byte("#EXTM3U\n#EXTINF:0,New title\n../" + newPath + "\n")}
+	manifest := PlaylistFile{Relative: "Podsync/managed-files.txt", Content: []byte(newPath + "\n")}
 
-	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{currentEpisode}, []PlaylistFile{playlist}, []string{oldPath}, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations(), Files: realDeviceFiles()}); err != nil {
+	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{currentEpisode}, []PlaylistFile{playlist, manifest}, []string{oldPath}, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations(), Files: realDeviceFiles()}); err != nil {
 		t.Fatalf("Episodes() returned error: %v", err)
 	}
 	if data, err := os.ReadFile(oldDestination); err != nil || string(data) != "old audio" {
@@ -166,6 +167,60 @@ func TestEpisodesKeepsOldManagedPathWhenUnsupportedReplacementChangesPath(t *tes
 	}
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(newPath))); !os.IsNotExist(err) {
 		t.Fatalf("unsupported replacement was installed, error: %v", err)
+	}
+	manifestData, err := os.ReadFile(filepath.Join(root, "Podsync/managed-files.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(manifestData), oldPath) || strings.Contains(string(manifestData), newPath) {
+		t.Fatalf("manifest = %q", manifestData)
+	}
+	playlistData, err := os.ReadFile(filepath.Join(root, "Playlists/test.m3u8"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(playlistData), oldPath) || strings.Contains(string(playlistData), newPath) {
+		t.Fatalf("playlist = %q", playlistData)
+	}
+}
+
+func TestEpisodesRemovesRetainedOldPathAfterReplacementSucceeds(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "audio/mpeg")
+		_, _ = w.Write([]byte("replacement audio"))
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	resolver := media.Resolver{1: "podcast-1"}
+	oldEpisode := catalog.Episode{FeedID: 1, GUID: "episode", Title: "Old title", Enclosure: catalog.Enclosure{URL: "https://example.com/old.mp3", Type: "audio/mpeg"}}
+	currentEpisode := oldEpisode
+	currentEpisode.Title = "New title"
+	currentEpisode.Enclosure.URL = server.URL + "/episode"
+	oldPath := resolver.RelativePathFor(oldEpisode)
+	newPath := resolver.RelativePathFor(currentEpisode)
+	oldDestination := filepath.Join(root, filepath.FromSlash(oldPath))
+	if err := os.MkdirAll(filepath.Dir(oldDestination), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldDestination, []byte("old audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	playlist := PlaylistFile{Relative: "Playlists/test.m3u8", Content: []byte("#EXTM3U\n#EXTINF:0,New title\n../" + newPath + "\n")}
+	manifest := PlaylistFile{Relative: "Podsync/managed-files.txt", Content: []byte(newPath + "\n")}
+
+	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{currentEpisode}, []PlaylistFile{playlist, manifest}, []string{oldPath}, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations(), Files: realDeviceFiles()}); err != nil {
+		t.Fatalf("Episodes() returned error: %v", err)
+	}
+	if _, err := os.Stat(oldDestination); !os.IsNotExist(err) {
+		t.Fatalf("old managed file remains, error: %v", err)
+	}
+	manifestData, err := os.ReadFile(filepath.Join(root, "Podsync/managed-files.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(manifestData) != newPath+"\n" {
+		t.Fatalf("manifest = %q, want %q", manifestData, newPath+"\n")
 	}
 }
 
