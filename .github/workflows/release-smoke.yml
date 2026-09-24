@@ -1,0 +1,94 @@
+name: Release Smoke Test
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to test
+        required: true
+        default: v0.1.1
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux-amd64
+            os: Linux
+            architecture: x86_64
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+            os: Linux
+            architecture: aarch64
+          - runner: macos-15-intel
+            target: darwin-amd64
+            os: macOS
+            architecture: x86_64
+          - runner: macos-14
+            target: darwin-arm64
+            os: macOS
+            architecture: arm64
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+    steps:
+      - name: Check out release examples
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+          persist-credentials: false
+
+      - name: Download release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          asset="podsync_${TAG#v}_${{ matrix.target }}.tar.gz"
+          mkdir -p dist
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$asset" \
+            --dir dist
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern checksums.txt \
+            --dir dist
+
+      - name: Verify checksum and native architecture
+        env:
+          TARGET: ${{ matrix.target }}
+          EXPECTED_OS: ${{ matrix.os }}
+          EXPECTED_ARCHITECTURE: ${{ matrix.architecture }}
+        run: |
+          set -euo pipefail
+          asset="podsync_${TAG#v}_${TARGET}.tar.gz"
+          expected="$(awk -v asset="$asset" '$2 == asset {print $1}' dist/checksums.txt)"
+          if command -v sha256sum >/dev/null 2>&1; then
+            actual="$(sha256sum "dist/$asset" | awk '{print $1}')"
+          else
+            actual="$(shasum -a 256 "dist/$asset" | awk '{print $1}')"
+          fi
+          test -n "$expected"
+          test "$actual" = "$expected"
+          test "$(uname -s)" = "$EXPECTED_OS"
+          test "$(uname -m)" = "$EXPECTED_ARCHITECTURE"
+
+      - name: Run CLI smoke tests
+        run: |
+          set -euo pipefail
+          asset="podsync_${TAG#v}_${{ matrix.target }}.tar.gz"
+          tar -xzf "dist/$asset" -C dist
+          test -x dist/podsync
+          test "$(dist/podsync --version)" = "podsync $TAG"
+          dist/podsync help >/dev/null
+          dist/podsync validate-config -config examples/podcasts.toml
