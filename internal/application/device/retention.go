@@ -20,6 +20,9 @@ func managedPathsForSkippedEpisodes(managed []string, skipped map[string]struct{
 	}
 	kept := make([]string, 0)
 	for _, relative := range managed {
+		if !strings.HasPrefix(filepath.ToSlash(relative), "Podcasts/") {
+			continue
+		}
 		if _, exists := markers[managedPathIdentityMarker(relative)]; exists {
 			kept = append(kept, relative)
 		}

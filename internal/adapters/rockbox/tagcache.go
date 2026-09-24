@@ -102,7 +102,7 @@ type tagCacheEntry struct {
 type tagHeader struct{ count int64 }
 
 func openMaster(path string) (*os.File, binary.ByteOrder, int64, int64, error) {
-	file, err := os.Open(path)
+	file, err := openRegularFile(path, "TagCache master index")
 	if err != nil {
 		return nil, nil, 0, 0, fmt.Errorf("open TagCache master index: %w", err)
 	}
