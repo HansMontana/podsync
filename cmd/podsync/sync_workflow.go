@@ -262,6 +262,8 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		logger.Warn(err.Error())
 	} else if tagCacheUpdateRequested {
 		logger.Info("Requested Rockbox TagCache update")
+	} else if cfg.Integrations.Rockbox.TagCacheUpdateMarker {
+		logger.Info("Rockbox TagCache update skipped: no media changes")
 	}
 	logger.Info(fmt.Sprintf("Sync complete: %d episodes, %d playlists", len(episodes), len(playlistFiles)-1))
 	return nil
