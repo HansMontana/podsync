@@ -51,6 +51,15 @@ func loadPlaybackRecords(layout devicefs.Layout) ([]rockboxplayback.Record, []er
 	var records []rockboxplayback.Record
 	var warnings []error
 	for _, path := range paths {
+		info, statErr := os.Lstat(path)
+		if statErr != nil {
+			warnings = append(warnings, fmt.Errorf("inspect playback log %q: %w", path, statErr))
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			warnings = append(warnings, fmt.Errorf("playback log %q is not a regular file", path))
+			continue
+		}
 		file, err := os.Open(path)
 		if err != nil {
 			warnings = append(warnings, fmt.Errorf("open playback log %q: %w", path, err))
@@ -104,8 +113,11 @@ func loadPlaybackRecordsAndStates(layout devicefs.Layout, episodes []catalog.Epi
 }
 
 func fileExists(path string) (bool, error) {
-	_, err := os.Stat(path)
+	info, err := os.Lstat(path)
 	if err == nil {
+		if !info.Mode().IsRegular() {
+			return false, fmt.Errorf("path is not a regular file: %q", path)
+		}
 		return true, nil
 	}
 	if os.IsNotExist(err) {

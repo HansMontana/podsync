@@ -17,6 +17,8 @@ const (
 	tagPlayCount                = 15
 	tagLastPlayed               = 18
 	tagCacheDeleted      uint32 = 0x0001
+	maxTagCacheEntries          = 1_000_000
+	maxTagCacheFileSize  int64  = 256 << 20
 )
 
 // ParseTagCache reads the Rockbox TagCache master and filename index files.
@@ -31,7 +33,7 @@ func ParseTagCache(directory string) ([]Record, error) {
 		return nil, err
 	}
 	defer master.Close()
-	filename, err := os.Open(filenamePath)
+	filename, err := openRegularFile(filenamePath, "TagCache filename index")
 	if err != nil {
 		return nil, fmt.Errorf("open TagCache filename index: %w", err)
 	}
@@ -118,6 +120,10 @@ func openMaster(path string) (*os.File, binary.ByteOrder, int64, int64, error) {
 		}
 	}
 	count := int64(order.Uint32(header[8:12]))
+	if count > maxTagCacheEntries {
+		file.Close()
+		return nil, nil, 0, 0, fmt.Errorf("TagCache master index exceeds %d entries", maxTagCacheEntries)
+	}
 	dirty := order.Uint32(header[20:24])
 	if dirty != 0 {
 		file.Close()
@@ -125,7 +131,7 @@ func openMaster(path string) (*os.File, binary.ByteOrder, int64, int64, error) {
 	}
 	entrySize := int64(tagCacheTagCount*4 + 4)
 	info, err := file.Stat()
-	if err != nil || info.Size() < tagCacheMasterHeader+count*entrySize {
+	if err != nil || info.Size() > maxTagCacheFileSize || info.Size() < tagCacheMasterHeader+count*entrySize {
 		file.Close()
 		return nil, nil, 0, 0, fmt.Errorf("truncated TagCache master index")
 	}
@@ -144,10 +150,28 @@ func readTagHeader(file *os.File, order binary.ByteOrder) (tagHeader, error) {
 	if err != nil {
 		return tagHeader{}, err
 	}
+	if info.Size() > maxTagCacheFileSize {
+		return tagHeader{}, fmt.Errorf("TagCache filename index exceeds %d bytes", maxTagCacheFileSize)
+	}
 	if int64(order.Uint32(header[4:8])) != info.Size()-12 {
 		return tagHeader{}, fmt.Errorf("invalid data size")
 	}
 	return tagHeader{count: int64(order.Uint32(header[8:12]))}, nil
+}
+
+func openRegularFile(path, description string) (*os.File, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, fmt.Errorf("inspect %s: %w", description, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s is not a regular file", description)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", description, err)
+	}
+	return file, nil
 }
 
 func readMasterEntry(file *os.File, order binary.ByteOrder, entrySize, indexID int64) (tagCacheEntry, error) {

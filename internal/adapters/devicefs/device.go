@@ -19,6 +19,12 @@ type PendingFeedRemoval struct {
 	URL string `json:"url"`
 }
 
+const (
+	maxDeviceJSONSize = 1 << 20
+	maxManagedPaths   = 100_000
+	maxManifestSize   = 16 << 20
+)
+
 func (l Layout) StateDirectory() string {
 	return filepath.Join(l.Root, "Podsync")
 }
@@ -78,6 +84,9 @@ func (l Layout) LoadMediaSignatures() (map[string]string, error) {
 	if err := RejectSymlink(l.MediaSignaturesPath()); err != nil {
 		return nil, err
 	}
+	if err := checkRegularFileSize(l.MediaSignaturesPath(), maxDeviceJSONSize); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("inspect media signatures: %w", err)
+	}
 	content, err := os.ReadFile(l.MediaSignaturesPath())
 	if os.IsNotExist(err) {
 		return map[string]string{}, nil
@@ -134,6 +143,9 @@ func (l Layout) SavePendingFeedRemoval(url string) error {
 func (l Layout) LoadPendingFeedRemoval() (PendingFeedRemoval, error) {
 	if err := RejectSymlink(l.PendingFeedRemovalPath()); err != nil {
 		return PendingFeedRemoval{}, err
+	}
+	if err := checkRegularFileSize(l.PendingFeedRemovalPath(), maxDeviceJSONSize); err != nil && !os.IsNotExist(err) {
+		return PendingFeedRemoval{}, fmt.Errorf("inspect pending feed removal: %w", err)
 	}
 	content, err := os.ReadFile(l.PendingFeedRemovalPath())
 	if os.IsNotExist(err) {
@@ -239,6 +251,9 @@ func loadPathList(path string) ([]string, error) {
 	if err := RejectSymlink(path); err != nil {
 		return nil, err
 	}
+	if err := checkRegularFileSize(path, maxManifestSize); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("inspect managed-files manifest: %w", err)
+	}
 	file, err := os.Open(path)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -250,9 +265,13 @@ func loadPathList(path string) ([]string, error) {
 
 	var paths []string
 	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 64*1024), 1<<20)
 	for scanner.Scan() {
 		path := strings.TrimSpace(scanner.Text())
 		if path != "" {
+			if len(paths) >= maxManagedPaths {
+				return nil, fmt.Errorf("managed-files manifest exceeds %d entries", maxManagedPaths)
+			}
 			paths = append(paths, path)
 		}
 	}
@@ -260,6 +279,20 @@ func loadPathList(path string) ([]string, error) {
 		return nil, fmt.Errorf("read managed-files manifest: %w", err)
 	}
 	return paths, nil
+}
+
+func checkRegularFileSize(path string, maximum int64) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("path is not a regular file: %q", path)
+	}
+	if info.Size() > maximum {
+		return fmt.Errorf("file exceeds %d bytes: %q", maximum, path)
+	}
+	return nil
 }
 
 func writePathList(path string, paths []string) error {

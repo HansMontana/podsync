@@ -1,6 +1,7 @@
 package rockbox
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -26,5 +27,15 @@ func TestParseLogIgnoresZeroElapsedPlayback(t *testing.T) {
 	}
 	if len(records) != 0 {
 		t.Fatalf("got records %+v", records)
+	}
+}
+
+func TestParseLogRejectsTooManyRecords(t *testing.T) {
+	var log strings.Builder
+	for i := 0; i <= maxLogRecords; i++ {
+		fmt.Fprintf(&log, "%d:100:100:/Podcasts/news/episode-%d.mp3\n", i+1, i)
+	}
+	if _, err := ParseLog(strings.NewReader(log.String())); err == nil {
+		t.Fatal("ParseLog() accepted too many records")
 	}
 }
