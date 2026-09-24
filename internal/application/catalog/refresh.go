@@ -60,10 +60,16 @@ func RefreshFeedWithArchive(ctx context.Context, repository Repository, reader F
 	if err != nil {
 		return fmt.Errorf("refresh feed %d: %w", feedID, err)
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	refreshedFeed.ETag = result.ETag
 	refreshedFeed.LastModified = result.LastModified
 	updated, err := domaincatalog.ApplyRefresh(current, domaincatalog.RefreshResult{Feed: refreshedFeed, Episodes: episodes, Archive: archive})
 	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if err := repository.Save(updated); err != nil {
@@ -85,12 +91,18 @@ func RefreshFeeds(ctx context.Context, repository Repository, reader FeedReader,
 		return RefreshReport{}, err
 	}
 	for _, result := range results {
+		if err := ctx.Err(); err != nil {
+			return RefreshReport{}, err
+		}
 		current, err = domaincatalog.ApplyRefresh(current, result)
 		if err != nil {
 			return RefreshReport{}, err
 		}
 	}
 	if len(results) > 0 {
+		if err := ctx.Err(); err != nil {
+			return RefreshReport{}, err
+		}
 		if err := repository.Save(current); err != nil {
 			return RefreshReport{}, fmt.Errorf("save refreshed feeds: %w", err)
 		}

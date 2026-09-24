@@ -2,6 +2,7 @@ package catalog_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -276,4 +277,46 @@ func TestRefreshFeedsReturnsParentCancellation(t *testing.T) {
 	if len(got.Episodes) != 1 || got.Episodes[0].GUID != "old" {
 		t.Fatalf("canceled refresh changed state: %+v", got)
 	}
+}
+
+func TestRefreshFeedCancellationDuringParseDoesNotSave(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	repository := &recordingRepository{state: catalog.Catalog{Feeds: []catalog.Feed{{ID: 1, URL: "https://example.com/feed.xml"}}}}
+	reader := cancelingReader{cancel: cancel}
+
+	err := applicationcatalog.RefreshFeed(ctx, repository, reader, 1)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("RefreshFeed() error = %v, want cancellation", err)
+	}
+	if repository.saved {
+		t.Fatal("RefreshFeed() saved state after cancellation")
+	}
+}
+
+type recordingRepository struct {
+	state catalog.Catalog
+	saved bool
+}
+
+func (r *recordingRepository) Load() (catalog.Catalog, error) { return r.state, nil }
+
+func (r *recordingRepository) Save(state catalog.Catalog) error {
+	r.saved = true
+	r.state = state
+	return nil
+}
+
+func (r *recordingRepository) Close() error { return nil }
+
+type cancelingReader struct {
+	cancel context.CancelFunc
+}
+
+func (r cancelingReader) Fetch(context.Context, catalog.Feed) (applicationcatalog.FetchResult, error) {
+	return applicationcatalog.FetchResult{Body: []byte("unused")}, nil
+}
+
+func (r cancelingReader) Parse(_ applicationcatalog.FetchResult, feed catalog.Feed) (catalog.Feed, []catalog.Episode, error) {
+	r.cancel()
+	return feed, []catalog.Episode{{FeedID: feed.ID, GUID: "episode"}}, nil
 }
