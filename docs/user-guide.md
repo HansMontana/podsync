@@ -75,8 +75,9 @@ Show the version of a local build:
 ```
 
 Published releases use semantic-version tags such as `v0.1.0`. Release
-archives are provided for Linux amd64, Linux arm64, and macOS Apple Silicon.
-The macOS artifact is for CLI use; daemon mode remains Linux-only.
+archives are provided for Linux amd64, Linux arm64, macOS Intel, and macOS
+Apple Silicon. The macOS artifacts are for CLI use; daemon mode remains
+Linux-only.
 
 Run the test suite:
 

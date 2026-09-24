@@ -30,7 +30,7 @@ Implemented:
 - Linux daemon mode for one update per mounted-device session
 - Automatic mounted-device detection, read-only managed-file verification, and `PODSYNC_DEVICE_ROOT` support
 - CLI workflows for validation, reconciliation, refresh, update, feed management, status, verification, playlist, briefing, and sync
-- Semantic-versioned releases with Linux amd64/arm64 and experimental macOS Apple Silicon CLI artifacts
+- Semantic-versioned releases with Linux amd64/arm64 and experimental macOS Intel/Apple Silicon CLI artifacts
 
 Remaining validation work:
 
@@ -98,9 +98,9 @@ podsync update -skip-verify-media
 
 Releases use semantic-version tags such as `v0.1.0`. Pushing a matching tag
 runs the private-repository release workflow, which tests and publishes Linux
-amd64, Linux arm64, and macOS Apple Silicon (`darwin/arm64`) archives with
-SHA-256 checksums. The macOS artifact supports the CLI; daemon mode remains
-Linux-only.
+amd64, Linux arm64, macOS Intel (`darwin/amd64`), and macOS Apple Silicon
+(`darwin/arm64`) archives with SHA-256 checksums. The macOS artifacts support
+the CLI; daemon mode remains Linux-only.
 
 Show the version of a local build:
 
