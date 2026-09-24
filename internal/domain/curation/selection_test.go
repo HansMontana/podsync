@@ -44,6 +44,24 @@ func TestFeedTreatsUnknownPlaybackAsUnplayed(t *testing.T) {
 	}
 }
 
+func TestRegularFeedSelectionDoesNotFilterSkippedEpisodes(t *testing.T) {
+	cfg := Config{
+		Sources: []SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
+		Feeds:   []LogicalFeed{{ID: "news", Source: "news", Order: NewestFirst, UnplayedOnly: true}},
+	}
+	episodeValue := catalog.Episode{FeedID: 1, GUID: "episode-1", PublishedAt: time.Now()}
+	got, err := Feed(cfg, catalog.Catalog{
+		Feeds:    []catalog.Feed{{ID: 1, URL: "https://example.com/news.xml"}},
+		Episodes: []catalog.Episode{episodeValue},
+	}, "news", map[string]playback.State{episodeValue.IdentityKey(): {Known: true, Skipped: true}}, false)
+	if err != nil {
+		t.Fatalf("Feed() returned error: %v", err)
+	}
+	if len(got) != 1 || got[0].GUID != episodeValue.GUID {
+		t.Fatalf("got episodes %+v", got)
+	}
+}
+
 func TestFeedSupportsOldestFirst(t *testing.T) {
 	cfg := Config{
 		Sources: []SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}},
