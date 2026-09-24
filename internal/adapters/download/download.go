@@ -46,7 +46,7 @@ func episode(ctx context.Context, client *http.Client, e catalog.Episode, stagin
 		return "", fmt.Errorf("validate audio URL: %w", err)
 	}
 	if client == nil {
-		client = http.DefaultClient
+		return "", fmt.Errorf("download episode: HTTP client is required")
 	}
 	if err := os.MkdirAll(stagingDir, 0o755); err != nil {
 		return "", fmt.Errorf("create staging directory: %w", err)

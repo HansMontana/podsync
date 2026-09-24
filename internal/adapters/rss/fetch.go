@@ -29,7 +29,7 @@ func FetchRSS(ctx context.Context, client *http.Client, f catalog.Feed) (FetchRe
 		return FetchResult{}, fmt.Errorf("validate feed URL: %w", err)
 	}
 	if client == nil {
-		client = http.DefaultClient
+		return FetchResult{}, fmt.Errorf("fetch RSS: HTTP client is required")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/HansMontana/podsync/internal/domain/catalog"
 )
 
 // New returns the HTTP client used for untrusted feed and media URLs.
@@ -19,6 +21,7 @@ func New(timeout time.Duration) *http.Client {
 	} else {
 		transport = transport.Clone()
 	}
+	transport.Proxy = nil
 	transport.DialContext = dialPublicContext
 	return &http.Client{
 		Timeout:       timeout,
@@ -60,8 +63,8 @@ func isPrivateIP(ip net.IP) bool {
 }
 
 func checkRedirect(next *http.Request, via []*http.Request) error {
-	if next.URL.Scheme != "https" {
-		return fmt.Errorf("refusing redirect to non-HTTPS URL")
+	if err := catalog.ValidateRemoteURL(next.URL.String()); err != nil {
+		return fmt.Errorf("refusing unsafe redirect: %w", err)
 	}
 	if len(via) == 0 {
 		return nil

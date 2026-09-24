@@ -38,6 +38,24 @@ func TestCheckRedirectDropsConditionalHeadersAcrossOrigins(t *testing.T) {
 	}
 }
 
+func TestNewDisablesEnvironmentProxy(t *testing.T) {
+	client := New(0)
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("client transport has type %T, want *http.Transport", client.Transport)
+	}
+	if transport.Proxy != nil {
+		t.Fatal("New() retained proxy configuration")
+	}
+}
+
+func TestCheckRedirectRejectsCredentials(t *testing.T) {
+	request := &http.Request{URL: mustURL(t, "https://user:password@example.com/feed.xml")}
+	if err := checkRedirect(request, []*http.Request{{URL: mustURL(t, "https://example.com/start.xml")}}); err == nil {
+		t.Fatal("checkRedirect() accepted redirect credentials")
+	}
+}
+
 func mustURL(t *testing.T, raw string) *url.URL {
 	t.Helper()
 	value, err := url.Parse(raw)
