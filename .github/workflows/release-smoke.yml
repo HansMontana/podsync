@@ -32,11 +32,11 @@ jobs:
             architecture: aarch64
           - runner: macos-15-intel
             target: darwin-amd64
-            os: macOS
+            os: Darwin
             architecture: x86_64
           - runner: macos-14
             target: darwin-arm64
-            os: macOS
+            os: Darwin
             architecture: arm64
     env:
       TAG: ${{ github.event.release.tag_name || inputs.tag }}
