@@ -293,7 +293,7 @@ func reconcileDeviceWithLockContext(ctx context.Context, deviceRoot, configPath 
 	if err != nil {
 		return applicationcatalog.RefreshReport{}, err
 	}
-	report, err := applicationcatalog.RefreshFeeds(ctx, repository, rss.NewReader(httpClient), requests)
+	report, err := applicationcatalog.RefreshFeeds(ctx, repository, rss.NewReader(httpClientFromContext(ctx)), requests)
 	if err != nil {
 		return applicationcatalog.RefreshReport{}, fmt.Errorf("refresh feeds: %w", err)
 	}

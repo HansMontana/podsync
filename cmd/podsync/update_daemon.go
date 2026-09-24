@@ -123,7 +123,7 @@ type daemonDevice struct {
 type daemonDetector func() (daemonDevice, bool, error)
 type daemonRunner func(context.Context, updateOptions) error
 
-func daemon(args []string) error {
+func daemon(parent context.Context, args []string) error {
 	if runtime.GOOS != "linux" {
 		return fmt.Errorf("daemon mode is currently supported on Linux only")
 	}
@@ -142,7 +142,7 @@ func daemon(args []string) error {
 		return fmt.Errorf("poll interval must be positive")
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return runDaemon(ctx, daemonOptions{
 		deviceRoot:      *deviceRoot,

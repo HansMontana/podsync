@@ -101,7 +101,7 @@ func TestRefreshAndSyncCommandsUseDeviceStateAndStaging(t *testing.T) {
 		_, _ = fmt.Fprintf(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>News</title><link>https://example.com</link><description>News</description><item><title>Episode one</title><guid>one</guid><pubDate>Fri, 02 Jan 2026 00:00:00 GMT</pubDate><enclosure url="%s/episode.mp3" type="audio/mpeg" length="5"/></item></channel></rss>`, server.URL)
 	}))
 	defer server.Close()
-	useHTTPClient(t, server.Client())
+	run := func(args []string) error { return runWithHTTPClient(args, server.Client()) }
 
 	root := t.TempDir()
 	hostConfig := filepath.Join(t.TempDir(), "config.toml")
@@ -170,7 +170,7 @@ func TestUpdateCommandRunsDeepVerificationByDefaultAndSupportsOptOut(t *testing.
 		_, _ = fmt.Fprintf(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>News</title><link>https://example.com</link><description>News</description><item><title>Episode one</title><guid>one</guid><pubDate>Fri, 02 Jan 2026 00:00:00 GMT</pubDate><enclosure url="%s/episode.mp3" type="audio/mpeg" length="5"/></item></channel></rss>`, server.URL)
 	}))
 	defer server.Close()
-	useHTTPClient(t, server.Client())
+	run := func(args []string) error { return runWithHTTPClient(args, server.Client()) }
 
 	root := t.TempDir()
 	hostConfig := filepath.Join(t.TempDir(), "config.toml")
@@ -203,7 +203,7 @@ func TestUpdateCommandRunsDeepVerificationByDefaultAndSupportsOptOut(t *testing.
 func TestUpdateStopsWhenRefreshFails(t *testing.T) {
 	server := httptest.NewTLSServer(http.NotFoundHandler())
 	defer server.Close()
-	useHTTPClient(t, server.Client())
+	run := func(args []string) error { return runWithHTTPClient(args, server.Client()) }
 
 	root := t.TempDir()
 	hostConfig := filepath.Join(t.TempDir(), "config.toml")
@@ -238,7 +238,7 @@ func TestUpdateSyncsPartialRefreshAndReturnsFailure(t *testing.T) {
 		_, _ = fmt.Fprintf(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>News</title><item><title>Episode one</title><guid>one</guid><enclosure url="%s/episode.mp3" type="audio/mpeg" length="5"/></item></channel></rss>`, server.URL)
 	}))
 	defer server.Close()
-	useHTTPClient(t, server.Client())
+	run := func(args []string) error { return runWithHTTPClient(args, server.Client()) }
 
 	root := t.TempDir()
 	hostConfig := filepath.Join(t.TempDir(), "config.toml")
@@ -452,7 +452,7 @@ func TestSyncFailureDoesNotPersistSuppliedConfiguration(t *testing.T) {
 		_, _ = fmt.Fprintf(w, `<?xml version="1.0"?><rss version="2.0"><channel><title>News</title><link>https://example.com</link><description>News</description><item><title>Episode one</title><guid>one</guid><pubDate>Fri, 02 Jan 2026 00:00:00 GMT</pubDate><enclosure url="%s/episode.mp3" type="audio/mpeg" length="5"/></item></channel></rss>`, server.URL)
 	}))
 	defer server.Close()
-	useHTTPClient(t, server.Client())
+	run := func(args []string) error { return runWithHTTPClient(args, server.Client()) }
 
 	root := t.TempDir()
 	original := curation.Config{Sources: []curation.SourceFeed{{ID: "news", URL: server.URL + "/feed.xml"}}, Feeds: []curation.LogicalFeed{{ID: "news", Source: "news", Order: curation.NewestFirst}}}
@@ -495,11 +495,4 @@ func TestSyncFailureDoesNotPersistSuppliedConfiguration(t *testing.T) {
 	if len(current.Feeds) != 1 {
 		t.Fatalf("failed sync persisted reconciled state: %+v", current.Feeds)
 	}
-}
-
-func useHTTPClient(t *testing.T, client *http.Client) {
-	t.Helper()
-	previous := httpClient
-	httpClient = client
-	t.Cleanup(func() { httpClient = previous })
 }

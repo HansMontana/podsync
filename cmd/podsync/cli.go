@@ -50,7 +50,7 @@ func runContext(ctx context.Context, args []string) error {
 	case "sync":
 		return sync(ctx, args[1:])
 	case "daemon":
-		return daemon(args[1:])
+		return daemon(ctx, args[1:])
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", args[0], usageText())
 	}
