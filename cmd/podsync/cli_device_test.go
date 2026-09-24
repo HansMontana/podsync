@@ -94,6 +94,12 @@ func TestCLIHelpAndUnknownCommandUsage(t *testing.T) {
 	}
 }
 
+func TestVersionText(t *testing.T) {
+	if got, want := versionText(), "podsync dev"; got != want {
+		t.Fatalf("versionText() = %q, want %q", got, want)
+	}
+}
+
 func TestCLIRejectsUnexpectedArguments(t *testing.T) {
 	if err := run([]string{"status", "unexpected"}); err == nil {
 		t.Fatal("status accepted an unexpected argument")
@@ -110,7 +116,7 @@ func TestUsageTextUsesConsistentSpaceIndentation(t *testing.T) {
 			t.Fatalf("usage line starts with a tab: %q", line)
 		}
 	}
-	for _, command := range []string{"validate-config", "reconcile", "refresh", "update", "status", "verify", "feed", "playlist", "briefing", "sync"} {
+	for _, command := range []string{"validate-config", "reconcile", "refresh", "update", "status", "verify", "feed", "playlist", "briefing", "sync", "version"} {
 		if !strings.Contains(text, "  "+command) {
 			t.Fatalf("usage text does not contain consistently indented command %q", command)
 		}

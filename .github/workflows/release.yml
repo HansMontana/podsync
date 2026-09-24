@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run tests
+        run: go test -count=1 ./...
+
+      - name: Build release artifacts
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for target in linux-amd64 linux-arm64 darwin-arm64; do
+            GOOS="${target%-*}"
+            GOARCH="${target#*-}"
+            artifact="podsync_${VERSION#v}_${target}"
+            mkdir -p "build/${artifact}"
+            GOOS="$GOOS" GOARCH="$GOARCH" go build \
+              -trimpath \
+              -ldflags "-s -w -X github.com/HansMontana/podsync/internal/version.Version=${VERSION}" \
+              -o "build/${artifact}/podsync" \
+              ./cmd/podsync
+            tar -C "build/${artifact}" -czf "dist/${artifact}.tar.gz" podsync
+          done
+          (cd dist && sha256sum *.tar.gz > checksums.txt)
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --verify-tag \
+            --title "podsync ${GITHUB_REF_NAME}" \
+            --generate-notes \
+            dist/*

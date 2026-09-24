@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/HansMontana/podsync/internal/version"
 )
 
 func runContext(ctx context.Context, args []string) error {
@@ -16,6 +18,13 @@ func runContext(ctx context.Context, args []string) error {
 	}
 	if args[0] == "--help" || args[0] == "-h" {
 		printUsage(os.Stdout)
+		return nil
+	}
+	if args[0] == "version" || args[0] == "--version" {
+		if len(args) > 1 {
+			return fmt.Errorf("unexpected argument %q", args[1])
+		}
+		fmt.Println(versionText())
 		return nil
 	}
 	if args[0] == "help" {
@@ -71,6 +80,7 @@ Commands:
   briefing         Generate one briefing playlist.
   sync             Download selected audio and apply device files.
   daemon           Run one update per mounted device session (Linux only).
+  version          Show the podsync version.
 
 Use "podsync help <command>" or "podsync <command> --help" for details.`
 }
@@ -108,11 +118,17 @@ func printCommandHelp(command string) error {
 		text = "Usage: podsync sync [-device-root PATH] [-config PATH] [-staging PATH] [-dry-run] [-skip-verify-media]\n\nApply selected audio, playlists, and managed-file cleanup."
 	case "daemon":
 		text = "Usage: podsync daemon [-device-root PATH] [-config PATH] [-staging PATH] [-poll-interval DURATION] [-skip-verify-media]\n\nRun one update per mounted device session on Linux."
+	case "version":
+		text = "Usage: podsync version\n\nShow the podsync version."
 	default:
 		return fmt.Errorf("unknown help topic %q\n\n%s", command, usageText())
 	}
 	fmt.Println(text)
 	return nil
+}
+
+func versionText() string {
+	return "podsync " + version.Version
 }
 
 func newFlagSet(name, usage string) *flag.FlagSet {
