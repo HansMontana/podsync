@@ -35,7 +35,7 @@ jobs:
             GOARCH="${target#*-}"
             artifact="podsync_${VERSION#v}_${target}"
             mkdir -p "build/${artifact}"
-            GOOS="$GOOS" GOARCH="$GOARCH" go build \
+            CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build \
               -trimpath \
               -ldflags "-s -w -X github.com/HansMontana/podsync/internal/version.Version=${VERSION}" \
               -o "build/${artifact}/podsync" \

@@ -100,7 +100,9 @@ Releases use semantic-version tags such as `v0.1.0`. Pushing a matching tag
 runs the private-repository release workflow, which tests and publishes Linux
 amd64, Linux arm64, macOS Intel (`darwin/amd64`), and macOS Apple Silicon
 (`darwin/arm64`) archives with SHA-256 checksums. The macOS artifacts support
-the CLI; daemon mode remains Linux-only.
+the CLI; daemon mode remains Linux-only. The macOS artifacts are currently
+unsigned and not notarized, so macOS may require an explicit Gatekeeper approval
+after the checksum has been verified.
 
 Show the version of a local build:
 
@@ -108,6 +110,10 @@ Show the version of a local build:
 podsync version
 podsync --version
 ```
+
+For macOS release downloads, compare the archive's SHA-256 hash with the
+matching entry in `checksums.txt` before opening it. The release workflow builds
+all artifacts with CGO disabled.
 
 `sync` uses already refreshed episode state. For new content, use
 `reconcile` or `feed add`, then configure a logical `[[feed]]` entry, then

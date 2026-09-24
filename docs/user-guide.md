@@ -77,7 +77,22 @@ Show the version of a local build:
 Published releases use semantic-version tags such as `v0.1.0`. Release
 archives are provided for Linux amd64, Linux arm64, macOS Intel, and macOS
 Apple Silicon. The macOS artifacts are for CLI use; daemon mode remains
-Linux-only.
+Linux-only. They are currently unsigned and not notarized, so macOS may show a
+Gatekeeper warning after download.
+
+Verify a macOS archive before opening it. Replace `0.1.1` and the architecture
+with the release you downloaded:
+
+```bash
+version=0.1.1
+artifact="podsync_${version}_darwin-arm64.tar.gz"
+expected="$(awk -v name="$artifact" '$2 == name {print $1}' checksums.txt)"
+actual="$(shasum -a 256 "$artifact" | awk '{print $1}')"
+test "$actual" = "$expected" && echo "checksum ok"
+```
+
+After verifying the checksum, use macOS's normal approval flow if Gatekeeper
+requires confirmation. Do not bypass the warning before verifying the archive.
 
 Run the test suite:
 
