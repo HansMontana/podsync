@@ -48,6 +48,19 @@ jobs:
           ref: ${{ github.event.release.tag_name || inputs.tag }}
           persist-credentials: false
 
+      - name: Set up Go on ARM64
+        if: matrix.target == 'linux-arm64'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run the native ARM64 test suite
+        if: matrix.target == 'linux-arm64'
+        run: |
+          go test -count=1 ./...
+          go vet ./...
+
       - name: Download release asset
         env:
           GH_TOKEN: ${{ github.token }}
