@@ -31,6 +31,25 @@ func (l Layout) ConfigPath() string {
 	return filepath.Join(l.StateDirectory(), "podsync.toml")
 }
 
+func (l Layout) PendingSyncConfigPath() string {
+	return filepath.Join(l.StateDirectory(), "pending-sync.toml")
+}
+
+func (l Layout) ClearPendingSyncConfig() error {
+	path := l.PendingSyncConfigPath()
+	if err := RejectSymlink(path); err != nil {
+		return err
+	}
+	err := os.Remove(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("remove pending sync configuration: %w", err)
+	}
+	return syncDirectory(filepath.Dir(path))
+}
+
 func (l Layout) PlaybackLogPaths() ([]string, error) {
 	paths, err := filepath.Glob(filepath.Join(l.Root, ".rockbox", "playback*.log"))
 	if err != nil {

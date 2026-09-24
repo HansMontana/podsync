@@ -55,6 +55,12 @@ func openDeviceWithLock(root, configPath string, readOnly, persistConfig bool, l
 	if configPath == "" {
 		configPath = layout.ConfigPath()
 	}
+	if !readOnly {
+		if err := recoverPendingSyncConfig(layout, repository, verify); err != nil {
+			_ = repository.Close()
+			return layout, nil, curation.Config{}, err
+		}
+	}
 	if configPath == layout.ConfigPath() {
 		if err := devicefs.RejectSymlink(configPath); err != nil {
 			_ = repository.Close()
@@ -150,6 +156,50 @@ func recoverPendingFeedRemoval(layout devicefs.Layout, repository applicationcat
 		}
 	}
 	return layout.ClearPendingFeedRemoval()
+}
+
+func recoverPendingSyncConfig(layout devicefs.Layout, repository applicationcatalog.Repository, verify deviceVerifier) error {
+	pendingPath := layout.PendingSyncConfigPath()
+	if err := devicefs.RejectSymlink(pendingPath); err != nil {
+		return err
+	}
+	if _, err := os.Stat(pendingPath); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("inspect pending sync configuration: %w", err)
+	}
+	pending, err := tomlconfig.Load(pendingPath)
+	if err != nil {
+		return fmt.Errorf("load pending sync configuration: %w", err)
+	}
+	current, err := repository.Load()
+	if err != nil {
+		return fmt.Errorf("load state for pending sync: %w", err)
+	}
+	reconciled, err := pending.EnsureSources(current)
+	if err != nil {
+		return fmt.Errorf("reconcile pending sync configuration: %w", err)
+	}
+	if verify != nil {
+		if err := verify(); err != nil {
+			return fmt.Errorf("verify device before recovering sync state: %w", err)
+		}
+	}
+	if err := repository.Save(reconciled); err != nil {
+		return fmt.Errorf("recover pending sync state: %w", err)
+	}
+	if verify != nil {
+		if err := verify(); err != nil {
+			return fmt.Errorf("verify device before recovering sync configuration: %w", err)
+		}
+	}
+	if err := tomlconfig.Save(layout.ConfigPath(), pending); err != nil {
+		return fmt.Errorf("recover pending sync configuration: %w", err)
+	}
+	if err := layout.ClearPendingSyncConfig(); err != nil {
+		return fmt.Errorf("clear pending sync configuration: %w", err)
+	}
+	return nil
 }
 
 func validateStagingDirectory(deviceRoot, stagingDir string) error {

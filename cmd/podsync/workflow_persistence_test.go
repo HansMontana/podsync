@@ -358,6 +358,52 @@ func TestPendingFeedRemovalIsCompletedAfterConfigurationWasSaved(t *testing.T) {
 	}
 }
 
+func TestPendingSyncConfigurationIsRecoveredBeforeOpeningDevice(t *testing.T) {
+	root := t.TempDir()
+	layout := devicefs.Layout{Root: root}
+	original := curation.Config{Sources: []curation.SourceFeed{{ID: "news", URL: "https://example.com/news.xml"}}}
+	updated := curation.Config{Sources: []curation.SourceFeed{
+		{ID: "news", URL: "https://example.com/news.xml"},
+		{ID: "sports", URL: "https://example.com/sports.xml"},
+	}}
+	if err := tomlconfig.Save(layout.ConfigPath(), original); err != nil {
+		t.Fatal(err)
+	}
+	repository, err := sqlitecatalog.NewSQLiteRepository(layout.DatabasePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Save(catalog.Catalog{Feeds: []catalog.Feed{{ID: 1, URL: "https://example.com/news.xml"}}}); err != nil {
+		_ = repository.Close()
+		t.Fatal(err)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := tomlconfig.Save(layout.PendingSyncConfigPath(), updated); err != nil {
+		t.Fatal(err)
+	}
+
+	_, reopened, cfg, err := openDevice(root, "", false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	if len(cfg.Sources) != 2 {
+		t.Fatalf("recovered config has %d sources, want 2", len(cfg.Sources))
+	}
+	current, err := reopened.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(current.Feeds) != 2 {
+		t.Fatalf("recovered state has %d feeds, want 2", len(current.Feeds))
+	}
+	if _, err := os.Stat(layout.PendingSyncConfigPath()); !os.IsNotExist(err) {
+		t.Fatalf("pending sync configuration remains, error: %v", err)
+	}
+}
+
 func TestStandalonePlaylistDoesNotPromoteUnrelatedPendingOwnership(t *testing.T) {
 	root := t.TempDir()
 	hostConfig := filepath.Join(t.TempDir(), "config.toml")

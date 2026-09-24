@@ -227,8 +227,8 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 		if err := devicefs.VerifyRootIdentity(layout.Root, identity); err != nil {
 			return fmt.Errorf("before saving sync config: %w", err)
 		}
-		if err := tomlconfig.Save(layout.ConfigPath(), cfg); err != nil {
-			return fmt.Errorf("save device config: %w", err)
+		if err := tomlconfig.Save(layout.PendingSyncConfigPath(), cfg); err != nil {
+			return fmt.Errorf("save pending sync config: %w", err)
 		}
 	}
 	if err := devicefs.VerifyRootIdentity(layout.Root, identity); err != nil {
@@ -236,6 +236,17 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 	}
 	if err := repository.Save(current); err != nil {
 		return fmt.Errorf("save configured sources: %w", err)
+	}
+	if configProvided {
+		if err := devicefs.VerifyRootIdentity(layout.Root, identity); err != nil {
+			return fmt.Errorf("before installing sync config: %w", err)
+		}
+		if err := tomlconfig.Save(layout.ConfigPath(), cfg); err != nil {
+			return fmt.Errorf("save device config: %w", err)
+		}
+		if err := layout.ClearPendingSyncConfig(); err != nil {
+			return fmt.Errorf("clear pending sync config: %w", err)
+		}
 	}
 	logger.Info(fmt.Sprintf("Sync complete: %d episodes, %d playlists", len(episodes), len(playlistFiles)-1))
 	return nil
