@@ -257,8 +257,11 @@ func syncDeviceContext(ctx context.Context, options syncOptions) error {
 			return fmt.Errorf("clear pending sync config: %w", err)
 		}
 	}
+	tagCacheUpdateRequested := cfg.Integrations.Rockbox.TagCacheUpdateMarker && (result.MediaChanged || pendingTagCacheUpdate)
 	if err := maybeRequestRockboxTagCacheUpdate(layout, cfg.Integrations.Rockbox.TagCacheUpdateMarker, result.MediaChanged, pendingTagCacheUpdate); err != nil {
 		logger.Warn(err.Error())
+	} else if tagCacheUpdateRequested {
+		logger.Info("Requested Rockbox TagCache update")
 	}
 	logger.Info(fmt.Sprintf("Sync complete: %d episodes, %d playlists", len(episodes), len(playlistFiles)-1))
 	return nil
