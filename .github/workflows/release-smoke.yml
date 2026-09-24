@@ -48,15 +48,15 @@ jobs:
           ref: ${{ github.event.release.tag_name || inputs.tag }}
           persist-credentials: false
 
-      - name: Set up Go on ARM64
-        if: matrix.target == 'linux-arm64'
+      - name: Set up Go
         uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: Run the native ARM64 test suite
-        if: matrix.target == 'linux-arm64'
+      - name: Run the native test suite
+        env:
+          CGO_ENABLED: 0
         run: |
           go test -count=1 ./...
           go vet ./...
