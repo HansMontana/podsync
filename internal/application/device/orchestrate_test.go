@@ -134,6 +134,41 @@ func TestEpisodesSkipsUnsupportedMediaAndRemovesItFromPlaylists(t *testing.T) {
 	}
 }
 
+func TestEpisodesKeepsOldManagedPathWhenUnsupportedReplacementChangesPath(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "video/mp4")
+		_, _ = w.Write([]byte("video"))
+	}))
+	defer server.Close()
+
+	root := t.TempDir()
+	resolver := media.Resolver{1: "podcast-1"}
+	oldEpisode := catalog.Episode{FeedID: 1, GUID: "episode", Title: "Old title", Enclosure: catalog.Enclosure{URL: "https://example.com/old.mp3", Type: "audio/mpeg"}}
+	currentEpisode := oldEpisode
+	currentEpisode.Title = "New title"
+	currentEpisode.Enclosure.URL = server.URL + "/episode"
+	oldPath := resolver.RelativePathFor(oldEpisode)
+	newPath := resolver.RelativePathFor(currentEpisode)
+	oldDestination := filepath.Join(root, filepath.FromSlash(oldPath))
+	if err := os.MkdirAll(filepath.Dir(oldDestination), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(oldDestination, []byte("old audio"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	playlist := PlaylistFile{Relative: "Playlists/test.m3u8", Content: []byte("#EXTM3U\n#EXTINF:0,New title\n../" + newPath + "\n")}
+
+	if err := Episodes(context.Background(), server.Client(), t.TempDir(), root, []catalog.Episode{currentEpisode}, []PlaylistFile{playlist}, []string{oldPath}, resolver, EpisodeSyncOptions{MediaOps: realMediaOperations(), Files: realDeviceFiles()}); err != nil {
+		t.Fatalf("Episodes() returned error: %v", err)
+	}
+	if data, err := os.ReadFile(oldDestination); err != nil || string(data) != "old audio" {
+		t.Fatalf("old managed file was not retained: %q, error %v", data, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(newPath))); !os.IsNotExist(err) {
+		t.Fatalf("unsupported replacement was installed, error: %v", err)
+	}
+}
+
 func TestEpisodesReusesExistingMatchingFile(t *testing.T) {
 	var requests atomic.Int32
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
