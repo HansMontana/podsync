@@ -8,8 +8,13 @@ type State struct {
 	Known      bool
 	PlayCount  int
 	LastPlayed time.Time
+	Skipped    bool
 }
 
 func (s State) Played() bool {
 	return s.Known && s.PlayCount > 0
+}
+
+func (s State) Consumed() bool {
+	return s.Known && (s.PlayCount > 0 || s.Skipped)
 }

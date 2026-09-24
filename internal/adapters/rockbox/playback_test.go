@@ -21,6 +21,15 @@ func TestForEpisodesMatchesNormalizedDevicePaths(t *testing.T) {
 	}
 }
 
+func TestForEpisodesPreservesSkippedState(t *testing.T) {
+	current := catalog.Episode{FeedID: 2, GUID: "one", Enclosure: catalog.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
+	resolver := media.Resolver{2: "podcast"}
+	state := ForEpisodesWithResolver([]catalog.Episode{current}, []Record{{Path: "/" + resolver.RelativePathFor(current), Known: true, Skipped: true}}, resolver)[current.IdentityKey()]
+	if !state.Skipped || !state.Consumed() || state.Played() {
+		t.Fatalf("got playback state %+v", state)
+	}
+}
+
 func TestForEpisodesMatchesRockboxVolumePrefixedPaths(t *testing.T) {
 	current := catalog.Episode{FeedID: 2, GUID: "one", Enclosure: catalog.Enclosure{URL: "https://example.com/one.mp3", Type: "audio/mpeg"}}
 	resolver := media.Resolver{2: "podcast"}
@@ -128,15 +137,15 @@ func TestParseLogAcceptsRockboxVolumePrefixedPaths(t *testing.T) {
 	}
 }
 
-func TestParseLogRejectsBriefOrMalformedPlayback(t *testing.T) {
+func TestParseLogKeepsPartialAndRejectsMalformedPlayback(t *testing.T) {
 	log := "1700000000:17999:20000:/Podcasts/podcast/episode.mp3\n1700000000:20001:20000:/Podcasts/podcast/episode.mp3\n"
 	records, err := ParseLog(strings.NewReader(log))
-	if err != nil || len(records) != 0 {
+	if err != nil || len(records) != 1 || !records[0].Skipped {
 		t.Fatalf("got records %+v, error %v", records, err)
 	}
 }
 
-func TestParseLogRequiresNinetyPercentCompletion(t *testing.T) {
+func TestParseLogClassifiesNinetyPercentCompletion(t *testing.T) {
 	log := "1700000000:8999:10000:/Podcasts/podcast/short.mp3\n" +
 		"1700000001:9000:10000:/Podcasts/podcast/exact.mp3\n" +
 		"1700000002:10000:10000:/Podcasts/podcast/full.mp3\n"
@@ -144,12 +153,16 @@ func TestParseLogRequiresNinetyPercentCompletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(records) != 2 {
+	if len(records) != 3 {
 		t.Fatalf("got records %+v", records)
 	}
 	for _, record := range records {
 		if strings.HasSuffix(record.Path, "short.mp3") {
-			t.Fatalf("accepted sub-90%% playback: %+v", record)
+			if !record.Skipped || record.PlayCount != 0 {
+				t.Fatalf("did not classify sub-90%% playback as skipped: %+v", record)
+			}
+		} else if record.Skipped || record.PlayCount != 1 {
+			t.Fatalf("misclassified completed playback: %+v", record)
 		}
 	}
 }

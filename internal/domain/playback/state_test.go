@@ -25,3 +25,16 @@ func TestStatePlayedRequiresKnownPositivePlayCount(t *testing.T) {
 		})
 	}
 }
+
+func TestStateConsumedIncludesSkippedEpisodes(t *testing.T) {
+	state := State{Known: true, Skipped: true}
+	if state.Played() {
+		t.Fatal("skipped state was incorrectly marked as played")
+	}
+	if !state.Consumed() {
+		t.Fatal("skipped state was not marked as consumed")
+	}
+	if (State{Skipped: true}).Consumed() {
+		t.Fatal("unknown skipped state was marked as consumed")
+	}
+}

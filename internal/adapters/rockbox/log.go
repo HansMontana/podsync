@@ -75,8 +75,7 @@ func parseLogLine(byPath map[string]Record, raw []byte) {
 	timestamp, timestampErr := strconv.ParseInt(parts[0], 10, 64)
 	elapsed, elapsedErr := strconv.ParseInt(parts[1], 10, 64)
 	length, lengthErr := strconv.ParseInt(parts[2], 10, 64)
-	minimumPlayed := length - length/10
-	if timestampErr != nil || elapsedErr != nil || lengthErr != nil || timestamp <= 0 || elapsed <= 0 || length <= 0 || elapsed > length || strings.TrimSpace(parts[3]) == "" || elapsed < minimumPlayed {
+	if timestampErr != nil || elapsedErr != nil || lengthErr != nil || timestamp <= 0 || elapsed <= 0 || length <= 0 || elapsed > length || strings.TrimSpace(parts[3]) == "" {
 		return
 	}
 	key := normalizePath(parts[3])
@@ -85,7 +84,11 @@ func parseLogLine(byPath map[string]Record, raw []byte) {
 	}
 	current := byPath[key]
 	current.Path = parts[3]
-	current.PlayCount++
+	if elapsed >= length-length/10 {
+		current.PlayCount++
+	} else {
+		current.Skipped = true
+	}
 	playedAt := time.Unix(timestamp, 0).UTC()
 	if playedAt.After(current.LastPlayed) {
 		current.LastPlayed = playedAt

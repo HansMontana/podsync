@@ -17,6 +17,7 @@ type Record struct {
 	Known      bool
 	PlayCount  int
 	LastPlayed time.Time
+	Skipped    bool
 }
 
 type hashedState struct {
@@ -38,6 +39,7 @@ func MergeRecords(records []Record) []Record {
 		current.Path = record.Path
 		current.Known = true
 		current.PlayCount += record.PlayCount
+		current.Skipped = current.Skipped || record.Skipped
 		if record.LastPlayed.After(current.LastPlayed) {
 			current.LastPlayed = record.LastPlayed
 		}
@@ -83,6 +85,7 @@ func PreferRecords(primary, fallback []Record) []Record {
 			if record.LastPlayed.After(current.LastPlayed) {
 				current.LastPlayed = record.LastPlayed
 			}
+			current.Skipped = current.Skipped || record.Skipped
 			byPath[key] = current
 		}
 	}
@@ -111,18 +114,9 @@ func ForEpisodesWithResolver(episodes []catalog.Episode, records []Record, resol
 		if key == "" {
 			continue
 		}
-		current := byPath[key]
-		if !current.Known || record.PlayCount > current.PlayCount || record.LastPlayed.After(current.LastPlayed) {
-			byPath[key] = domainplayback.State{Known: true, PlayCount: record.PlayCount, LastPlayed: record.LastPlayed}
-		}
+		byPath[key] = mergeState(byPath[key], record)
 		if hash := identityHashFromPath(key); hash != "" {
-			current := byIdentityHash[hash]
-			if !current.Known || record.PlayCount > current.PlayCount || record.LastPlayed.After(current.LastPlayed) {
-				byIdentityHash[hash] = hashedState{
-					State:     domainplayback.State{Known: true, PlayCount: record.PlayCount, LastPlayed: record.LastPlayed},
-					Directory: path.Dir(key),
-				}
-			}
+			byIdentityHash[hash] = hashedState{State: mergeState(byIdentityHash[hash].State, record), Directory: path.Dir(key)}
 		}
 	}
 
@@ -142,6 +136,18 @@ func ForEpisodesWithResolver(episodes []catalog.Episode, records []Record, resol
 		}
 	}
 	return result
+}
+
+func mergeState(current domainplayback.State, record Record) domainplayback.State {
+	current.Known = true
+	if record.PlayCount > current.PlayCount {
+		current.PlayCount = record.PlayCount
+	}
+	if record.LastPlayed.After(current.LastPlayed) {
+		current.LastPlayed = record.LastPlayed
+	}
+	current.Skipped = current.Skipped || record.Skipped
+	return current
 }
 
 func identityHashFromPath(value string) string {
