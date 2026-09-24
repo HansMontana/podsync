@@ -184,9 +184,9 @@ unplayed_only = true
 
 Briefing sections behave differently from rolling logical-feed playlists. A
 section uses the referenced logical feed's source and filter, then applies its
-own ordering. When `unplayed_only = true`, completed and skipped episodes are
-filtered before the section limit is applied, so older eligible episodes fill
-the configured limit.
+own ordering and episode limit first. When `unplayed_only = true`, a completed
+or skipped episode in that selected window suppresses the section; older
+episodes are not substituted.
 
 ## Commands
 

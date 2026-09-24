@@ -31,23 +31,22 @@ func Build(cfg Config, current catalog.Catalog, briefingID string, playbackState
 		if err != nil {
 			return Plan{}, fmt.Errorf("briefing %q section %q: %w", briefingID, section.Feed, err)
 		}
-		if section.UnplayedOnly {
-			episodes = filterConsumedEpisodes(episodes, playbackStates)
-		}
 		if len(episodes) > section.Limit {
 			episodes = episodes[:section.Limit]
+		}
+		if section.UnplayedOnly && hasConsumedEpisode(episodes, playbackStates) {
+			continue
 		}
 		plan.Episodes = append(plan.Episodes, episodes...)
 	}
 	return plan, nil
 }
 
-func filterConsumedEpisodes(episodes []catalog.Episode, playbackStates map[string]playback.State) []catalog.Episode {
-	result := make([]catalog.Episode, 0, len(episodes))
+func hasConsumedEpisode(episodes []catalog.Episode, playbackStates map[string]playback.State) bool {
 	for _, current := range episodes {
-		if !playbackStates[current.IdentityKey()].Consumed() {
-			result = append(result, current)
+		if playbackStates[current.IdentityKey()].Consumed() {
+			return true
 		}
 	}
-	return result
+	return false
 }
